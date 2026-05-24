@@ -1,0 +1,32 @@
+name: Improvement
+description: Suggest an enhancement to existing functionality.
+type: Improvement
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What to Improve
+      description: What should be improved, and how?
+    validations:
+      required: true
+
+  - type: textarea
+    id: current
+    attributes:
+      label: Current Behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: desired
+    attributes:
+      label: Desired Behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional Context
+    validations:
+      required: false

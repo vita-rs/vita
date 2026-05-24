@@ -1,0 +1,34 @@
+name: Discussion
+description: Questions, RFCs, or open-ended brainstorming.
+type: Discussion
+body:
+  - type: textarea
+    id: topic
+    attributes:
+      label: Topic
+      description: A brief summary of what you want to discuss.
+    validations:
+      required: true
+
+  - type: textarea
+    id: background
+    attributes:
+      label: Background
+      description: Relevant context, prior art, or motivation.
+    validations:
+      required: true
+
+  - type: textarea
+    id: points
+    attributes:
+      label: Discussion Points
+      description: Specific questions or items you want input on.
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional Context
+    validations:
+      required: false
