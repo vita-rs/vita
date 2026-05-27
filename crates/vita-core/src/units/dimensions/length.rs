@@ -79,3 +79,241 @@ impl LengthUnit for Meter {
     const TO_CANONICAL: f64 = 1e10;
     const SYMBOL: &'static str = "m";
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use alloc::format;
+    use alloc::string::ToString;
+    use core::iter;
+
+    #[test]
+    fn new_value_roundtrip() {
+        assert_eq!(Length::<f64, Angstrom>::new(1.52).value(), 1.52);
+    }
+
+    #[test]
+    fn from_scalar() {
+        let l: Length<f64, Nanometer> = Length::from(3.0);
+        assert_eq!(l.value(), 3.0);
+    }
+
+    #[test]
+    fn default_is_zero() {
+        assert_eq!(Length::<f64, Angstrom>::default().value(), 0.0_f64);
+    }
+
+    #[test]
+    fn copy_and_clone() {
+        let a = Length::<f64, Angstrom>::new(2.0);
+        let b = a;
+        let c = a.clone();
+        assert_eq!(a, b);
+        assert_eq!(a, c);
+    }
+
+    #[test]
+    fn angstrom_to_nanometer() {
+        let nm: Length<f64, Nanometer> = Length::<f64, Angstrom>::new(10.0).to();
+        assert!((nm.value() - 1.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn nanometer_to_angstrom() {
+        let a: Length<f64, Angstrom> = Length::<f64, Nanometer>::new(1.0).to();
+        assert!((a.value() - 10.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn angstrom_to_picometer() {
+        let pm: Length<f64, Picometer> = Length::<f64, Angstrom>::new(1.0).to();
+        assert!((pm.value() - 100.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn angstrom_to_meter() {
+        let m: Length<f64, Meter> = Length::<f64, Angstrom>::new(1e10).to();
+        assert!((m.value() - 1.0).abs() < 1e-4);
+    }
+
+    #[test]
+    fn bohr_to_angstrom() {
+        let a: Length<f64, Angstrom> = Length::<f64, Bohr>::new(1.0).to();
+        assert!((a.value() - 0.529_177_210_544).abs() < 1e-12);
+    }
+
+    #[test]
+    fn roundtrip_nanometer_bohr_nanometer() {
+        let orig = Length::<f64, Nanometer>::new(0.5);
+        let back: Length<f64, Nanometer> = orig.to::<Bohr>().to();
+        assert!((back.value() - 0.5).abs() < 1e-12);
+    }
+
+    #[test]
+    fn add() {
+        let sum = Length::<f64, Angstrom>::new(1.0) + Length::new(2.5);
+        assert_eq!(sum.value(), 3.5);
+    }
+
+    #[test]
+    fn add_assign() {
+        let mut l = Length::<f64, Angstrom>::new(1.0);
+        l += Length::new(0.5);
+        assert_eq!(l.value(), 1.5);
+    }
+
+    #[test]
+    fn sub() {
+        let diff = Length::<f64, Angstrom>::new(3.0) - Length::new(1.0);
+        assert_eq!(diff.value(), 2.0);
+    }
+
+    #[test]
+    fn sub_assign() {
+        let mut l = Length::<f64, Angstrom>::new(3.0);
+        l -= Length::new(1.0);
+        assert_eq!(l.value(), 2.0);
+    }
+
+    #[test]
+    fn neg() {
+        assert_eq!((-Length::<f64, Angstrom>::new(1.5)).value(), -1.5);
+    }
+
+    #[test]
+    fn mul_scalar() {
+        assert_eq!((Length::<f64, Angstrom>::new(2.0) * 3.0).value(), 6.0);
+    }
+
+    #[test]
+    fn mul_assign_scalar() {
+        let mut l = Length::<f64, Angstrom>::new(2.0);
+        l *= 3.0;
+        assert_eq!(l.value(), 6.0);
+    }
+
+    #[test]
+    fn div_scalar() {
+        assert_eq!((Length::<f64, Angstrom>::new(6.0) / 2.0).value(), 3.0);
+    }
+
+    #[test]
+    fn div_assign_scalar() {
+        let mut l = Length::<f64, Angstrom>::new(6.0);
+        l /= 2.0;
+        assert_eq!(l.value(), 3.0);
+    }
+
+    #[test]
+    fn div_same_unit_yields_ratio() {
+        let ratio = Length::<f64, Angstrom>::new(6.0) / Length::new(2.0);
+        assert_eq!(ratio, 3.0);
+    }
+
+    #[test]
+    fn eq() {
+        let a = Length::<f64, Angstrom>::new(1.0);
+        assert_eq!(a, Length::new(1.0));
+        assert_ne!(a, Length::new(2.0));
+    }
+
+    #[test]
+    fn ord() {
+        let a = Length::<f64, Angstrom>::new(1.0);
+        let b = Length::<f64, Angstrom>::new(2.0);
+        assert!(a < b);
+        assert!(b > a);
+    }
+
+    #[test]
+    fn abs() {
+        assert_eq!(Length::<f64, Angstrom>::new(-3.0).abs().value(), 3.0);
+        assert_eq!(Length::<f64, Angstrom>::new(3.0).abs().value(), 3.0);
+    }
+
+    #[test]
+    fn min_ignores_nan() {
+        let l = Length::<f64, Angstrom>::new(1.0);
+        let nan = Length::<f64, Angstrom>::new(f64::NAN);
+        assert_eq!(l.min(nan).value(), 1.0);
+        assert_eq!(nan.min(l).value(), 1.0);
+    }
+
+    #[test]
+    fn max_ignores_nan() {
+        let l = Length::<f64, Angstrom>::new(1.0);
+        let nan = Length::<f64, Angstrom>::new(f64::NAN);
+        assert_eq!(l.max(nan).value(), 1.0);
+        assert_eq!(nan.max(l).value(), 1.0);
+    }
+
+    #[test]
+    fn clamp() {
+        let lo = Length::<f64, Angstrom>::new(1.0);
+        let hi = Length::<f64, Angstrom>::new(2.0);
+        assert_eq!(Length::new(1.5_f64).clamp(lo, hi).value(), 1.5);
+        assert_eq!(Length::new(0.5_f64).clamp(lo, hi).value(), 1.0);
+        assert_eq!(Length::new(3.0_f64).clamp(lo, hi).value(), 2.0);
+    }
+
+    #[test]
+    #[should_panic]
+    fn clamp_panics_when_lo_gt_hi() {
+        let lo = Length::<f64, Angstrom>::new(2.0);
+        let hi = Length::<f64, Angstrom>::new(1.0);
+        Length::new(1.5_f64).clamp(lo, hi);
+    }
+
+    #[test]
+    fn sum_owned() {
+        let v = [
+            Length::<f64, Angstrom>::new(1.0),
+            Length::new(2.0),
+            Length::new(3.0),
+        ];
+        let total: Length<f64, Angstrom> = v.iter().copied().sum();
+        assert_eq!(total.value(), 6.0);
+    }
+
+    #[test]
+    fn sum_borrowed() {
+        let v = [
+            Length::<f64, Angstrom>::new(1.0),
+            Length::new(2.0),
+            Length::new(3.0),
+        ];
+        let total: Length<f64, Angstrom> = v.iter().sum();
+        assert_eq!(total.value(), 6.0);
+    }
+
+    #[test]
+    fn sum_empty() {
+        let total: Length<f64, Angstrom> = iter::empty::<Length<f64, Angstrom>>().sum();
+        assert_eq!(total.value(), 0.0);
+    }
+
+    #[test]
+    fn display() {
+        assert_eq!(Length::<f64, Nanometer>::new(1.5).to_string(), "1.5 nm");
+    }
+
+    #[test]
+    fn debug() {
+        assert_eq!(
+            format!("{:?}", Length::<f64, Angstrom>::new(1.0)),
+            "Length(1.0)"
+        );
+    }
+
+    #[test]
+    fn f32_angstrom_to_nanometer() {
+        let nm: Length<f32, Nanometer> = Length::<f32, Angstrom>::new(10.0_f32).to();
+        assert!((nm.value() - 1.0_f32).abs() < 1e-6_f32);
+    }
+
+    #[test]
+    fn f32_add() {
+        let sum = Length::<f32, Angstrom>::new(1.0_f32) + Length::new(2.0_f32);
+        assert_eq!(sum.value(), 3.0_f32);
+    }
+}
