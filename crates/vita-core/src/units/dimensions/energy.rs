@@ -101,3 +101,241 @@ impl EnergyUnit for Joule {
     const TO_CANONICAL: f64 = 1.0 / 4.359_744_722_206_0e-18;
     const SYMBOL: &'static str = "J";
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use alloc::format;
+    use alloc::string::ToString;
+    use core::iter;
+
+    #[test]
+    fn new_value_roundtrip() {
+        assert_eq!(Energy::<f64, Hartree>::new(2.5).value(), 2.5);
+    }
+
+    #[test]
+    fn from_scalar() {
+        let e: Energy<f64, ElectronVolt> = Energy::from(3.0);
+        assert_eq!(e.value(), 3.0);
+    }
+
+    #[test]
+    fn default_is_zero() {
+        assert_eq!(Energy::<f64, Hartree>::default().value(), 0.0_f64);
+    }
+
+    #[test]
+    fn copy_and_clone() {
+        let a = Energy::<f64, Hartree>::new(1.0);
+        let b = a;
+        let c = a.clone();
+        assert_eq!(a, b);
+        assert_eq!(a, c);
+    }
+
+    #[test]
+    fn hartree_to_kcal_per_mol() {
+        let e: Energy<f64, KcalPerMol> = Energy::<f64, Hartree>::new(1.0).to();
+        assert!((e.value() - 627.509_474_063).abs() < 1e-9);
+    }
+
+    #[test]
+    fn kcal_per_mol_to_hartree() {
+        let h: Energy<f64, Hartree> = Energy::<f64, KcalPerMol>::new(627.509_474_063).to();
+        assert!((h.value() - 1.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn hartree_to_electron_volt() {
+        let ev: Energy<f64, ElectronVolt> = Energy::<f64, Hartree>::new(1.0).to();
+        assert!((ev.value() - 27.211_386_245_981).abs() < 1e-12);
+    }
+
+    #[test]
+    fn joule_to_hartree() {
+        let h: Energy<f64, Hartree> = Energy::<f64, Joule>::new(4.359_744_722_206_0e-18).to();
+        assert!((h.value() - 1.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn hartree_to_wavenumber() {
+        let wn: Energy<f64, Wavenumber> = Energy::<f64, Hartree>::new(1.0).to();
+        assert!((wn.value() - 219_474.631_363_14).abs() < 1e-6);
+    }
+
+    #[test]
+    fn roundtrip_kcal_per_mol_kj_per_mol_kcal_per_mol() {
+        let orig = Energy::<f64, KcalPerMol>::new(10.0);
+        let back: Energy<f64, KcalPerMol> = orig.to::<KjPerMol>().to();
+        assert!((back.value() - 10.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn add() {
+        let sum = Energy::<f64, Hartree>::new(1.0) + Energy::new(2.5);
+        assert_eq!(sum.value(), 3.5);
+    }
+
+    #[test]
+    fn add_assign() {
+        let mut e = Energy::<f64, Hartree>::new(1.0);
+        e += Energy::new(0.5);
+        assert_eq!(e.value(), 1.5);
+    }
+
+    #[test]
+    fn sub() {
+        let diff = Energy::<f64, Hartree>::new(3.0) - Energy::new(1.0);
+        assert_eq!(diff.value(), 2.0);
+    }
+
+    #[test]
+    fn sub_assign() {
+        let mut e = Energy::<f64, Hartree>::new(3.0);
+        e -= Energy::new(1.0);
+        assert_eq!(e.value(), 2.0);
+    }
+
+    #[test]
+    fn neg() {
+        assert_eq!((-Energy::<f64, Hartree>::new(1.5)).value(), -1.5);
+    }
+
+    #[test]
+    fn mul_scalar() {
+        assert_eq!((Energy::<f64, Hartree>::new(2.0) * 3.0).value(), 6.0);
+    }
+
+    #[test]
+    fn mul_assign_scalar() {
+        let mut e = Energy::<f64, Hartree>::new(2.0);
+        e *= 3.0;
+        assert_eq!(e.value(), 6.0);
+    }
+
+    #[test]
+    fn div_scalar() {
+        assert_eq!((Energy::<f64, Hartree>::new(6.0) / 2.0).value(), 3.0);
+    }
+
+    #[test]
+    fn div_assign_scalar() {
+        let mut e = Energy::<f64, Hartree>::new(6.0);
+        e /= 2.0;
+        assert_eq!(e.value(), 3.0);
+    }
+
+    #[test]
+    fn div_same_unit_yields_ratio() {
+        let ratio = Energy::<f64, Hartree>::new(6.0) / Energy::new(2.0);
+        assert_eq!(ratio, 3.0);
+    }
+
+    #[test]
+    fn eq() {
+        let a = Energy::<f64, Hartree>::new(1.0);
+        assert_eq!(a, Energy::new(1.0));
+        assert_ne!(a, Energy::new(2.0));
+    }
+
+    #[test]
+    fn ord() {
+        let a = Energy::<f64, Hartree>::new(1.0);
+        let b = Energy::<f64, Hartree>::new(2.0);
+        assert!(a < b);
+        assert!(b > a);
+    }
+
+    #[test]
+    fn abs() {
+        assert_eq!(Energy::<f64, Hartree>::new(-3.0).abs().value(), 3.0);
+        assert_eq!(Energy::<f64, Hartree>::new(3.0).abs().value(), 3.0);
+    }
+
+    #[test]
+    fn min_ignores_nan() {
+        let e = Energy::<f64, Hartree>::new(1.0);
+        let nan = Energy::<f64, Hartree>::new(f64::NAN);
+        assert_eq!(e.min(nan).value(), 1.0);
+        assert_eq!(nan.min(e).value(), 1.0);
+    }
+
+    #[test]
+    fn max_ignores_nan() {
+        let e = Energy::<f64, Hartree>::new(1.0);
+        let nan = Energy::<f64, Hartree>::new(f64::NAN);
+        assert_eq!(e.max(nan).value(), 1.0);
+        assert_eq!(nan.max(e).value(), 1.0);
+    }
+
+    #[test]
+    fn clamp() {
+        let lo = Energy::<f64, Hartree>::new(1.0);
+        let hi = Energy::<f64, Hartree>::new(2.0);
+        assert_eq!(Energy::new(1.5_f64).clamp(lo, hi).value(), 1.5);
+        assert_eq!(Energy::new(0.5_f64).clamp(lo, hi).value(), 1.0);
+        assert_eq!(Energy::new(3.0_f64).clamp(lo, hi).value(), 2.0);
+    }
+
+    #[test]
+    #[should_panic]
+    fn clamp_panics_when_lo_gt_hi() {
+        let lo = Energy::<f64, Hartree>::new(2.0);
+        let hi = Energy::<f64, Hartree>::new(1.0);
+        Energy::new(1.5_f64).clamp(lo, hi);
+    }
+
+    #[test]
+    fn sum_owned() {
+        let v = [
+            Energy::<f64, Hartree>::new(1.0),
+            Energy::new(2.0),
+            Energy::new(3.0),
+        ];
+        let total: Energy<f64, Hartree> = v.iter().copied().sum();
+        assert_eq!(total.value(), 6.0);
+    }
+
+    #[test]
+    fn sum_borrowed() {
+        let v = [
+            Energy::<f64, Hartree>::new(1.0),
+            Energy::new(2.0),
+            Energy::new(3.0),
+        ];
+        let total: Energy<f64, Hartree> = v.iter().sum();
+        assert_eq!(total.value(), 6.0);
+    }
+
+    #[test]
+    fn sum_empty() {
+        let total: Energy<f64, Hartree> = iter::empty::<Energy<f64, Hartree>>().sum();
+        assert_eq!(total.value(), 0.0);
+    }
+
+    #[test]
+    fn display() {
+        assert_eq!(Energy::<f64, ElectronVolt>::new(1.5).to_string(), "1.5 eV");
+    }
+
+    #[test]
+    fn debug() {
+        assert_eq!(
+            format!("{:?}", Energy::<f64, Hartree>::new(1.0)),
+            "Energy(1.0)"
+        );
+    }
+
+    #[test]
+    fn f32_hartree_to_electron_volt() {
+        let ev: Energy<f32, ElectronVolt> = Energy::<f32, Hartree>::new(1.0_f32).to();
+        assert!((ev.value() - 27.211_386_f32).abs() < 1e-4_f32);
+    }
+
+    #[test]
+    fn f32_add() {
+        let sum = Energy::<f32, Hartree>::new(1.0_f32) + Energy::new(2.0_f32);
+        assert_eq!(sum.value(), 3.0_f32);
+    }
+}
