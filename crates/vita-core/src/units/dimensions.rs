@@ -1,3 +1,4 @@
+pub mod acceleration;
 pub mod angle;
 pub mod charge;
 pub mod energy;
