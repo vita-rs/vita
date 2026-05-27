@@ -2,5 +2,5 @@ mod dimensions;
 mod quantity;
 mod scalar;
 
-pub use dimensions::length;
+pub use dimensions::{energy, length};
 pub use scalar::Scalar;
