@@ -6,3 +6,4 @@ pub mod mass;
 pub mod pressure;
 pub mod temperature;
 pub mod time;
+pub mod velocity;
