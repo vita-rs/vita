@@ -68,3 +68,238 @@ impl MassUnit for Kilogram {
     const TO_CANONICAL: f64 = 6.022_140_7537e26;
     const SYMBOL: &'static str = "kg";
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use alloc::format;
+    use alloc::string::ToString;
+    use core::iter;
+
+    #[test]
+    fn new_value_roundtrip() {
+        assert_eq!(Mass::<f64, Dalton>::new(1.52).value(), 1.52);
+    }
+
+    #[test]
+    fn from_scalar() {
+        let m: Mass<f64, ElectronMass> = Mass::from(3.0);
+        assert_eq!(m.value(), 3.0);
+    }
+
+    #[test]
+    fn default_is_zero() {
+        assert_eq!(Mass::<f64, Dalton>::default().value(), 0.0_f64);
+    }
+
+    #[test]
+    fn copy_and_clone() {
+        let a = Mass::<f64, Dalton>::new(2.0);
+        let b = a;
+        let c = a.clone();
+        assert_eq!(a, b);
+        assert_eq!(a, c);
+    }
+
+    #[test]
+    fn electron_mass_to_dalton() {
+        let da: Mass<f64, Dalton> = Mass::<f64, ElectronMass>::new(1.0).to();
+        assert!((da.value() - 5.485_799_090_441e-4).abs() < 1e-18);
+    }
+
+    #[test]
+    fn dalton_to_electron_mass() {
+        let me: Mass<f64, ElectronMass> = Mass::<f64, Dalton>::new(1.0).to();
+        assert!((me.value() - 1822.888_486_278).abs() < 1e-9);
+    }
+
+    #[test]
+    fn proton_mass_to_dalton() {
+        let da: Mass<f64, Dalton> = Mass::<f64, ProtonMass>::new(1.0).to();
+        assert!((da.value() - 1.007_276_466_578_9).abs() < 1e-15);
+    }
+
+    #[test]
+    fn dalton_to_kilogram() {
+        let kg: Mass<f64, Kilogram> = Mass::<f64, Dalton>::new(1.0).to();
+        assert!((kg.value() - 1.660_539_068_92e-27).abs() < 1e-37);
+    }
+
+    #[test]
+    fn kilogram_to_dalton() {
+        let da: Mass<f64, Dalton> = Mass::<f64, Kilogram>::new(1.0).to();
+        assert!((da.value() - 6.022_140_7537e26).abs() < 1e14);
+    }
+
+    #[test]
+    fn roundtrip_electron_mass_kilogram_electron_mass() {
+        let orig = Mass::<f64, ElectronMass>::new(10.0);
+        let back: Mass<f64, ElectronMass> = orig.to::<Kilogram>().to();
+        assert!((back.value() - 10.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn add() {
+        let sum = Mass::<f64, Dalton>::new(1.0) + Mass::new(2.5);
+        assert_eq!(sum.value(), 3.5);
+    }
+
+    #[test]
+    fn add_assign() {
+        let mut m = Mass::<f64, Dalton>::new(1.0);
+        m += Mass::new(0.5);
+        assert_eq!(m.value(), 1.5);
+    }
+
+    #[test]
+    fn sub() {
+        let diff = Mass::<f64, Dalton>::new(3.0) - Mass::new(1.0);
+        assert_eq!(diff.value(), 2.0);
+    }
+
+    #[test]
+    fn sub_assign() {
+        let mut m = Mass::<f64, Dalton>::new(3.0);
+        m -= Mass::new(1.0);
+        assert_eq!(m.value(), 2.0);
+    }
+
+    #[test]
+    fn neg() {
+        assert_eq!((-Mass::<f64, Dalton>::new(1.5)).value(), -1.5);
+    }
+
+    #[test]
+    fn mul_scalar() {
+        assert_eq!((Mass::<f64, Dalton>::new(2.0) * 3.0).value(), 6.0);
+    }
+
+    #[test]
+    fn mul_assign_scalar() {
+        let mut m = Mass::<f64, Dalton>::new(2.0);
+        m *= 3.0;
+        assert_eq!(m.value(), 6.0);
+    }
+
+    #[test]
+    fn div_scalar() {
+        assert_eq!((Mass::<f64, Dalton>::new(6.0) / 2.0).value(), 3.0);
+    }
+
+    #[test]
+    fn div_assign_scalar() {
+        let mut m = Mass::<f64, Dalton>::new(6.0);
+        m /= 2.0;
+        assert_eq!(m.value(), 3.0);
+    }
+
+    #[test]
+    fn div_same_unit_yields_ratio() {
+        let ratio = Mass::<f64, Dalton>::new(6.0) / Mass::new(2.0);
+        assert_eq!(ratio, 3.0);
+    }
+
+    #[test]
+    fn eq() {
+        let a = Mass::<f64, Dalton>::new(1.0);
+        assert_eq!(a, Mass::new(1.0));
+        assert_ne!(a, Mass::new(2.0));
+    }
+
+    #[test]
+    fn ord() {
+        let a = Mass::<f64, Dalton>::new(1.0);
+        let b = Mass::<f64, Dalton>::new(2.0);
+        assert!(a < b);
+        assert!(b > a);
+    }
+
+    #[test]
+    fn abs() {
+        assert_eq!(Mass::<f64, Dalton>::new(-3.0).abs().value(), 3.0);
+        assert_eq!(Mass::<f64, Dalton>::new(3.0).abs().value(), 3.0);
+    }
+
+    #[test]
+    fn min_ignores_nan() {
+        let m = Mass::<f64, Dalton>::new(1.0);
+        let nan = Mass::<f64, Dalton>::new(f64::NAN);
+        assert_eq!(m.min(nan).value(), 1.0);
+        assert_eq!(nan.min(m).value(), 1.0);
+    }
+
+    #[test]
+    fn max_ignores_nan() {
+        let m = Mass::<f64, Dalton>::new(1.0);
+        let nan = Mass::<f64, Dalton>::new(f64::NAN);
+        assert_eq!(m.max(nan).value(), 1.0);
+        assert_eq!(nan.max(m).value(), 1.0);
+    }
+
+    #[test]
+    fn clamp() {
+        let lo = Mass::<f64, Dalton>::new(1.0);
+        let hi = Mass::<f64, Dalton>::new(2.0);
+        assert_eq!(Mass::new(1.5_f64).clamp(lo, hi).value(), 1.5);
+        assert_eq!(Mass::new(0.5_f64).clamp(lo, hi).value(), 1.0);
+        assert_eq!(Mass::new(3.0_f64).clamp(lo, hi).value(), 2.0);
+    }
+
+    #[test]
+    #[should_panic]
+    fn clamp_panics_when_lo_gt_hi() {
+        let lo = Mass::<f64, Dalton>::new(2.0);
+        let hi = Mass::<f64, Dalton>::new(1.0);
+        Mass::new(1.5_f64).clamp(lo, hi);
+    }
+
+    #[test]
+    fn sum_owned() {
+        let v = [
+            Mass::<f64, Dalton>::new(1.0),
+            Mass::new(2.0),
+            Mass::new(3.0),
+        ];
+        let total: Mass<f64, Dalton> = v.iter().copied().sum();
+        assert_eq!(total.value(), 6.0);
+    }
+
+    #[test]
+    fn sum_borrowed() {
+        let v = [
+            Mass::<f64, Dalton>::new(1.0),
+            Mass::new(2.0),
+            Mass::new(3.0),
+        ];
+        let total: Mass<f64, Dalton> = v.iter().sum();
+        assert_eq!(total.value(), 6.0);
+    }
+
+    #[test]
+    fn sum_empty() {
+        let total: Mass<f64, Dalton> = iter::empty::<Mass<f64, Dalton>>().sum();
+        assert_eq!(total.value(), 0.0);
+    }
+
+    #[test]
+    fn display() {
+        assert_eq!(Mass::<f64, ElectronMass>::new(1.5).to_string(), "1.5 mₑ");
+    }
+
+    #[test]
+    fn debug() {
+        assert_eq!(format!("{:?}", Mass::<f64, Dalton>::new(1.0)), "Mass(1.0)");
+    }
+
+    #[test]
+    fn f32_electron_mass_to_dalton() {
+        let da: Mass<f32, Dalton> = Mass::<f32, ElectronMass>::new(1.0_f32).to();
+        assert!((da.value() - 5.485_799e-4_f32).abs() < 1e-10_f32);
+    }
+
+    #[test]
+    fn f32_add() {
+        let sum = Mass::<f32, Dalton>::new(1.0_f32) + Mass::new(2.0_f32);
+        assert_eq!(sum.value(), 3.0_f32);
+    }
+}
