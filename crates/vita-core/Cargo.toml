@@ -1,0 +1,27 @@
+[package]
+name = "vita-core"
+description = "Zero-dependency primitives for atomistic and molecular computation."
+keywords = [
+    "atomistic",
+    "molecular",
+    "bioinformatics",
+    "cheminformatics",
+    "biochemistry",
+]
+categories = [
+    "science",
+    "science::computational-biology",
+    "science::computational-chemistry",
+    "science::materials",
+    "no-std",
+]
+readme = "README.md"
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lib]
+name = "vita_core"
+path = "src/lib.rs"
