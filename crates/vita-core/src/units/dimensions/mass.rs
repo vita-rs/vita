@@ -7,6 +7,7 @@
 //! | [`Dalton`] | Da | 1 |
 //! | [`ElectronMass`] | mₑ | 5.485799090441e-4 |
 //! | [`ProtonMass`] | mₚ | 1.0072764665789 |
+//! | [`Gram`] | g | 6.0221407537e23 |
 //! | [`Kilogram`] | kg | 6.0221407537e26 |
 
 use crate::units::quantity::define_quantity;
@@ -57,6 +58,16 @@ pub struct ProtonMass;
 impl MassUnit for ProtonMass {
     const TO_CANONICAL: f64 = 1.007_276_466_578_9;
     const SYMBOL: &'static str = "mₚ";
+}
+
+/// The gram (g) (CODATA 2022).
+///
+/// 1 g ≈ 6.0221407537e23 Da.
+pub struct Gram;
+
+impl MassUnit for Gram {
+    const TO_CANONICAL: f64 = 6.022_140_7537e23;
+    const SYMBOL: &'static str = "g";
 }
 
 /// The kilogram (kg) — SI base unit of mass (CODATA 2022).
@@ -117,6 +128,18 @@ mod tests {
     fn proton_mass_to_dalton() {
         let da: Mass<f64, Dalton> = Mass::<f64, ProtonMass>::new(1.0).to();
         assert!((da.value() - 1.007_276_466_578_9).abs() < 1e-15);
+    }
+
+    #[test]
+    fn dalton_to_gram() {
+        let g: Mass<f64, Gram> = Mass::<f64, Dalton>::new(1.0).to();
+        assert!((g.value() - 1.660_539_068_92e-24).abs() < 1e-34);
+    }
+
+    #[test]
+    fn gram_to_dalton() {
+        let da: Mass<f64, Dalton> = Mass::<f64, Gram>::new(1.0).to();
+        assert!((da.value() - 6.022_140_7537e23).abs() < 1e11);
     }
 
     #[test]
