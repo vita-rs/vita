@@ -5,8 +5,8 @@
 //! | Type | Symbol | Eₕ per unit |
 //! |---|---|---|
 //! | [`Hartree`] | Eₕ | 1 |
-//! | [`KcalPerMol`] | kcal mol⁻¹ | 1 / 627.509474063 |
-//! | [`KjPerMol`] | kJ mol⁻¹ | 1 / 2625.49963948 |
+//! | [`KilocaloriePerMole`] | kcal mol⁻¹ | 1 / 627.509474063 |
+//! | [`KilojoulePerMole`] | kJ mol⁻¹ | 1 / 2625.49963948 |
 //! | [`ElectronVolt`] | eV | 1 / 27.211386245981 |
 //! | [`Wavenumber`] | cm⁻¹ | 1 / 219474.63136314 |
 //! | [`MilliElectronVolt`] | meV | 1 / 27211.386245981 |
@@ -45,9 +45,9 @@ impl EnergyUnit for Hartree {
 /// The kilocalorie per mole (kcal mol⁻¹).
 ///
 /// 1 kcal mol⁻¹ ≈ 1 / 627.509474063 Eₕ (CODATA 2022, derived).
-pub struct KcalPerMol;
+pub struct KilocaloriePerMole;
 
-impl EnergyUnit for KcalPerMol {
+impl EnergyUnit for KilocaloriePerMole {
     const TO_CANONICAL: f64 = 1.0 / 627.509_474_063;
     const SYMBOL: &'static str = "kcal mol⁻¹";
 }
@@ -55,9 +55,9 @@ impl EnergyUnit for KcalPerMol {
 /// The kilojoule per mole (kJ mol⁻¹).
 ///
 /// 1 kJ mol⁻¹ ≈ 1 / 2625.49963948 Eₕ (CODATA 2022, derived).
-pub struct KjPerMol;
+pub struct KilojoulePerMole;
 
-impl EnergyUnit for KjPerMol {
+impl EnergyUnit for KilojoulePerMole {
     const TO_CANONICAL: f64 = 1.0 / 2625.499_639_48;
     const SYMBOL: &'static str = "kJ mol⁻¹";
 }
@@ -135,14 +135,14 @@ mod tests {
     }
 
     #[test]
-    fn hartree_to_kcal_per_mol() {
-        let e: Energy<f64, KcalPerMol> = Energy::<f64, Hartree>::new(1.0).to();
+    fn hartree_to_kilocalorie_per_mole() {
+        let e: Energy<f64, KilocaloriePerMole> = Energy::<f64, Hartree>::new(1.0).to();
         assert!((e.value() - 627.509_474_063).abs() < 1e-9);
     }
 
     #[test]
-    fn kcal_per_mol_to_hartree() {
-        let h: Energy<f64, Hartree> = Energy::<f64, KcalPerMol>::new(627.509_474_063).to();
+    fn kilocalorie_per_mole_to_hartree() {
+        let h: Energy<f64, Hartree> = Energy::<f64, KilocaloriePerMole>::new(627.509_474_063).to();
         assert!((h.value() - 1.0).abs() < 1e-12);
     }
 
@@ -165,9 +165,9 @@ mod tests {
     }
 
     #[test]
-    fn roundtrip_kcal_per_mol_kj_per_mol_kcal_per_mol() {
-        let orig = Energy::<f64, KcalPerMol>::new(10.0);
-        let back: Energy<f64, KcalPerMol> = orig.to::<KjPerMol>().to();
+    fn roundtrip_kilocalorie_per_mole_kilojoule_per_mole_kilocalorie_per_mole() {
+        let orig = Energy::<f64, KilocaloriePerMole>::new(10.0);
+        let back: Energy<f64, KilocaloriePerMole> = orig.to::<KilojoulePerMole>().to();
         assert!((back.value() - 10.0).abs() < 1e-12);
     }
 
