@@ -1,6 +1,7 @@
 pub mod acceleration;
 pub mod angle;
 pub mod charge;
+pub mod dipole_moment;
 pub mod energy;
 pub mod force;
 pub mod force_constant;
