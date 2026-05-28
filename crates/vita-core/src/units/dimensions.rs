@@ -3,6 +3,7 @@ pub mod amount_of_substance;
 pub mod angle;
 pub mod area;
 pub mod charge;
+pub mod concentration;
 pub mod density;
 pub mod dipole_moment;
 pub mod energy;
