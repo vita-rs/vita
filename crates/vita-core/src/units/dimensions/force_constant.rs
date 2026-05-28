@@ -7,7 +7,9 @@
 //! | [`HartreePerBohrSquared`] | Eₕ a₀⁻² | 1 |
 //! | [`KcalPerMolPerAngstromSquared`] | kcal mol⁻¹ Å⁻² | 0.529177210544² / 627.509474063 |
 //! | [`KjPerMolPerNanometerSquared`] | kJ mol⁻¹ nm⁻² | 0.0529177210544² / 2625.49963948 |
+//! | [`ElectronVoltPerAngstromSquared`] | eV Å⁻² | 0.529177210544² / 27.211386245981 |
 //! | [`NewtonPerMeter`] | N m⁻¹ | 5.29177210544e-11 / 8.2387235038e-8 |
+//! | [`PiconewtonPerNanometer`] | pN nm⁻¹ | 5.29177210544e-14 / 8.2387235038e-8 |
 
 use crate::units::quantity::define_quantity;
 
@@ -60,6 +62,16 @@ impl ForceConstantUnit for KjPerMolPerNanometerSquared {
     const SYMBOL: &'static str = "kJ mol⁻¹ nm⁻²";
 }
 
+/// The electronvolt per ångström squared (eV Å⁻²).
+///
+/// 1 eV Å⁻² ≈ 0.529177210544² / 27.211386245981 Eₕ a₀⁻² (CODATA 2022, derived).
+pub struct ElectronVoltPerAngstromSquared;
+
+impl ForceConstantUnit for ElectronVoltPerAngstromSquared {
+    const TO_CANONICAL: f64 = 0.529_177_210_544 * 0.529_177_210_544 / 27.211_386_245_981;
+    const SYMBOL: &'static str = "eV Å⁻²";
+}
+
 /// The newton per metre (N m⁻¹) — SI unit of force constant (CODATA 2022).
 ///
 /// 1 N m⁻¹ ≈ 5.29177210544e-11 / 8.2387235038e-8 Eₕ a₀⁻².
@@ -68,6 +80,16 @@ pub struct NewtonPerMeter;
 impl ForceConstantUnit for NewtonPerMeter {
     const TO_CANONICAL: f64 = 5.291_772_105_44e-11 / 8.238_723_503_8e-8;
     const SYMBOL: &'static str = "N m⁻¹";
+}
+
+/// The piconewton per nanometre (pN nm⁻¹).
+///
+/// 1 pN nm⁻¹ ≈ 5.29177210544e-14 / 8.2387235038e-8 Eₕ a₀⁻² (CODATA 2022).
+pub struct PiconewtonPerNanometer;
+
+impl ForceConstantUnit for PiconewtonPerNanometer {
+    const TO_CANONICAL: f64 = 5.291_772_105_44e-14 / 8.238_723_503_8e-8;
+    const SYMBOL: &'static str = "pN nm⁻¹";
 }
 
 #[cfg(test)]
@@ -130,10 +152,24 @@ mod tests {
     }
 
     #[test]
+    fn hartree_per_bohr_squared_to_electron_volt_per_angstrom_squared() {
+        let k: ForceConstant<f64, ElectronVoltPerAngstromSquared> =
+            ForceConstant::<f64, HartreePerBohrSquared>::new(1.0).to();
+        assert!((k.value() - 97.173_624_424).abs() < 1e-6);
+    }
+
+    #[test]
     fn hartree_per_bohr_squared_to_newton_per_meter() {
         let k: ForceConstant<f64, NewtonPerMeter> =
             ForceConstant::<f64, HartreePerBohrSquared>::new(1.0).to();
         assert!((k.value() - 1556.893_105).abs() < 1e-6);
+    }
+
+    #[test]
+    fn hartree_per_bohr_squared_to_piconewton_per_nanometer() {
+        let k: ForceConstant<f64, PiconewtonPerNanometer> =
+            ForceConstant::<f64, HartreePerBohrSquared>::new(1.0).to();
+        assert!((k.value() - 1_556_893.104_926).abs() < 1e-3);
     }
 
     #[test]
