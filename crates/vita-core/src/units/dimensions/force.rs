@@ -5,8 +5,8 @@
 //! | Type | Symbol | Eₕ a₀⁻¹ per unit |
 //! |---|---|---|
 //! | [`HartreePerBohr`] | Eₕ a₀⁻¹ | 1 |
-//! | [`KcalPerMolPerAngstrom`] | kcal mol⁻¹ Å⁻¹ | 0.529177210544 / 627.509474063 |
-//! | [`KjPerMolPerNanometer`] | kJ mol⁻¹ nm⁻¹ | 0.0529177210544 / 2625.49963948 |
+//! | [`KilocaloriePerMolePerAngstrom`] | kcal mol⁻¹ Å⁻¹ | 0.529177210544 / 627.509474063 |
+//! | [`KilojoulePerMolePerNanometer`] | kJ mol⁻¹ nm⁻¹ | 0.0529177210544 / 2625.49963948 |
 //! | [`ElectronVoltPerAngstrom`] | eV Å⁻¹ | 0.529177210544 / 27.211386245981 |
 //! | [`Newton`] | N | 1 / 8.2387235038e-8 |
 //! | [`Piconewton`] | pN | 1e-12 / 8.2387235038e-8 |
@@ -44,9 +44,9 @@ impl ForceUnit for HartreePerBohr {
 /// The kilocalorie per mole per ångström (kcal mol⁻¹ Å⁻¹).
 ///
 /// 1 kcal mol⁻¹ Å⁻¹ ≈ 0.529177210544 / 627.509474063 Eₕ a₀⁻¹ (CODATA 2022, derived).
-pub struct KcalPerMolPerAngstrom;
+pub struct KilocaloriePerMolePerAngstrom;
 
-impl ForceUnit for KcalPerMolPerAngstrom {
+impl ForceUnit for KilocaloriePerMolePerAngstrom {
     const TO_CANONICAL: f64 = 0.529_177_210_544 / 627.509_474_063;
     const SYMBOL: &'static str = "kcal mol⁻¹ Å⁻¹";
 }
@@ -54,9 +54,9 @@ impl ForceUnit for KcalPerMolPerAngstrom {
 /// The kilojoule per mole per nanometre (kJ mol⁻¹ nm⁻¹).
 ///
 /// 1 kJ mol⁻¹ nm⁻¹ ≈ 0.0529177210544 / 2625.49963948 Eₕ a₀⁻¹ (CODATA 2022, derived).
-pub struct KjPerMolPerNanometer;
+pub struct KilojoulePerMolePerNanometer;
 
-impl ForceUnit for KjPerMolPerNanometer {
+impl ForceUnit for KilojoulePerMolePerNanometer {
     const TO_CANONICAL: f64 = 0.052_917_721_054_4 / 2625.499_639_48;
     const SYMBOL: &'static str = "kJ mol⁻¹ nm⁻¹";
 }
@@ -124,21 +124,23 @@ mod tests {
     }
 
     #[test]
-    fn hartree_per_bohr_to_kcal_per_mol_per_angstrom() {
-        let f: Force<f64, KcalPerMolPerAngstrom> = Force::<f64, HartreePerBohr>::new(1.0).to();
+    fn hartree_per_bohr_to_kilocalorie_per_mole_per_angstrom() {
+        let f: Force<f64, KilocaloriePerMolePerAngstrom> =
+            Force::<f64, HartreePerBohr>::new(1.0).to();
         assert!((f.value() - 1185.821_047).abs() < 1e-6);
     }
 
     #[test]
-    fn kcal_per_mol_per_angstrom_to_hartree_per_bohr() {
+    fn kilocalorie_per_mole_per_angstrom_to_hartree_per_bohr() {
         let f: Force<f64, HartreePerBohr> =
-            Force::<f64, KcalPerMolPerAngstrom>::new(1185.821_047_391_503).to();
+            Force::<f64, KilocaloriePerMolePerAngstrom>::new(1185.821_047_391_503).to();
         assert!((f.value() - 1.0).abs() < 1e-9);
     }
 
     #[test]
-    fn hartree_per_bohr_to_kj_per_mol_per_nanometer() {
-        let f: Force<f64, KjPerMolPerNanometer> = Force::<f64, HartreePerBohr>::new(1.0).to();
+    fn hartree_per_bohr_to_kilojoule_per_mole_per_nanometer() {
+        let f: Force<f64, KilojoulePerMolePerNanometer> =
+            Force::<f64, HartreePerBohr>::new(1.0).to();
         assert!((f.value() - 49_614.752_622_87).abs() < 1e-3);
     }
 
@@ -161,9 +163,9 @@ mod tests {
     }
 
     #[test]
-    fn roundtrip_kcal_per_mol_per_angstrom_newton_kcal_per_mol_per_angstrom() {
-        let orig = Force::<f64, KcalPerMolPerAngstrom>::new(10.0);
-        let back: Force<f64, KcalPerMolPerAngstrom> = orig.to::<Newton>().to();
+    fn roundtrip_kilocalorie_per_mole_per_angstrom_newton_kilocalorie_per_mole_per_angstrom() {
+        let orig = Force::<f64, KilocaloriePerMolePerAngstrom>::new(10.0);
+        let back: Force<f64, KilocaloriePerMolePerAngstrom> = orig.to::<Newton>().to();
         assert!((back.value() - 10.0).abs() < 1e-12);
     }
 
@@ -324,8 +326,9 @@ mod tests {
     }
 
     #[test]
-    fn f32_hartree_per_bohr_to_kcal_per_mol_per_angstrom() {
-        let f: Force<f32, KcalPerMolPerAngstrom> = Force::<f32, HartreePerBohr>::new(1.0_f32).to();
+    fn f32_hartree_per_bohr_to_kilocalorie_per_mole_per_angstrom() {
+        let f: Force<f32, KilocaloriePerMolePerAngstrom> =
+            Force::<f32, HartreePerBohr>::new(1.0_f32).to();
         assert!((f.value() - 1185.821_f32).abs() < 0.01_f32);
     }
 
