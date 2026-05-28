@@ -3,6 +3,7 @@ pub mod angle;
 pub mod charge;
 pub mod energy;
 pub mod force;
+pub mod force_constant;
 pub mod length;
 pub mod mass;
 pub mod pressure;
