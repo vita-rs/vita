@@ -7,6 +7,7 @@ pub mod dipole_moment;
 pub mod energy;
 pub mod force;
 pub mod force_constant;
+pub mod frequency;
 pub mod length;
 pub mod mass;
 pub mod pressure;
