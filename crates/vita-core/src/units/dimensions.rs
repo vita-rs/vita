@@ -12,6 +12,7 @@ pub mod force_constant;
 pub mod frequency;
 pub mod length;
 pub mod mass;
+pub mod momentum;
 pub mod pressure;
 pub mod temperature;
 pub mod time;
