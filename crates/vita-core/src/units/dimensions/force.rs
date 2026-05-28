@@ -7,6 +7,7 @@
 //! | [`HartreePerBohr`] | Eₕ a₀⁻¹ | 1 |
 //! | [`KcalPerMolPerAngstrom`] | kcal mol⁻¹ Å⁻¹ | 0.529177210544 / 627.509474063 |
 //! | [`KjPerMolPerNanometer`] | kJ mol⁻¹ nm⁻¹ | 0.0529177210544 / 2625.49963948 |
+//! | [`ElectronVoltPerAngstrom`] | eV Å⁻¹ | 0.529177210544 / 27.211386245981 |
 //! | [`Newton`] | N | 1 / 8.2387235038e-8 |
 //! | [`Piconewton`] | pN | 1e-12 / 8.2387235038e-8 |
 
@@ -58,6 +59,16 @@ pub struct KjPerMolPerNanometer;
 impl ForceUnit for KjPerMolPerNanometer {
     const TO_CANONICAL: f64 = 0.052_917_721_054_4 / 2625.499_639_48;
     const SYMBOL: &'static str = "kJ mol⁻¹ nm⁻¹";
+}
+
+/// The electronvolt per ångström (eV Å⁻¹) — standard DFT force unit.
+///
+/// 1 eV Å⁻¹ ≈ 0.529177210544 / 27.211386245981 Eₕ a₀⁻¹ (CODATA 2022, derived).
+pub struct ElectronVoltPerAngstrom;
+
+impl ForceUnit for ElectronVoltPerAngstrom {
+    const TO_CANONICAL: f64 = 0.529_177_210_544 / 27.211_386_245_981;
+    const SYMBOL: &'static str = "eV Å⁻¹";
 }
 
 /// The newton (N) — SI unit of force (CODATA 2022).
@@ -129,6 +140,12 @@ mod tests {
     fn hartree_per_bohr_to_kj_per_mol_per_nanometer() {
         let f: Force<f64, KjPerMolPerNanometer> = Force::<f64, HartreePerBohr>::new(1.0).to();
         assert!((f.value() - 49_614.752_622_87).abs() < 1e-3);
+    }
+
+    #[test]
+    fn hartree_per_bohr_to_electron_volt_per_angstrom() {
+        let f: Force<f64, ElectronVoltPerAngstrom> = Force::<f64, HartreePerBohr>::new(1.0).to();
+        assert!((f.value() - 51.422_067_511).abs() < 1e-6);
     }
 
     #[test]
