@@ -1,4 +1,5 @@
 pub mod acceleration;
+pub mod amount_of_substance;
 pub mod angle;
 pub mod area;
 pub mod charge;
