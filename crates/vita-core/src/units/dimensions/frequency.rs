@@ -5,7 +5,7 @@
 //! | Type | Symbol | cm⁻¹ per unit |
 //! |---|---|---|
 //! | [`Wavenumber`] | cm⁻¹ | 1 |
-//! | [`AtomicUnit`] | a.u. | 219474.63136314 |
+//! | [`AtomicFrequency`] | a.u. | 219474.63136314 |
 //! | [`Terahertz`] | THz | 33.3564095198152 |
 //! | [`Hertz`] | Hz | 1 / 29979245800 |
 
@@ -42,9 +42,9 @@ impl FrequencyUnit for Wavenumber {
 /// The atomic unit of frequency (a.u.) (CODATA 2022).
 ///
 /// 1 a.u. ≈ 219474.63136314 cm⁻¹.
-pub struct AtomicUnit;
+pub struct AtomicFrequency;
 
-impl FrequencyUnit for AtomicUnit {
+impl FrequencyUnit for AtomicFrequency {
     const TO_CANONICAL: f64 = 219_474.631_363_14;
     const SYMBOL: &'static str = "a.u.";
 }
@@ -115,14 +115,14 @@ mod tests {
     }
 
     #[test]
-    fn atomic_unit_to_wavenumber() {
-        let wn: Frequency<f64, Wavenumber> = Frequency::<f64, AtomicUnit>::new(1.0).to();
+    fn atomic_frequency_to_wavenumber() {
+        let wn: Frequency<f64, Wavenumber> = Frequency::<f64, AtomicFrequency>::new(1.0).to();
         assert!((wn.value() - 219_474.631_363_14).abs() < 1e-6);
     }
 
     #[test]
-    fn wavenumber_to_atomic_unit() {
-        let au: Frequency<f64, AtomicUnit> =
+    fn wavenumber_to_atomic_frequency() {
+        let au: Frequency<f64, AtomicFrequency> =
             Frequency::<f64, Wavenumber>::new(219_474.631_363_14).to();
         assert!((au.value() - 1.0).abs() < 1e-12);
     }
