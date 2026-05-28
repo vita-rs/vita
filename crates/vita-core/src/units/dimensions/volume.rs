@@ -7,6 +7,7 @@
 //! | [`CubicAngstrom`] | Å³ | 1 |
 //! | [`CubicBohr`] | a₀³ | 0.148184711171 |
 //! | [`CubicNanometer`] | nm³ | 1000 |
+//! | [`CubicPicometer`] | pm³ | 1e-6 |
 //! | [`CubicMeter`] | m³ | 1e30 |
 //! | [`Liter`] | L | 1e27 |
 //! | [`Milliliter`] | mL | 1e24 |
@@ -59,6 +60,16 @@ pub struct CubicNanometer;
 impl VolumeUnit for CubicNanometer {
     const TO_CANONICAL: f64 = 1_000.0;
     const SYMBOL: &'static str = "nm³";
+}
+
+/// The cubic picometre (pm³).
+///
+/// 1 pm³ = 1e-6 Å³.
+pub struct CubicPicometer;
+
+impl VolumeUnit for CubicPicometer {
+    const TO_CANONICAL: f64 = 1e-6;
+    const SYMBOL: &'static str = "pm³";
 }
 
 /// The cubic metre (m³) — SI base unit of volume.
@@ -139,6 +150,12 @@ mod tests {
     fn cubic_bohr_to_cubic_angstrom() {
         let a3: Volume<f64, CubicAngstrom> = Volume::<f64, CubicBohr>::new(1.0).to();
         assert!((a3.value() - 0.148_184_711_171).abs() < 1e-12);
+    }
+
+    #[test]
+    fn cubic_angstrom_to_cubic_picometer() {
+        let pm3: Volume<f64, CubicPicometer> = Volume::<f64, CubicAngstrom>::new(1.0).to();
+        assert!((pm3.value() - 1e6).abs() < 1e-6);
     }
 
     #[test]
