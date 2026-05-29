@@ -243,6 +243,19 @@ macro_rules! define_quantity {
             fn sub_assign(&mut self, rhs: Self) { self.0 -= rhs.0; }
         }
 
+        impl<V: $crate::units::scalar::Scalar, U: $UnitTrait> ::core::ops::Rem for $Qty<V, U> {
+            type Output = Self;
+            #[inline]
+            fn rem(self, rhs: Self) -> Self { Self::new(self.0 % rhs.0) }
+        }
+
+        impl<V: $crate::units::scalar::Scalar, U: $UnitTrait> ::core::ops::RemAssign
+            for $Qty<V, U>
+        {
+            #[inline]
+            fn rem_assign(&mut self, rhs: Self) { self.0 %= rhs.0; }
+        }
+
         impl<V: $crate::units::scalar::Scalar, U: $UnitTrait> ::core::ops::Mul<V>
             for $Qty<V, U>
         {
@@ -271,6 +284,21 @@ macro_rules! define_quantity {
         {
             #[inline]
             fn div_assign(&mut self, rhs: V) { self.0 /= rhs; }
+        }
+
+        impl<V: $crate::units::scalar::Scalar, U: $UnitTrait> ::core::ops::Rem<V>
+            for $Qty<V, U>
+        {
+            type Output = Self;
+            #[inline]
+            fn rem(self, rhs: V) -> Self { Self::new(self.0 % rhs) }
+        }
+
+        impl<V: $crate::units::scalar::Scalar, U: $UnitTrait> ::core::ops::RemAssign<V>
+            for $Qty<V, U>
+        {
+            #[inline]
+            fn rem_assign(&mut self, rhs: V) { self.0 %= rhs; }
         }
 
         impl<V: $crate::units::scalar::Scalar, U: $UnitTrait> ::core::ops::Div for $Qty<V, U> {
