@@ -105,7 +105,7 @@ mod tests {
     fn copy_and_clone() {
         let a = Length::<f64, Angstrom>::new(2.0);
         let b = a;
-        let c = a.clone();
+        let c = ::core::clone::Clone::clone(&a);
         assert_eq!(a, b);
         assert_eq!(a, c);
     }
@@ -174,6 +174,19 @@ mod tests {
     }
 
     #[test]
+    fn rem() {
+        let r = Length::<f64, Angstrom>::new(7.0) % Length::new(3.0);
+        assert_eq!(r.value(), 1.0);
+    }
+
+    #[test]
+    fn rem_assign() {
+        let mut l = Length::<f64, Angstrom>::new(7.0);
+        l %= Length::new(3.0);
+        assert_eq!(l.value(), 1.0);
+    }
+
+    #[test]
     fn neg() {
         assert_eq!((-Length::<f64, Angstrom>::new(1.5)).value(), -1.5);
     }
@@ -200,6 +213,19 @@ mod tests {
         let mut l = Length::<f64, Angstrom>::new(6.0);
         l /= 2.0;
         assert_eq!(l.value(), 3.0);
+    }
+
+    #[test]
+    fn rem_scalar() {
+        let r = Length::<f64, Angstrom>::new(7.0) % 3.0;
+        assert_eq!(r.value(), 1.0);
+    }
+
+    #[test]
+    fn rem_assign_scalar() {
+        let mut l = Length::<f64, Angstrom>::new(7.0);
+        l %= 3.0;
+        assert_eq!(l.value(), 1.0);
     }
 
     #[test]
@@ -260,6 +286,116 @@ mod tests {
         let lo = Length::<f64, Angstrom>::new(2.0);
         let hi = Length::<f64, Angstrom>::new(1.0);
         Length::new(1.5_f64).clamp(lo, hi);
+    }
+
+    #[test]
+    fn signum() {
+        assert_eq!(Length::<f64, Angstrom>::new(3.0).signum(), 1.0);
+        assert_eq!(Length::<f64, Angstrom>::new(-3.0).signum(), -1.0);
+    }
+
+    #[test]
+    fn copysign() {
+        let l = Length::<f64, Angstrom>::new(3.0);
+        let sign = Length::<f64, Angstrom>::new(-1.0);
+        assert_eq!(l.copysign(sign).value(), -3.0);
+        assert_eq!((-l).copysign(l).value(), 3.0);
+    }
+
+    #[test]
+    fn floor() {
+        assert_eq!(Length::<f64, Angstrom>::new(2.7).floor().value(), 2.0);
+        assert_eq!(Length::<f64, Angstrom>::new(-2.3).floor().value(), -3.0);
+    }
+
+    #[test]
+    fn ceil() {
+        assert_eq!(Length::<f64, Angstrom>::new(2.3).ceil().value(), 3.0);
+        assert_eq!(Length::<f64, Angstrom>::new(-2.7).ceil().value(), -2.0);
+    }
+
+    #[test]
+    fn round() {
+        assert_eq!(Length::<f64, Angstrom>::new(2.5).round().value(), 3.0);
+        assert_eq!(Length::<f64, Angstrom>::new(-2.5).round().value(), -3.0);
+    }
+
+    #[test]
+    fn round_ties_even() {
+        assert_eq!(
+            Length::<f64, Angstrom>::new(2.5).round_ties_even().value(),
+            2.0
+        );
+        assert_eq!(
+            Length::<f64, Angstrom>::new(3.5).round_ties_even().value(),
+            4.0
+        );
+    }
+
+    #[test]
+    fn trunc() {
+        assert_eq!(Length::<f64, Angstrom>::new(2.7).trunc().value(), 2.0);
+        assert_eq!(Length::<f64, Angstrom>::new(-2.7).trunc().value(), -2.0);
+    }
+
+    #[test]
+    fn fract() {
+        assert!((Length::<f64, Angstrom>::new(2.75).fract().value() - 0.75).abs() < 1e-12);
+    }
+
+    #[test]
+    fn div_euclid() {
+        let q = Length::<f64, Angstrom>::new(7.0).div_euclid(Length::new(3.0));
+        assert_eq!(q, 2.0);
+    }
+
+    #[test]
+    fn rem_euclid() {
+        let r = Length::<f64, Angstrom>::new(-7.0).rem_euclid(Length::new(3.0));
+        assert_eq!(r.value(), 2.0);
+    }
+
+    #[test]
+    fn mul_add() {
+        let r = Length::<f64, Angstrom>::new(2.0).mul_add(3.0, Length::new(1.0));
+        assert_eq!(r.value(), 7.0);
+    }
+
+    #[test]
+    fn hypot() {
+        let h = Length::<f64, Angstrom>::new(3.0).hypot(Length::new(4.0));
+        assert!((h.value() - 5.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn is_nan() {
+        assert!(Length::<f64, Angstrom>::new(f64::NAN).is_nan());
+        assert!(!Length::<f64, Angstrom>::new(1.0).is_nan());
+    }
+
+    #[test]
+    fn is_infinite() {
+        assert!(Length::<f64, Angstrom>::new(f64::INFINITY).is_infinite());
+        assert!(!Length::<f64, Angstrom>::new(1.0).is_infinite());
+    }
+
+    #[test]
+    fn is_finite() {
+        assert!(Length::<f64, Angstrom>::new(1.0).is_finite());
+        assert!(!Length::<f64, Angstrom>::new(f64::INFINITY).is_finite());
+        assert!(!Length::<f64, Angstrom>::new(f64::NAN).is_finite());
+    }
+
+    #[test]
+    fn is_sign_positive() {
+        assert!(Length::<f64, Angstrom>::new(1.0).is_sign_positive());
+        assert!(!Length::<f64, Angstrom>::new(-1.0).is_sign_positive());
+    }
+
+    #[test]
+    fn is_sign_negative() {
+        assert!(Length::<f64, Angstrom>::new(-1.0).is_sign_negative());
+        assert!(!Length::<f64, Angstrom>::new(1.0).is_sign_negative());
     }
 
     #[test]

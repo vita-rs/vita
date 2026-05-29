@@ -127,7 +127,7 @@ mod tests {
     fn copy_and_clone() {
         let a = Volume::<f64, CubicAngstrom>::new(2.0);
         let b = a;
-        let c = a.clone();
+        let c = ::core::clone::Clone::clone(&a);
         assert_eq!(a, b);
         assert_eq!(a, c);
     }
@@ -196,6 +196,19 @@ mod tests {
     }
 
     #[test]
+    fn rem() {
+        let r = Volume::<f64, CubicAngstrom>::new(7.0) % Volume::new(3.0);
+        assert_eq!(r.value(), 1.0);
+    }
+
+    #[test]
+    fn rem_assign() {
+        let mut v = Volume::<f64, CubicAngstrom>::new(7.0);
+        v %= Volume::new(3.0);
+        assert_eq!(v.value(), 1.0);
+    }
+
+    #[test]
     fn neg() {
         assert_eq!((-Volume::<f64, CubicAngstrom>::new(1.5)).value(), -1.5);
     }
@@ -222,6 +235,19 @@ mod tests {
         let mut v = Volume::<f64, CubicAngstrom>::new(6.0);
         v /= 2.0;
         assert_eq!(v.value(), 3.0);
+    }
+
+    #[test]
+    fn rem_scalar() {
+        let r = Volume::<f64, CubicAngstrom>::new(7.0) % 3.0;
+        assert_eq!(r.value(), 1.0);
+    }
+
+    #[test]
+    fn rem_assign_scalar() {
+        let mut v = Volume::<f64, CubicAngstrom>::new(7.0);
+        v %= 3.0;
+        assert_eq!(v.value(), 1.0);
     }
 
     #[test]
@@ -282,6 +308,129 @@ mod tests {
         let lo = Volume::<f64, CubicAngstrom>::new(2.0);
         let hi = Volume::<f64, CubicAngstrom>::new(1.0);
         Volume::new(1.5_f64).clamp(lo, hi);
+    }
+
+    #[test]
+    fn signum() {
+        assert_eq!(Volume::<f64, CubicAngstrom>::new(3.0).signum(), 1.0);
+        assert_eq!(Volume::<f64, CubicAngstrom>::new(-3.0).signum(), -1.0);
+    }
+
+    #[test]
+    fn copysign() {
+        let v = Volume::<f64, CubicAngstrom>::new(3.0);
+        let sign = Volume::<f64, CubicAngstrom>::new(-1.0);
+        assert_eq!(v.copysign(sign).value(), -3.0);
+        assert_eq!((-v).copysign(v).value(), 3.0);
+    }
+
+    #[test]
+    fn floor() {
+        assert_eq!(Volume::<f64, CubicAngstrom>::new(2.7).floor().value(), 2.0);
+        assert_eq!(
+            Volume::<f64, CubicAngstrom>::new(-2.3).floor().value(),
+            -3.0
+        );
+    }
+
+    #[test]
+    fn ceil() {
+        assert_eq!(Volume::<f64, CubicAngstrom>::new(2.3).ceil().value(), 3.0);
+        assert_eq!(Volume::<f64, CubicAngstrom>::new(-2.7).ceil().value(), -2.0);
+    }
+
+    #[test]
+    fn round() {
+        assert_eq!(Volume::<f64, CubicAngstrom>::new(2.5).round().value(), 3.0);
+        assert_eq!(
+            Volume::<f64, CubicAngstrom>::new(-2.5).round().value(),
+            -3.0
+        );
+    }
+
+    #[test]
+    fn round_ties_even() {
+        assert_eq!(
+            Volume::<f64, CubicAngstrom>::new(2.5)
+                .round_ties_even()
+                .value(),
+            2.0
+        );
+        assert_eq!(
+            Volume::<f64, CubicAngstrom>::new(3.5)
+                .round_ties_even()
+                .value(),
+            4.0
+        );
+    }
+
+    #[test]
+    fn trunc() {
+        assert_eq!(Volume::<f64, CubicAngstrom>::new(2.7).trunc().value(), 2.0);
+        assert_eq!(
+            Volume::<f64, CubicAngstrom>::new(-2.7).trunc().value(),
+            -2.0
+        );
+    }
+
+    #[test]
+    fn fract() {
+        assert!((Volume::<f64, CubicAngstrom>::new(2.75).fract().value() - 0.75).abs() < 1e-12);
+    }
+
+    #[test]
+    fn div_euclid() {
+        let q = Volume::<f64, CubicAngstrom>::new(7.0).div_euclid(Volume::new(3.0));
+        assert_eq!(q, 2.0);
+    }
+
+    #[test]
+    fn rem_euclid() {
+        let r = Volume::<f64, CubicAngstrom>::new(-7.0).rem_euclid(Volume::new(3.0));
+        assert_eq!(r.value(), 2.0);
+    }
+
+    #[test]
+    fn mul_add() {
+        let r = Volume::<f64, CubicAngstrom>::new(2.0).mul_add(3.0, Volume::new(1.0));
+        assert_eq!(r.value(), 7.0);
+    }
+
+    #[test]
+    fn hypot() {
+        let h = Volume::<f64, CubicAngstrom>::new(3.0).hypot(Volume::new(4.0));
+        assert!((h.value() - 5.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn is_nan() {
+        assert!(Volume::<f64, CubicAngstrom>::new(f64::NAN).is_nan());
+        assert!(!Volume::<f64, CubicAngstrom>::new(1.0).is_nan());
+    }
+
+    #[test]
+    fn is_infinite() {
+        assert!(Volume::<f64, CubicAngstrom>::new(f64::INFINITY).is_infinite());
+        assert!(!Volume::<f64, CubicAngstrom>::new(1.0).is_infinite());
+    }
+
+    #[test]
+    fn is_finite() {
+        assert!(Volume::<f64, CubicAngstrom>::new(1.0).is_finite());
+        assert!(!Volume::<f64, CubicAngstrom>::new(f64::INFINITY).is_finite());
+        assert!(!Volume::<f64, CubicAngstrom>::new(f64::NAN).is_finite());
+    }
+
+    #[test]
+    fn is_sign_positive() {
+        assert!(Volume::<f64, CubicAngstrom>::new(1.0).is_sign_positive());
+        assert!(!Volume::<f64, CubicAngstrom>::new(-1.0).is_sign_positive());
+    }
+
+    #[test]
+    fn is_sign_negative() {
+        assert!(Volume::<f64, CubicAngstrom>::new(-1.0).is_sign_negative());
+        assert!(!Volume::<f64, CubicAngstrom>::new(1.0).is_sign_negative());
     }
 
     #[test]

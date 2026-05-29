@@ -76,7 +76,7 @@ impl TimeUnit for Second {
 pub struct AtomicTime;
 
 impl TimeUnit for AtomicTime {
-    const TO_CANONICAL: f64 = 2.418_884_326_5864e-5;
+    const TO_CANONICAL: f64 = 2.418_884_326_586_4e-5;
     const SYMBOL: &'static str = "atu";
 }
 
@@ -105,7 +105,7 @@ mod tests {
     fn copy_and_clone() {
         let a = Time::<f64, Picosecond>::new(2.0);
         let b = a;
-        let c = a.clone();
+        let c = ::core::clone::Clone::clone(&a);
         assert_eq!(a, b);
         assert_eq!(a, c);
     }
@@ -137,7 +137,7 @@ mod tests {
     #[test]
     fn atomic_time_to_picosecond() {
         let ps: Time<f64, Picosecond> = Time::<f64, AtomicTime>::new(1.0).to();
-        assert!((ps.value() - 2.418_884_326_5864e-5).abs() < 1e-18);
+        assert!((ps.value() - 2.418_884_326_586_4e-5).abs() < 1e-18);
     }
 
     #[test]
@@ -174,6 +174,19 @@ mod tests {
     }
 
     #[test]
+    fn rem() {
+        let r = Time::<f64, Picosecond>::new(7.0) % Time::new(3.0);
+        assert_eq!(r.value(), 1.0);
+    }
+
+    #[test]
+    fn rem_assign() {
+        let mut t = Time::<f64, Picosecond>::new(7.0);
+        t %= Time::new(3.0);
+        assert_eq!(t.value(), 1.0);
+    }
+
+    #[test]
     fn neg() {
         assert_eq!((-Time::<f64, Picosecond>::new(1.5)).value(), -1.5);
     }
@@ -200,6 +213,19 @@ mod tests {
         let mut t = Time::<f64, Picosecond>::new(6.0);
         t /= 2.0;
         assert_eq!(t.value(), 3.0);
+    }
+
+    #[test]
+    fn rem_scalar() {
+        let r = Time::<f64, Picosecond>::new(7.0) % 3.0;
+        assert_eq!(r.value(), 1.0);
+    }
+
+    #[test]
+    fn rem_assign_scalar() {
+        let mut t = Time::<f64, Picosecond>::new(7.0);
+        t %= 3.0;
+        assert_eq!(t.value(), 1.0);
     }
 
     #[test]
@@ -260,6 +286,116 @@ mod tests {
         let lo = Time::<f64, Picosecond>::new(2.0);
         let hi = Time::<f64, Picosecond>::new(1.0);
         Time::new(1.5_f64).clamp(lo, hi);
+    }
+
+    #[test]
+    fn signum() {
+        assert_eq!(Time::<f64, Picosecond>::new(3.0).signum(), 1.0);
+        assert_eq!(Time::<f64, Picosecond>::new(-3.0).signum(), -1.0);
+    }
+
+    #[test]
+    fn copysign() {
+        let t = Time::<f64, Picosecond>::new(3.0);
+        let sign = Time::<f64, Picosecond>::new(-1.0);
+        assert_eq!(t.copysign(sign).value(), -3.0);
+        assert_eq!((-t).copysign(t).value(), 3.0);
+    }
+
+    #[test]
+    fn floor() {
+        assert_eq!(Time::<f64, Picosecond>::new(2.7).floor().value(), 2.0);
+        assert_eq!(Time::<f64, Picosecond>::new(-2.3).floor().value(), -3.0);
+    }
+
+    #[test]
+    fn ceil() {
+        assert_eq!(Time::<f64, Picosecond>::new(2.3).ceil().value(), 3.0);
+        assert_eq!(Time::<f64, Picosecond>::new(-2.7).ceil().value(), -2.0);
+    }
+
+    #[test]
+    fn round() {
+        assert_eq!(Time::<f64, Picosecond>::new(2.5).round().value(), 3.0);
+        assert_eq!(Time::<f64, Picosecond>::new(-2.5).round().value(), -3.0);
+    }
+
+    #[test]
+    fn round_ties_even() {
+        assert_eq!(
+            Time::<f64, Picosecond>::new(2.5).round_ties_even().value(),
+            2.0
+        );
+        assert_eq!(
+            Time::<f64, Picosecond>::new(3.5).round_ties_even().value(),
+            4.0
+        );
+    }
+
+    #[test]
+    fn trunc() {
+        assert_eq!(Time::<f64, Picosecond>::new(2.7).trunc().value(), 2.0);
+        assert_eq!(Time::<f64, Picosecond>::new(-2.7).trunc().value(), -2.0);
+    }
+
+    #[test]
+    fn fract() {
+        assert!((Time::<f64, Picosecond>::new(2.75).fract().value() - 0.75).abs() < 1e-12);
+    }
+
+    #[test]
+    fn div_euclid() {
+        let q = Time::<f64, Picosecond>::new(7.0).div_euclid(Time::new(3.0));
+        assert_eq!(q, 2.0);
+    }
+
+    #[test]
+    fn rem_euclid() {
+        let r = Time::<f64, Picosecond>::new(-7.0).rem_euclid(Time::new(3.0));
+        assert_eq!(r.value(), 2.0);
+    }
+
+    #[test]
+    fn mul_add() {
+        let r = Time::<f64, Picosecond>::new(2.0).mul_add(3.0, Time::new(1.0));
+        assert_eq!(r.value(), 7.0);
+    }
+
+    #[test]
+    fn hypot() {
+        let h = Time::<f64, Picosecond>::new(3.0).hypot(Time::new(4.0));
+        assert!((h.value() - 5.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn is_nan() {
+        assert!(Time::<f64, Picosecond>::new(f64::NAN).is_nan());
+        assert!(!Time::<f64, Picosecond>::new(1.0).is_nan());
+    }
+
+    #[test]
+    fn is_infinite() {
+        assert!(Time::<f64, Picosecond>::new(f64::INFINITY).is_infinite());
+        assert!(!Time::<f64, Picosecond>::new(1.0).is_infinite());
+    }
+
+    #[test]
+    fn is_finite() {
+        assert!(Time::<f64, Picosecond>::new(1.0).is_finite());
+        assert!(!Time::<f64, Picosecond>::new(f64::INFINITY).is_finite());
+        assert!(!Time::<f64, Picosecond>::new(f64::NAN).is_finite());
+    }
+
+    #[test]
+    fn is_sign_positive() {
+        assert!(Time::<f64, Picosecond>::new(1.0).is_sign_positive());
+        assert!(!Time::<f64, Picosecond>::new(-1.0).is_sign_positive());
+    }
+
+    #[test]
+    fn is_sign_negative() {
+        assert!(Time::<f64, Picosecond>::new(-1.0).is_sign_negative());
+        assert!(!Time::<f64, Picosecond>::new(1.0).is_sign_negative());
     }
 
     #[test]

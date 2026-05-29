@@ -89,7 +89,7 @@ mod tests {
     fn copy_and_clone() {
         let a = Density::<f64, GramPerCubicCentimeter>::new(1.0);
         let b = a;
-        let c = a.clone();
+        let c = ::core::clone::Clone::clone(&a);
         assert_eq!(a, b);
         assert_eq!(a, c);
     }
@@ -156,6 +156,19 @@ mod tests {
     }
 
     #[test]
+    fn rem() {
+        let r = Density::<f64, GramPerCubicCentimeter>::new(7.0) % Density::new(3.0);
+        assert_eq!(r.value(), 1.0);
+    }
+
+    #[test]
+    fn rem_assign() {
+        let mut d = Density::<f64, GramPerCubicCentimeter>::new(7.0);
+        d %= Density::new(3.0);
+        assert_eq!(d.value(), 1.0);
+    }
+
+    #[test]
     fn neg() {
         assert_eq!(
             (-Density::<f64, GramPerCubicCentimeter>::new(1.5)).value(),
@@ -191,6 +204,19 @@ mod tests {
         let mut d = Density::<f64, GramPerCubicCentimeter>::new(6.0);
         d /= 2.0;
         assert_eq!(d.value(), 3.0);
+    }
+
+    #[test]
+    fn rem_scalar() {
+        let r = Density::<f64, GramPerCubicCentimeter>::new(7.0) % 3.0;
+        assert_eq!(r.value(), 1.0);
+    }
+
+    #[test]
+    fn rem_assign_scalar() {
+        let mut d = Density::<f64, GramPerCubicCentimeter>::new(7.0);
+        d %= 3.0;
+        assert_eq!(d.value(), 1.0);
     }
 
     #[test]
@@ -261,6 +287,173 @@ mod tests {
         let lo = Density::<f64, GramPerCubicCentimeter>::new(2.0);
         let hi = Density::<f64, GramPerCubicCentimeter>::new(1.0);
         Density::new(1.5_f64).clamp(lo, hi);
+    }
+
+    #[test]
+    fn signum() {
+        assert_eq!(
+            Density::<f64, GramPerCubicCentimeter>::new(3.0).signum(),
+            1.0
+        );
+        assert_eq!(
+            Density::<f64, GramPerCubicCentimeter>::new(-3.0).signum(),
+            -1.0
+        );
+    }
+
+    #[test]
+    fn copysign() {
+        let d = Density::<f64, GramPerCubicCentimeter>::new(3.0);
+        let sign = Density::<f64, GramPerCubicCentimeter>::new(-1.0);
+        assert_eq!(d.copysign(sign).value(), -3.0);
+        assert_eq!((-d).copysign(d).value(), 3.0);
+    }
+
+    #[test]
+    fn floor() {
+        assert_eq!(
+            Density::<f64, GramPerCubicCentimeter>::new(2.7)
+                .floor()
+                .value(),
+            2.0
+        );
+        assert_eq!(
+            Density::<f64, GramPerCubicCentimeter>::new(-2.3)
+                .floor()
+                .value(),
+            -3.0
+        );
+    }
+
+    #[test]
+    fn ceil() {
+        assert_eq!(
+            Density::<f64, GramPerCubicCentimeter>::new(2.3)
+                .ceil()
+                .value(),
+            3.0
+        );
+        assert_eq!(
+            Density::<f64, GramPerCubicCentimeter>::new(-2.7)
+                .ceil()
+                .value(),
+            -2.0
+        );
+    }
+
+    #[test]
+    fn round() {
+        assert_eq!(
+            Density::<f64, GramPerCubicCentimeter>::new(2.5)
+                .round()
+                .value(),
+            3.0
+        );
+        assert_eq!(
+            Density::<f64, GramPerCubicCentimeter>::new(-2.5)
+                .round()
+                .value(),
+            -3.0
+        );
+    }
+
+    #[test]
+    fn round_ties_even() {
+        assert_eq!(
+            Density::<f64, GramPerCubicCentimeter>::new(2.5)
+                .round_ties_even()
+                .value(),
+            2.0
+        );
+        assert_eq!(
+            Density::<f64, GramPerCubicCentimeter>::new(3.5)
+                .round_ties_even()
+                .value(),
+            4.0
+        );
+    }
+
+    #[test]
+    fn trunc() {
+        assert_eq!(
+            Density::<f64, GramPerCubicCentimeter>::new(2.7)
+                .trunc()
+                .value(),
+            2.0
+        );
+        assert_eq!(
+            Density::<f64, GramPerCubicCentimeter>::new(-2.7)
+                .trunc()
+                .value(),
+            -2.0
+        );
+    }
+
+    #[test]
+    fn fract() {
+        assert!(
+            (Density::<f64, GramPerCubicCentimeter>::new(2.75)
+                .fract()
+                .value()
+                - 0.75)
+                .abs()
+                < 1e-12
+        );
+    }
+
+    #[test]
+    fn div_euclid() {
+        let q = Density::<f64, GramPerCubicCentimeter>::new(7.0).div_euclid(Density::new(3.0));
+        assert_eq!(q, 2.0);
+    }
+
+    #[test]
+    fn rem_euclid() {
+        let r = Density::<f64, GramPerCubicCentimeter>::new(-7.0).rem_euclid(Density::new(3.0));
+        assert_eq!(r.value(), 2.0);
+    }
+
+    #[test]
+    fn mul_add() {
+        let r = Density::<f64, GramPerCubicCentimeter>::new(2.0).mul_add(3.0, Density::new(1.0));
+        assert_eq!(r.value(), 7.0);
+    }
+
+    #[test]
+    fn hypot() {
+        let h = Density::<f64, GramPerCubicCentimeter>::new(3.0).hypot(Density::new(4.0));
+        assert!((h.value() - 5.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn is_nan() {
+        assert!(Density::<f64, GramPerCubicCentimeter>::new(f64::NAN).is_nan());
+        assert!(!Density::<f64, GramPerCubicCentimeter>::new(1.0).is_nan());
+    }
+
+    #[test]
+    fn is_infinite() {
+        assert!(Density::<f64, GramPerCubicCentimeter>::new(f64::INFINITY).is_infinite());
+        assert!(!Density::<f64, GramPerCubicCentimeter>::new(1.0).is_infinite());
+    }
+
+    #[test]
+    fn is_finite() {
+        assert!(Density::<f64, GramPerCubicCentimeter>::new(1.0).is_finite());
+        assert!(!Density::<f64, GramPerCubicCentimeter>::new(f64::INFINITY).is_finite());
+        assert!(!Density::<f64, GramPerCubicCentimeter>::new(f64::NAN).is_finite());
+    }
+
+    #[test]
+    fn is_sign_positive() {
+        assert!(Density::<f64, GramPerCubicCentimeter>::new(1.0).is_sign_positive());
+        assert!(!Density::<f64, GramPerCubicCentimeter>::new(-1.0).is_sign_positive());
+    }
+
+    #[test]
+    fn is_sign_negative() {
+        assert!(Density::<f64, GramPerCubicCentimeter>::new(-1.0).is_sign_negative());
+        assert!(!Density::<f64, GramPerCubicCentimeter>::new(1.0).is_sign_negative());
     }
 
     #[test]

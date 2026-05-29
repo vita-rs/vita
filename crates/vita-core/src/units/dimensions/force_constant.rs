@@ -58,7 +58,7 @@ impl ForceConstantUnit for KilocaloriePerMolePerSquareAngstrom {
 pub struct KilojoulePerMolePerSquareNanometer;
 
 impl ForceConstantUnit for KilojoulePerMolePerSquareNanometer {
-    const TO_CANONICAL: f64 = 0.052_917_721_054_4 * 0.052_917_721_054_4 / 2625.499_639_48;
+    const TO_CANONICAL: f64 = 0.052_917_721_054_4 * 0.052_917_721_054_4 / 2_625.499_639_48;
     const SYMBOL: &'static str = "kJ mol⁻¹ nm⁻²";
 }
 
@@ -123,7 +123,7 @@ mod tests {
     fn copy_and_clone() {
         let a = ForceConstant::<f64, HartreePerSquareBohr>::new(2.0);
         let b = a;
-        let c = a.clone();
+        let c = ::core::clone::Clone::clone(&a);
         assert_eq!(a, b);
         assert_eq!(a, c);
     }
@@ -132,13 +132,13 @@ mod tests {
     fn hartree_per_square_bohr_to_kilocalorie_per_mole_per_square_angstrom() {
         let k: ForceConstant<f64, KilocaloriePerMolePerSquareAngstrom> =
             ForceConstant::<f64, HartreePerSquareBohr>::new(1.0).to();
-        assert!((k.value() - 2240.877_014).abs() < 1e-3);
+        assert!((k.value() - 2_240.877_014).abs() < 1e-3);
     }
 
     #[test]
     fn kilocalorie_per_mole_per_square_angstrom_to_hartree_per_square_bohr() {
         let k: ForceConstant<f64, HartreePerSquareBohr> =
-            ForceConstant::<f64, KilocaloriePerMolePerSquareAngstrom>::new(2240.877_013_907_053)
+            ForceConstant::<f64, KilocaloriePerMolePerSquareAngstrom>::new(2_240.877_013_907_053)
                 .to();
         assert!((k.value() - 1.0).abs() < 1e-9);
     }
@@ -161,7 +161,7 @@ mod tests {
     fn hartree_per_square_bohr_to_newton_per_meter() {
         let k: ForceConstant<f64, NewtonPerMeter> =
             ForceConstant::<f64, HartreePerSquareBohr>::new(1.0).to();
-        assert!((k.value() - 1556.893_105).abs() < 1e-6);
+        assert!((k.value() - 1_556.893_105).abs() < 1e-6);
     }
 
     #[test]
@@ -207,6 +207,19 @@ mod tests {
     }
 
     #[test]
+    fn rem() {
+        let r = ForceConstant::<f64, HartreePerSquareBohr>::new(7.0) % ForceConstant::new(3.0);
+        assert_eq!(r.value(), 1.0);
+    }
+
+    #[test]
+    fn rem_assign() {
+        let mut k = ForceConstant::<f64, HartreePerSquareBohr>::new(7.0);
+        k %= ForceConstant::new(3.0);
+        assert_eq!(k.value(), 1.0);
+    }
+
+    #[test]
     fn neg() {
         assert_eq!(
             (-ForceConstant::<f64, HartreePerSquareBohr>::new(1.5)).value(),
@@ -242,6 +255,19 @@ mod tests {
         let mut k = ForceConstant::<f64, HartreePerSquareBohr>::new(6.0);
         k /= 2.0;
         assert_eq!(k.value(), 3.0);
+    }
+
+    #[test]
+    fn rem_scalar() {
+        let r = ForceConstant::<f64, HartreePerSquareBohr>::new(7.0) % 3.0;
+        assert_eq!(r.value(), 1.0);
+    }
+
+    #[test]
+    fn rem_assign_scalar() {
+        let mut k = ForceConstant::<f64, HartreePerSquareBohr>::new(7.0);
+        k %= 3.0;
+        assert_eq!(k.value(), 1.0);
     }
 
     #[test]
@@ -312,6 +338,176 @@ mod tests {
         let lo = ForceConstant::<f64, HartreePerSquareBohr>::new(2.0);
         let hi = ForceConstant::<f64, HartreePerSquareBohr>::new(1.0);
         ForceConstant::new(1.5_f64).clamp(lo, hi);
+    }
+
+    #[test]
+    fn signum() {
+        assert_eq!(
+            ForceConstant::<f64, HartreePerSquareBohr>::new(3.0).signum(),
+            1.0
+        );
+        assert_eq!(
+            ForceConstant::<f64, HartreePerSquareBohr>::new(-3.0).signum(),
+            -1.0
+        );
+    }
+
+    #[test]
+    fn copysign() {
+        let k = ForceConstant::<f64, HartreePerSquareBohr>::new(3.0);
+        let sign = ForceConstant::<f64, HartreePerSquareBohr>::new(-1.0);
+        assert_eq!(k.copysign(sign).value(), -3.0);
+        assert_eq!((-k).copysign(k).value(), 3.0);
+    }
+
+    #[test]
+    fn floor() {
+        assert_eq!(
+            ForceConstant::<f64, HartreePerSquareBohr>::new(2.7)
+                .floor()
+                .value(),
+            2.0
+        );
+        assert_eq!(
+            ForceConstant::<f64, HartreePerSquareBohr>::new(-2.3)
+                .floor()
+                .value(),
+            -3.0
+        );
+    }
+
+    #[test]
+    fn ceil() {
+        assert_eq!(
+            ForceConstant::<f64, HartreePerSquareBohr>::new(2.3)
+                .ceil()
+                .value(),
+            3.0
+        );
+        assert_eq!(
+            ForceConstant::<f64, HartreePerSquareBohr>::new(-2.7)
+                .ceil()
+                .value(),
+            -2.0
+        );
+    }
+
+    #[test]
+    fn round() {
+        assert_eq!(
+            ForceConstant::<f64, HartreePerSquareBohr>::new(2.5)
+                .round()
+                .value(),
+            3.0
+        );
+        assert_eq!(
+            ForceConstant::<f64, HartreePerSquareBohr>::new(-2.5)
+                .round()
+                .value(),
+            -3.0
+        );
+    }
+
+    #[test]
+    fn round_ties_even() {
+        assert_eq!(
+            ForceConstant::<f64, HartreePerSquareBohr>::new(2.5)
+                .round_ties_even()
+                .value(),
+            2.0
+        );
+        assert_eq!(
+            ForceConstant::<f64, HartreePerSquareBohr>::new(3.5)
+                .round_ties_even()
+                .value(),
+            4.0
+        );
+    }
+
+    #[test]
+    fn trunc() {
+        assert_eq!(
+            ForceConstant::<f64, HartreePerSquareBohr>::new(2.7)
+                .trunc()
+                .value(),
+            2.0
+        );
+        assert_eq!(
+            ForceConstant::<f64, HartreePerSquareBohr>::new(-2.7)
+                .trunc()
+                .value(),
+            -2.0
+        );
+    }
+
+    #[test]
+    fn fract() {
+        assert!(
+            (ForceConstant::<f64, HartreePerSquareBohr>::new(2.75)
+                .fract()
+                .value()
+                - 0.75)
+                .abs()
+                < 1e-12
+        );
+    }
+
+    #[test]
+    fn div_euclid() {
+        let q = ForceConstant::<f64, HartreePerSquareBohr>::new(7.0)
+            .div_euclid(ForceConstant::new(3.0));
+        assert_eq!(q, 2.0);
+    }
+
+    #[test]
+    fn rem_euclid() {
+        let r = ForceConstant::<f64, HartreePerSquareBohr>::new(-7.0)
+            .rem_euclid(ForceConstant::new(3.0));
+        assert_eq!(r.value(), 2.0);
+    }
+
+    #[test]
+    fn mul_add() {
+        let r = ForceConstant::<f64, HartreePerSquareBohr>::new(2.0)
+            .mul_add(3.0, ForceConstant::new(1.0));
+        assert_eq!(r.value(), 7.0);
+    }
+
+    #[test]
+    fn hypot() {
+        let h = ForceConstant::<f64, HartreePerSquareBohr>::new(3.0).hypot(ForceConstant::new(4.0));
+        assert!((h.value() - 5.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn is_nan() {
+        assert!(ForceConstant::<f64, HartreePerSquareBohr>::new(f64::NAN).is_nan());
+        assert!(!ForceConstant::<f64, HartreePerSquareBohr>::new(1.0).is_nan());
+    }
+
+    #[test]
+    fn is_infinite() {
+        assert!(ForceConstant::<f64, HartreePerSquareBohr>::new(f64::INFINITY).is_infinite());
+        assert!(!ForceConstant::<f64, HartreePerSquareBohr>::new(1.0).is_infinite());
+    }
+
+    #[test]
+    fn is_finite() {
+        assert!(ForceConstant::<f64, HartreePerSquareBohr>::new(1.0).is_finite());
+        assert!(!ForceConstant::<f64, HartreePerSquareBohr>::new(f64::INFINITY).is_finite());
+        assert!(!ForceConstant::<f64, HartreePerSquareBohr>::new(f64::NAN).is_finite());
+    }
+
+    #[test]
+    fn is_sign_positive() {
+        assert!(ForceConstant::<f64, HartreePerSquareBohr>::new(1.0).is_sign_positive());
+        assert!(!ForceConstant::<f64, HartreePerSquareBohr>::new(-1.0).is_sign_positive());
+    }
+
+    #[test]
+    fn is_sign_negative() {
+        assert!(ForceConstant::<f64, HartreePerSquareBohr>::new(-1.0).is_sign_negative());
+        assert!(!ForceConstant::<f64, HartreePerSquareBohr>::new(1.0).is_sign_negative());
     }
 
     #[test]

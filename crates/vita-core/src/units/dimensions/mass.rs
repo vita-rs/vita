@@ -66,7 +66,7 @@ impl MassUnit for ProtonMass {
 pub struct Gram;
 
 impl MassUnit for Gram {
-    const TO_CANONICAL: f64 = 6.022_140_7537e23;
+    const TO_CANONICAL: f64 = 6.022_140_753_7e23;
     const SYMBOL: &'static str = "g";
 }
 
@@ -76,7 +76,7 @@ impl MassUnit for Gram {
 pub struct Kilogram;
 
 impl MassUnit for Kilogram {
-    const TO_CANONICAL: f64 = 6.022_140_7537e26;
+    const TO_CANONICAL: f64 = 6.022_140_753_7e26;
     const SYMBOL: &'static str = "kg";
 }
 
@@ -105,7 +105,7 @@ mod tests {
     fn copy_and_clone() {
         let a = Mass::<f64, Dalton>::new(2.0);
         let b = a;
-        let c = a.clone();
+        let c = ::core::clone::Clone::clone(&a);
         assert_eq!(a, b);
         assert_eq!(a, c);
     }
@@ -119,7 +119,7 @@ mod tests {
     #[test]
     fn dalton_to_electron_mass() {
         let me: Mass<f64, ElectronMass> = Mass::<f64, Dalton>::new(1.0).to();
-        assert!((me.value() - 1822.888_486_278).abs() < 1e-9);
+        assert!((me.value() - 1_822.888_486_278).abs() < 1e-9);
     }
 
     #[test]
@@ -137,7 +137,7 @@ mod tests {
     #[test]
     fn gram_to_dalton() {
         let da: Mass<f64, Dalton> = Mass::<f64, Gram>::new(1.0).to();
-        assert!((da.value() - 6.022_140_7537e23).abs() < 1e11);
+        assert!((da.value() - 6.022_140_753_7e23).abs() < 1e11);
     }
 
     #[test]
@@ -149,7 +149,7 @@ mod tests {
     #[test]
     fn kilogram_to_dalton() {
         let da: Mass<f64, Dalton> = Mass::<f64, Kilogram>::new(1.0).to();
-        assert!((da.value() - 6.022_140_7537e26).abs() < 1e14);
+        assert!((da.value() - 6.022_140_753_7e26).abs() < 1e14);
     }
 
     #[test]
@@ -186,6 +186,19 @@ mod tests {
     }
 
     #[test]
+    fn rem() {
+        let r = Mass::<f64, Dalton>::new(7.0) % Mass::new(3.0);
+        assert_eq!(r.value(), 1.0);
+    }
+
+    #[test]
+    fn rem_assign() {
+        let mut m = Mass::<f64, Dalton>::new(7.0);
+        m %= Mass::new(3.0);
+        assert_eq!(m.value(), 1.0);
+    }
+
+    #[test]
     fn neg() {
         assert_eq!((-Mass::<f64, Dalton>::new(1.5)).value(), -1.5);
     }
@@ -212,6 +225,19 @@ mod tests {
         let mut m = Mass::<f64, Dalton>::new(6.0);
         m /= 2.0;
         assert_eq!(m.value(), 3.0);
+    }
+
+    #[test]
+    fn rem_scalar() {
+        let r = Mass::<f64, Dalton>::new(7.0) % 3.0;
+        assert_eq!(r.value(), 1.0);
+    }
+
+    #[test]
+    fn rem_assign_scalar() {
+        let mut m = Mass::<f64, Dalton>::new(7.0);
+        m %= 3.0;
+        assert_eq!(m.value(), 1.0);
     }
 
     #[test]
@@ -272,6 +298,110 @@ mod tests {
         let lo = Mass::<f64, Dalton>::new(2.0);
         let hi = Mass::<f64, Dalton>::new(1.0);
         Mass::new(1.5_f64).clamp(lo, hi);
+    }
+
+    #[test]
+    fn signum() {
+        assert_eq!(Mass::<f64, Dalton>::new(3.0).signum(), 1.0);
+        assert_eq!(Mass::<f64, Dalton>::new(-3.0).signum(), -1.0);
+    }
+
+    #[test]
+    fn copysign() {
+        let m = Mass::<f64, Dalton>::new(3.0);
+        let sign = Mass::<f64, Dalton>::new(-1.0);
+        assert_eq!(m.copysign(sign).value(), -3.0);
+        assert_eq!((-m).copysign(m).value(), 3.0);
+    }
+
+    #[test]
+    fn floor() {
+        assert_eq!(Mass::<f64, Dalton>::new(2.7).floor().value(), 2.0);
+        assert_eq!(Mass::<f64, Dalton>::new(-2.3).floor().value(), -3.0);
+    }
+
+    #[test]
+    fn ceil() {
+        assert_eq!(Mass::<f64, Dalton>::new(2.3).ceil().value(), 3.0);
+        assert_eq!(Mass::<f64, Dalton>::new(-2.7).ceil().value(), -2.0);
+    }
+
+    #[test]
+    fn round() {
+        assert_eq!(Mass::<f64, Dalton>::new(2.5).round().value(), 3.0);
+        assert_eq!(Mass::<f64, Dalton>::new(-2.5).round().value(), -3.0);
+    }
+
+    #[test]
+    fn round_ties_even() {
+        assert_eq!(Mass::<f64, Dalton>::new(2.5).round_ties_even().value(), 2.0);
+        assert_eq!(Mass::<f64, Dalton>::new(3.5).round_ties_even().value(), 4.0);
+    }
+
+    #[test]
+    fn trunc() {
+        assert_eq!(Mass::<f64, Dalton>::new(2.7).trunc().value(), 2.0);
+        assert_eq!(Mass::<f64, Dalton>::new(-2.7).trunc().value(), -2.0);
+    }
+
+    #[test]
+    fn fract() {
+        assert!((Mass::<f64, Dalton>::new(2.75).fract().value() - 0.75).abs() < 1e-12);
+    }
+
+    #[test]
+    fn div_euclid() {
+        let q = Mass::<f64, Dalton>::new(7.0).div_euclid(Mass::new(3.0));
+        assert_eq!(q, 2.0);
+    }
+
+    #[test]
+    fn rem_euclid() {
+        let r = Mass::<f64, Dalton>::new(-7.0).rem_euclid(Mass::new(3.0));
+        assert_eq!(r.value(), 2.0);
+    }
+
+    #[test]
+    fn mul_add() {
+        let r = Mass::<f64, Dalton>::new(2.0).mul_add(3.0, Mass::new(1.0));
+        assert_eq!(r.value(), 7.0);
+    }
+
+    #[test]
+    fn hypot() {
+        let h = Mass::<f64, Dalton>::new(3.0).hypot(Mass::new(4.0));
+        assert!((h.value() - 5.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn is_nan() {
+        assert!(Mass::<f64, Dalton>::new(f64::NAN).is_nan());
+        assert!(!Mass::<f64, Dalton>::new(1.0).is_nan());
+    }
+
+    #[test]
+    fn is_infinite() {
+        assert!(Mass::<f64, Dalton>::new(f64::INFINITY).is_infinite());
+        assert!(!Mass::<f64, Dalton>::new(1.0).is_infinite());
+    }
+
+    #[test]
+    fn is_finite() {
+        assert!(Mass::<f64, Dalton>::new(1.0).is_finite());
+        assert!(!Mass::<f64, Dalton>::new(f64::INFINITY).is_finite());
+        assert!(!Mass::<f64, Dalton>::new(f64::NAN).is_finite());
+    }
+
+    #[test]
+    fn is_sign_positive() {
+        assert!(Mass::<f64, Dalton>::new(1.0).is_sign_positive());
+        assert!(!Mass::<f64, Dalton>::new(-1.0).is_sign_positive());
+    }
+
+    #[test]
+    fn is_sign_negative() {
+        assert!(Mass::<f64, Dalton>::new(-1.0).is_sign_negative());
+        assert!(!Mass::<f64, Dalton>::new(1.0).is_sign_negative());
     }
 
     #[test]

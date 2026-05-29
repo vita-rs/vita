@@ -57,7 +57,7 @@ impl ForceUnit for KilocaloriePerMolePerAngstrom {
 pub struct KilojoulePerMolePerNanometer;
 
 impl ForceUnit for KilojoulePerMolePerNanometer {
-    const TO_CANONICAL: f64 = 0.052_917_721_054_4 / 2625.499_639_48;
+    const TO_CANONICAL: f64 = 0.052_917_721_054_4 / 2_625.499_639_48;
     const SYMBOL: &'static str = "kJ mol⁻¹ nm⁻¹";
 }
 
@@ -116,7 +116,7 @@ mod tests {
     fn copy_and_clone() {
         let a = Force::<f64, HartreePerBohr>::new(2.0);
         let b = a;
-        let c = a.clone();
+        let c = ::core::clone::Clone::clone(&a);
         assert_eq!(a, b);
         assert_eq!(a, c);
     }
@@ -125,13 +125,13 @@ mod tests {
     fn hartree_per_bohr_to_kilocalorie_per_mole_per_angstrom() {
         let f: Force<f64, KilocaloriePerMolePerAngstrom> =
             Force::<f64, HartreePerBohr>::new(1.0).to();
-        assert!((f.value() - 1185.821_047).abs() < 1e-6);
+        assert!((f.value() - 1_185.821_047).abs() < 1e-6);
     }
 
     #[test]
     fn kilocalorie_per_mole_per_angstrom_to_hartree_per_bohr() {
         let f: Force<f64, HartreePerBohr> =
-            Force::<f64, KilocaloriePerMolePerAngstrom>::new(1185.821_047_391_503).to();
+            Force::<f64, KilocaloriePerMolePerAngstrom>::new(1_185.821_047_391_503).to();
         assert!((f.value() - 1.0).abs() < 1e-9);
     }
 
@@ -194,6 +194,19 @@ mod tests {
     }
 
     #[test]
+    fn rem() {
+        let r = Force::<f64, HartreePerBohr>::new(7.0) % Force::new(3.0);
+        assert_eq!(r.value(), 1.0);
+    }
+
+    #[test]
+    fn rem_assign() {
+        let mut f = Force::<f64, HartreePerBohr>::new(7.0);
+        f %= Force::new(3.0);
+        assert_eq!(f.value(), 1.0);
+    }
+
+    #[test]
     fn neg() {
         assert_eq!((-Force::<f64, HartreePerBohr>::new(1.5)).value(), -1.5);
     }
@@ -220,6 +233,19 @@ mod tests {
         let mut f = Force::<f64, HartreePerBohr>::new(6.0);
         f /= 2.0;
         assert_eq!(f.value(), 3.0);
+    }
+
+    #[test]
+    fn rem_scalar() {
+        let r = Force::<f64, HartreePerBohr>::new(7.0) % 3.0;
+        assert_eq!(r.value(), 1.0);
+    }
+
+    #[test]
+    fn rem_assign_scalar() {
+        let mut f = Force::<f64, HartreePerBohr>::new(7.0);
+        f %= 3.0;
+        assert_eq!(f.value(), 1.0);
     }
 
     #[test]
@@ -280,6 +306,129 @@ mod tests {
         let lo = Force::<f64, HartreePerBohr>::new(2.0);
         let hi = Force::<f64, HartreePerBohr>::new(1.0);
         Force::new(1.5_f64).clamp(lo, hi);
+    }
+
+    #[test]
+    fn signum() {
+        assert_eq!(Force::<f64, HartreePerBohr>::new(3.0).signum(), 1.0);
+        assert_eq!(Force::<f64, HartreePerBohr>::new(-3.0).signum(), -1.0);
+    }
+
+    #[test]
+    fn copysign() {
+        let f = Force::<f64, HartreePerBohr>::new(3.0);
+        let sign = Force::<f64, HartreePerBohr>::new(-1.0);
+        assert_eq!(f.copysign(sign).value(), -3.0);
+        assert_eq!((-f).copysign(f).value(), 3.0);
+    }
+
+    #[test]
+    fn floor() {
+        assert_eq!(Force::<f64, HartreePerBohr>::new(2.7).floor().value(), 2.0);
+        assert_eq!(
+            Force::<f64, HartreePerBohr>::new(-2.3).floor().value(),
+            -3.0
+        );
+    }
+
+    #[test]
+    fn ceil() {
+        assert_eq!(Force::<f64, HartreePerBohr>::new(2.3).ceil().value(), 3.0);
+        assert_eq!(Force::<f64, HartreePerBohr>::new(-2.7).ceil().value(), -2.0);
+    }
+
+    #[test]
+    fn round() {
+        assert_eq!(Force::<f64, HartreePerBohr>::new(2.5).round().value(), 3.0);
+        assert_eq!(
+            Force::<f64, HartreePerBohr>::new(-2.5).round().value(),
+            -3.0
+        );
+    }
+
+    #[test]
+    fn round_ties_even() {
+        assert_eq!(
+            Force::<f64, HartreePerBohr>::new(2.5)
+                .round_ties_even()
+                .value(),
+            2.0
+        );
+        assert_eq!(
+            Force::<f64, HartreePerBohr>::new(3.5)
+                .round_ties_even()
+                .value(),
+            4.0
+        );
+    }
+
+    #[test]
+    fn trunc() {
+        assert_eq!(Force::<f64, HartreePerBohr>::new(2.7).trunc().value(), 2.0);
+        assert_eq!(
+            Force::<f64, HartreePerBohr>::new(-2.7).trunc().value(),
+            -2.0
+        );
+    }
+
+    #[test]
+    fn fract() {
+        assert!((Force::<f64, HartreePerBohr>::new(2.75).fract().value() - 0.75).abs() < 1e-12);
+    }
+
+    #[test]
+    fn div_euclid() {
+        let q = Force::<f64, HartreePerBohr>::new(7.0).div_euclid(Force::new(3.0));
+        assert_eq!(q, 2.0);
+    }
+
+    #[test]
+    fn rem_euclid() {
+        let r = Force::<f64, HartreePerBohr>::new(-7.0).rem_euclid(Force::new(3.0));
+        assert_eq!(r.value(), 2.0);
+    }
+
+    #[test]
+    fn mul_add() {
+        let r = Force::<f64, HartreePerBohr>::new(2.0).mul_add(3.0, Force::new(1.0));
+        assert_eq!(r.value(), 7.0);
+    }
+
+    #[test]
+    fn hypot() {
+        let h = Force::<f64, HartreePerBohr>::new(3.0).hypot(Force::new(4.0));
+        assert!((h.value() - 5.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn is_nan() {
+        assert!(Force::<f64, HartreePerBohr>::new(f64::NAN).is_nan());
+        assert!(!Force::<f64, HartreePerBohr>::new(1.0).is_nan());
+    }
+
+    #[test]
+    fn is_infinite() {
+        assert!(Force::<f64, HartreePerBohr>::new(f64::INFINITY).is_infinite());
+        assert!(!Force::<f64, HartreePerBohr>::new(1.0).is_infinite());
+    }
+
+    #[test]
+    fn is_finite() {
+        assert!(Force::<f64, HartreePerBohr>::new(1.0).is_finite());
+        assert!(!Force::<f64, HartreePerBohr>::new(f64::INFINITY).is_finite());
+        assert!(!Force::<f64, HartreePerBohr>::new(f64::NAN).is_finite());
+    }
+
+    #[test]
+    fn is_sign_positive() {
+        assert!(Force::<f64, HartreePerBohr>::new(1.0).is_sign_positive());
+        assert!(!Force::<f64, HartreePerBohr>::new(-1.0).is_sign_positive());
+    }
+
+    #[test]
+    fn is_sign_negative() {
+        assert!(Force::<f64, HartreePerBohr>::new(-1.0).is_sign_negative());
+        assert!(!Force::<f64, HartreePerBohr>::new(1.0).is_sign_negative());
     }
 
     #[test]

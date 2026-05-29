@@ -126,7 +126,7 @@ mod tests {
     fn copy_and_clone() {
         let a = AmountOfSubstance::<f64, Mole>::new(2.0);
         let b = a;
-        let c = a.clone();
+        let c = ::core::clone::Clone::clone(&a);
         assert_eq!(a, b);
         assert_eq!(a, c);
     }
@@ -191,6 +191,19 @@ mod tests {
     }
 
     #[test]
+    fn rem() {
+        let r = AmountOfSubstance::<f64, Mole>::new(7.0) % AmountOfSubstance::new(3.0);
+        assert_eq!(r.value(), 1.0);
+    }
+
+    #[test]
+    fn rem_assign() {
+        let mut a = AmountOfSubstance::<f64, Mole>::new(7.0);
+        a %= AmountOfSubstance::new(3.0);
+        assert_eq!(a.value(), 1.0);
+    }
+
+    #[test]
     fn neg() {
         assert_eq!((-AmountOfSubstance::<f64, Mole>::new(1.5)).value(), -1.5);
     }
@@ -223,6 +236,19 @@ mod tests {
         let mut a = AmountOfSubstance::<f64, Mole>::new(6.0);
         a /= 2.0;
         assert_eq!(a.value(), 3.0);
+    }
+
+    #[test]
+    fn rem_scalar() {
+        let r = AmountOfSubstance::<f64, Mole>::new(7.0) % 3.0;
+        assert_eq!(r.value(), 1.0);
+    }
+
+    #[test]
+    fn rem_assign_scalar() {
+        let mut a = AmountOfSubstance::<f64, Mole>::new(7.0);
+        a %= 3.0;
+        assert_eq!(a.value(), 1.0);
     }
 
     #[test]
@@ -283,6 +309,141 @@ mod tests {
         let lo = AmountOfSubstance::<f64, Mole>::new(2.0);
         let hi = AmountOfSubstance::<f64, Mole>::new(1.0);
         AmountOfSubstance::new(1.5_f64).clamp(lo, hi);
+    }
+
+    #[test]
+    fn signum() {
+        assert_eq!(AmountOfSubstance::<f64, Mole>::new(3.0).signum(), 1.0);
+        assert_eq!(AmountOfSubstance::<f64, Mole>::new(-3.0).signum(), -1.0);
+    }
+
+    #[test]
+    fn copysign() {
+        let a = AmountOfSubstance::<f64, Mole>::new(3.0);
+        let sign = AmountOfSubstance::<f64, Mole>::new(-1.0);
+        assert_eq!(a.copysign(sign).value(), -3.0);
+        assert_eq!((-a).copysign(a).value(), 3.0);
+    }
+
+    #[test]
+    fn floor() {
+        assert_eq!(
+            AmountOfSubstance::<f64, Mole>::new(2.7).floor().value(),
+            2.0
+        );
+        assert_eq!(
+            AmountOfSubstance::<f64, Mole>::new(-2.3).floor().value(),
+            -3.0
+        );
+    }
+
+    #[test]
+    fn ceil() {
+        assert_eq!(AmountOfSubstance::<f64, Mole>::new(2.3).ceil().value(), 3.0);
+        assert_eq!(
+            AmountOfSubstance::<f64, Mole>::new(-2.7).ceil().value(),
+            -2.0
+        );
+    }
+
+    #[test]
+    fn round() {
+        assert_eq!(
+            AmountOfSubstance::<f64, Mole>::new(2.5).round().value(),
+            3.0
+        );
+        assert_eq!(
+            AmountOfSubstance::<f64, Mole>::new(-2.5).round().value(),
+            -3.0
+        );
+    }
+
+    #[test]
+    fn round_ties_even() {
+        assert_eq!(
+            AmountOfSubstance::<f64, Mole>::new(2.5)
+                .round_ties_even()
+                .value(),
+            2.0
+        );
+        assert_eq!(
+            AmountOfSubstance::<f64, Mole>::new(3.5)
+                .round_ties_even()
+                .value(),
+            4.0
+        );
+    }
+
+    #[test]
+    fn trunc() {
+        assert_eq!(
+            AmountOfSubstance::<f64, Mole>::new(2.7).trunc().value(),
+            2.0
+        );
+        assert_eq!(
+            AmountOfSubstance::<f64, Mole>::new(-2.7).trunc().value(),
+            -2.0
+        );
+    }
+
+    #[test]
+    fn fract() {
+        assert!((AmountOfSubstance::<f64, Mole>::new(2.75).fract().value() - 0.75).abs() < 1e-12);
+    }
+
+    #[test]
+    fn div_euclid() {
+        let q = AmountOfSubstance::<f64, Mole>::new(7.0).div_euclid(AmountOfSubstance::new(3.0));
+        assert_eq!(q, 2.0);
+    }
+
+    #[test]
+    fn rem_euclid() {
+        let r = AmountOfSubstance::<f64, Mole>::new(-7.0).rem_euclid(AmountOfSubstance::new(3.0));
+        assert_eq!(r.value(), 2.0);
+    }
+
+    #[test]
+    fn mul_add() {
+        let r = AmountOfSubstance::<f64, Mole>::new(2.0).mul_add(3.0, AmountOfSubstance::new(1.0));
+        assert_eq!(r.value(), 7.0);
+    }
+
+    #[test]
+    fn hypot() {
+        let h = AmountOfSubstance::<f64, Mole>::new(3.0).hypot(AmountOfSubstance::new(4.0));
+        assert!((h.value() - 5.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn is_nan() {
+        assert!(AmountOfSubstance::<f64, Mole>::new(f64::NAN).is_nan());
+        assert!(!AmountOfSubstance::<f64, Mole>::new(1.0).is_nan());
+    }
+
+    #[test]
+    fn is_infinite() {
+        assert!(AmountOfSubstance::<f64, Mole>::new(f64::INFINITY).is_infinite());
+        assert!(!AmountOfSubstance::<f64, Mole>::new(1.0).is_infinite());
+    }
+
+    #[test]
+    fn is_finite() {
+        assert!(AmountOfSubstance::<f64, Mole>::new(1.0).is_finite());
+        assert!(!AmountOfSubstance::<f64, Mole>::new(f64::INFINITY).is_finite());
+        assert!(!AmountOfSubstance::<f64, Mole>::new(f64::NAN).is_finite());
+    }
+
+    #[test]
+    fn is_sign_positive() {
+        assert!(AmountOfSubstance::<f64, Mole>::new(1.0).is_sign_positive());
+        assert!(!AmountOfSubstance::<f64, Mole>::new(-1.0).is_sign_positive());
+    }
+
+    #[test]
+    fn is_sign_negative() {
+        assert!(AmountOfSubstance::<f64, Mole>::new(-1.0).is_sign_negative());
+        assert!(!AmountOfSubstance::<f64, Mole>::new(1.0).is_sign_negative());
     }
 
     #[test]
