@@ -36,6 +36,7 @@ macro_rules! define_quantity {
         }
 
         impl<V, U> $Qty<V, U> {
+            /// Constructs a quantity holding `value` in unit `U`.
             #[inline]
             pub const fn new(value: V) -> Self {
                 Self(value, ::core::marker::PhantomData)
@@ -43,6 +44,7 @@ macro_rules! define_quantity {
         }
 
         impl<V: $crate::units::scalar::Scalar, U: $UnitTrait> $Qty<V, U> {
+            /// Returns the underlying scalar expressed in unit `U`.
             #[inline]
             pub const fn value(self) -> V { self.0 }
 
@@ -78,7 +80,7 @@ macro_rules! define_quantity {
                 Self::new(<V as $crate::units::scalar::Scalar>::max(self.0, other.0))
             }
 
-            /// Restricts the value to `[lo, hi]`.
+            /// Restricts `self` to the interval `[lo, hi]`.
             ///
             /// # Panics
             ///
@@ -99,7 +101,10 @@ macro_rules! define_quantity {
             fn default() -> Self { Self::new(V::default()) }
         }
 
-        impl<V: $crate::units::scalar::Scalar, U: $UnitTrait> From<V> for $Qty<V, U> {
+        impl<V: $crate::units::scalar::Scalar, U: $UnitTrait> From<V>
+            for $Qty<V, U>
+        {
+            /// Wraps a raw scalar as a quantity in unit `U`.
             #[inline]
             fn from(value: V) -> Self { Self::new(value) }
         }
