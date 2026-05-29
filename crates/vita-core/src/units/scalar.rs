@@ -1,5 +1,8 @@
 use core::fmt;
-use core::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign};
+use core::iter::{Product, Sum};
+use core::ops::{
+    Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Rem, RemAssign, Sub, SubAssign,
+};
 
 /// Numeric scalar type for values in physical-quantity types.
 ///
@@ -20,6 +23,12 @@ pub trait Scalar:
     + Div<Output = Self>
     + DivAssign
     + Neg<Output = Self>
+    + Rem<Output = Self>
+    + RemAssign
+    + Sum
+    + for<'a> Sum<&'a Self>
+    + Product
+    + for<'a> Product<&'a Self>
 {
     /// Returns the absolute value.
     fn abs(self) -> Self;
