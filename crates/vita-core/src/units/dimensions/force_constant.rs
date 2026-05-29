@@ -26,7 +26,7 @@ pub trait ForceConstantUnit {
 }
 
 define_quantity!(
-    /// A force constant parameterised by scalar type `V` and unit marker `U`.
+    /// A force constant parameterized by scalar type `V` and unit marker `U`.
     ForceConstant,
     ForceConstantUnit
 );
@@ -52,7 +52,7 @@ impl ForceConstantUnit for KilocaloriePerMolePerSquareAngstrom {
     const SYMBOL: &'static str = "kcal mol⁻¹ Å⁻²";
 }
 
-/// The kilojoule per mole per square nanometre (kJ mol⁻¹ nm⁻²).
+/// The kilojoule per mole per square nanometer (kJ mol⁻¹ nm⁻²).
 ///
 /// 1 kJ mol⁻¹ nm⁻² ≈ 0.0529177210544² / 2625.49963948 Eₕ a₀⁻² (CODATA 2022, derived).
 pub struct KilojoulePerMolePerSquareNanometer;
@@ -72,7 +72,7 @@ impl ForceConstantUnit for ElectronVoltPerSquareAngstrom {
     const SYMBOL: &'static str = "eV Å⁻²";
 }
 
-/// The newton per metre (N m⁻¹) — SI unit of force constant (CODATA 2022).
+/// The newton per meter (N m⁻¹) — SI unit of force constant (CODATA 2022).
 ///
 /// 1 N m⁻¹ ≈ 5.29177210544e-11 / 8.2387235038e-8 Eₕ a₀⁻².
 pub struct NewtonPerMeter;
@@ -82,7 +82,7 @@ impl ForceConstantUnit for NewtonPerMeter {
     const SYMBOL: &'static str = "N m⁻¹";
 }
 
-/// The piconewton per nanometre (pN nm⁻¹).
+/// The piconewton per nanometer (pN nm⁻¹).
 ///
 /// 1 pN nm⁻¹ ≈ 5.29177210544e-14 / 8.2387235038e-8 Eₕ a₀⁻² (CODATA 2022).
 pub struct PiconewtonPerNanometer;

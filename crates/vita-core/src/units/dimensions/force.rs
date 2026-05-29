@@ -26,7 +26,7 @@ pub trait ForceUnit {
 }
 
 define_quantity!(
-    /// A force parameterised by scalar type `V` and unit marker `U`.
+    /// A force parameterized by scalar type `V` and unit marker `U`.
     Force,
     ForceUnit
 );
@@ -51,7 +51,7 @@ impl ForceUnit for KilocaloriePerMolePerAngstrom {
     const SYMBOL: &'static str = "kcal mol⁻¹ Å⁻¹";
 }
 
-/// The kilojoule per mole per nanometre (kJ mol⁻¹ nm⁻¹).
+/// The kilojoule per mole per nanometer (kJ mol⁻¹ nm⁻¹).
 ///
 /// 1 kJ mol⁻¹ nm⁻¹ ≈ 0.0529177210544 / 2625.49963948 Eₕ a₀⁻¹ (CODATA 2022, derived).
 pub struct KilojoulePerMolePerNanometer;

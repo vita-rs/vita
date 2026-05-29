@@ -23,7 +23,7 @@ pub trait DipoleMomentUnit {
 }
 
 define_quantity!(
-    /// A dipole moment parameterised by scalar type `V` and unit marker `U`.
+    /// A dipole moment parameterized by scalar type `V` and unit marker `U`.
     DipoleMoment,
     DipoleMomentUnit
 );
@@ -48,7 +48,7 @@ impl DipoleMomentUnit for ElectronBohr {
     const SYMBOL: &'static str = "ea₀";
 }
 
-/// The coulomb metre (C·m) — SI unit of electric dipole moment.
+/// The coulomb meter (C·m) — SI unit of electric dipole moment.
 ///
 /// 1 C·m = 2.997924580e29 D (exact, derived from c = 299 792 458 m s⁻¹).
 pub struct CoulombMeter;

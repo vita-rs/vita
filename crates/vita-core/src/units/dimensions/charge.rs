@@ -24,7 +24,7 @@ pub trait ChargeUnit {
 }
 
 define_quantity!(
-    /// A charge parameterised by scalar type `V` and unit marker `U`.
+    /// A charge parameterized by scalar type `V` and unit marker `U`.
     Charge,
     ChargeUnit
 );

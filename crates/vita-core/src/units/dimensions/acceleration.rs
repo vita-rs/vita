@@ -25,7 +25,7 @@ pub trait AccelerationUnit {
 }
 
 define_quantity!(
-    /// An acceleration parameterised by scalar type `V` and unit marker `U`.
+    /// An acceleration parameterized by scalar type `V` and unit marker `U`.
     Acceleration,
     AccelerationUnit
 );
@@ -40,7 +40,7 @@ impl AccelerationUnit for AngstromPerSquarePicosecond {
     const SYMBOL: &'static str = "Å ps⁻²";
 }
 
-/// The nanometre per square picosecond (nm ps⁻²).
+/// The nanometer per square picosecond (nm ps⁻²).
 ///
 /// 1 nm ps⁻² = 10 Å ps⁻².
 pub struct NanometerPerSquarePicosecond;
@@ -60,7 +60,7 @@ impl AccelerationUnit for AngstromPerSquareFemtosecond {
     const SYMBOL: &'static str = "Å fs⁻²";
 }
 
-/// The metre per square second (m s⁻²) — SI unit of acceleration.
+/// The meter per square second (m s⁻²) — SI unit of acceleration.
 ///
 /// 1 m s⁻² = 1e-14 Å ps⁻².
 pub struct MeterPerSquareSecond;

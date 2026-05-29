@@ -22,7 +22,7 @@ pub trait TemperatureUnit {
 }
 
 define_quantity!(
-    /// A temperature parameterised by scalar type `V` and unit marker `U`.
+    /// A temperature parameterized by scalar type `V` and unit marker `U`.
     Temperature,
     TemperatureUnit
 );

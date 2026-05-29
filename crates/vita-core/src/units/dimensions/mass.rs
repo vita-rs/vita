@@ -25,7 +25,7 @@ pub trait MassUnit {
 }
 
 define_quantity!(
-    /// A mass parameterised by scalar type `V` and unit marker `U`.
+    /// A mass parameterized by scalar type `V` and unit marker `U`.
     Mass,
     MassUnit
 );

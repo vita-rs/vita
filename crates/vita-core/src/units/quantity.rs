@@ -1,4 +1,4 @@
-/// Generate a physical-quantity newtype parameterised by a scalar type `V`
+/// Generate a physical-quantity newtype parameterized by a scalar type `V`
 /// and a unit marker `U`.
 macro_rules! define_quantity {
     ($(#[$meta:meta])* $Qty:ident, $UnitTrait:ident) => {

@@ -25,7 +25,7 @@ pub trait MomentumUnit {
 }
 
 define_quantity!(
-    /// A momentum parameterised by scalar type `V` and unit marker `U`.
+    /// A momentum parameterized by scalar type `V` and unit marker `U`.
     Momentum,
     MomentumUnit
 );
@@ -40,7 +40,7 @@ impl MomentumUnit for DaltonAngstromPerPicosecond {
     const SYMBOL: &'static str = "Da Å ps⁻¹";
 }
 
-/// The dalton-nanometre per picosecond (Da nm ps⁻¹).
+/// The dalton-nanometer per picosecond (Da nm ps⁻¹).
 ///
 /// 1 Da nm ps⁻¹ = 10 Da Å ps⁻¹.
 pub struct DaltonNanometerPerPicosecond;
@@ -70,7 +70,7 @@ impl MomentumUnit for AtomicMomentum {
     const SYMBOL: &'static str = "ℏ a₀⁻¹";
 }
 
-/// The kilogram-metre per second (kg m s⁻¹) — SI unit of momentum (CODATA 2022, derived).
+/// The kilogram-meter per second (kg m s⁻¹) — SI unit of momentum (CODATA 2022, derived).
 ///
 /// 1 kg m s⁻¹ ≈ 6.0221407537e24 Da Å ps⁻¹.
 pub struct KilogramMeterPerSecond;

@@ -25,7 +25,7 @@ pub trait LengthUnit {
 }
 
 define_quantity!(
-    /// A length parameterised by scalar type `V` and unit marker `U`.
+    /// A length parameterized by scalar type `V` and unit marker `U`.
     Length,
     LengthUnit
 );
@@ -50,7 +50,7 @@ impl LengthUnit for Bohr {
     const SYMBOL: &'static str = "a₀";
 }
 
-/// The nanometre (nm).
+/// The nanometer (nm).
 ///
 /// 1 nm = 10 Å.
 pub struct Nanometer;
@@ -60,7 +60,7 @@ impl LengthUnit for Nanometer {
     const SYMBOL: &'static str = "nm";
 }
 
-/// The picometre (pm).
+/// The picometer (pm).
 ///
 /// 1 pm = 0.01 Å.
 pub struct Picometer;
@@ -70,7 +70,7 @@ impl LengthUnit for Picometer {
     const SYMBOL: &'static str = "pm";
 }
 
-/// The metre (m) — SI base unit of length.
+/// The meter (m) — SI base unit of length.
 ///
 /// 1 m = 1e10 Å.
 pub struct Meter;

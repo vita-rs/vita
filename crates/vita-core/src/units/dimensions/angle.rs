@@ -24,7 +24,7 @@ pub trait AngleUnit {
 }
 
 define_quantity!(
-    /// An angle parameterised by scalar type `V` and unit marker `U`.
+    /// An angle parameterized by scalar type `V` and unit marker `U`.
     Angle,
     AngleUnit
 );

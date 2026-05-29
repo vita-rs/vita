@@ -24,7 +24,7 @@ pub trait FrequencyUnit {
 }
 
 define_quantity!(
-    /// A frequency parameterised by scalar type `V` and unit marker `U`.
+    /// A frequency parameterized by scalar type `V` and unit marker `U`.
     Frequency,
     FrequencyUnit
 );

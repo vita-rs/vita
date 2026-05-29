@@ -27,7 +27,7 @@ pub trait AmountOfSubstanceUnit {
 }
 
 define_quantity!(
-    /// An amount of substance parameterised by scalar type `V` and unit marker `U`.
+    /// An amount of substance parameterized by scalar type `V` and unit marker `U`.
     AmountOfSubstance,
     AmountOfSubstanceUnit
 );

@@ -25,7 +25,7 @@ pub trait TimeUnit {
 }
 
 define_quantity!(
-    /// A time parameterised by scalar type `V` and unit marker `U`.
+    /// A time parameterized by scalar type `V` and unit marker `U`.
     Time,
     TimeUnit
 );

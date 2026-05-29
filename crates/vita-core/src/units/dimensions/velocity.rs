@@ -25,7 +25,7 @@ pub trait VelocityUnit {
 }
 
 define_quantity!(
-    /// A velocity parameterised by scalar type `V` and unit marker `U`.
+    /// A velocity parameterized by scalar type `V` and unit marker `U`.
     Velocity,
     VelocityUnit
 );
@@ -40,7 +40,7 @@ impl VelocityUnit for AngstromPerPicosecond {
     const SYMBOL: &'static str = "Å ps⁻¹";
 }
 
-/// The nanometre per picosecond (nm ps⁻¹).
+/// The nanometer per picosecond (nm ps⁻¹).
 ///
 /// 1 nm ps⁻¹ = 10 Å ps⁻¹.
 pub struct NanometerPerPicosecond;
@@ -60,7 +60,7 @@ impl VelocityUnit for AngstromPerFemtosecond {
     const SYMBOL: &'static str = "Å fs⁻¹";
 }
 
-/// The metre per second (m s⁻¹) — SI unit of velocity.
+/// The meter per second (m s⁻¹) — SI unit of velocity.
 ///
 /// 1 m s⁻¹ = 0.01 Å ps⁻¹.
 pub struct MeterPerSecond;

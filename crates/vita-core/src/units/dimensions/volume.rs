@@ -27,7 +27,7 @@ pub trait VolumeUnit {
 }
 
 define_quantity!(
-    /// A volume parameterised by scalar type `V` and unit marker `U`.
+    /// A volume parameterized by scalar type `V` and unit marker `U`.
     Volume,
     VolumeUnit
 );
@@ -52,7 +52,7 @@ impl VolumeUnit for CubicBohr {
     const SYMBOL: &'static str = "a₀³";
 }
 
-/// The cubic nanometre (nm³).
+/// The cubic nanometer (nm³).
 ///
 /// 1 nm³ = 1000 Å³.
 pub struct CubicNanometer;
@@ -62,7 +62,7 @@ impl VolumeUnit for CubicNanometer {
     const SYMBOL: &'static str = "nm³";
 }
 
-/// The cubic picometre (pm³).
+/// The cubic picometer (pm³).
 ///
 /// 1 pm³ = 1e-6 Å³.
 pub struct CubicPicometer;
@@ -72,7 +72,7 @@ impl VolumeUnit for CubicPicometer {
     const SYMBOL: &'static str = "pm³";
 }
 
-/// The cubic metre (m³) — SI base unit of volume.
+/// The cubic meter (m³) — SI base unit of volume.
 ///
 /// 1 m³ = 1e30 Å³.
 pub struct CubicMeter;
@@ -82,7 +82,7 @@ impl VolumeUnit for CubicMeter {
     const SYMBOL: &'static str = "m³";
 }
 
-/// The litre (L).
+/// The liter (L).
 ///
 /// 1 L = 1e27 Å³.
 pub struct Liter;
@@ -92,7 +92,7 @@ impl VolumeUnit for Liter {
     const SYMBOL: &'static str = "L";
 }
 
-/// The millilitre (mL).
+/// The milliliter (mL).
 ///
 /// 1 mL = 1e24 Å³.
 pub struct Milliliter;

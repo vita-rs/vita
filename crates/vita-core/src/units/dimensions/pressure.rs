@@ -26,7 +26,7 @@ pub trait PressureUnit {
 }
 
 define_quantity!(
-    /// A pressure parameterised by scalar type `V` and unit marker `U`.
+    /// A pressure parameterized by scalar type `V` and unit marker `U`.
     Pressure,
     PressureUnit
 );

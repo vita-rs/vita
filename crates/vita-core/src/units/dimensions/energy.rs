@@ -27,7 +27,7 @@ pub trait EnergyUnit {
 }
 
 define_quantity!(
-    /// An energy parameterised by scalar type `V` and unit marker `U`.
+    /// An energy parameterized by scalar type `V` and unit marker `U`.
     Energy,
     EnergyUnit
 );
@@ -72,7 +72,7 @@ impl EnergyUnit for ElectronVolt {
     const SYMBOL: &'static str = "eV";
 }
 
-/// The wavenumber (cm⁻¹) — inverse centimetres (CODATA 2022).
+/// The wavenumber (cm⁻¹) — inverse centimeters (CODATA 2022).
 ///
 /// 1 cm⁻¹ ≈ 1 / 219474.63136314 Eₕ.
 pub struct Wavenumber;

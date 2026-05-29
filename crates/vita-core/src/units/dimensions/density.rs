@@ -1,6 +1,6 @@
 //! Density quantities and unit markers.
 //!
-//! The canonical unit is the **gram per cubic centimetre** (g cm⁻³).
+//! The canonical unit is the **gram per cubic centimeter** (g cm⁻³).
 //!
 //! | Type | Symbol | g cm⁻³ per unit |
 //! |---|---|---|
@@ -14,21 +14,21 @@ use crate::units::quantity::define_quantity;
 ///
 /// Implement this on a zero-sized type to define a new density unit.
 /// [`TO_CANONICAL`][Self::TO_CANONICAL] must give the number of grams per
-/// cubic centimetre per one unit of `Self`.
+/// cubic centimeter per one unit of `Self`.
 pub trait DensityUnit {
-    /// Grams per cubic centimetre per one unit of `Self`.
+    /// Grams per cubic centimeter per one unit of `Self`.
     const TO_CANONICAL: f64;
     /// Display symbol (e.g. `"g cm⁻³"`, `"kg m⁻³"`).
     const SYMBOL: &'static str;
 }
 
 define_quantity!(
-    /// A density parameterised by scalar type `V` and unit marker `U`.
+    /// A density parameterized by scalar type `V` and unit marker `U`.
     Density,
     DensityUnit
 );
 
-/// The gram per cubic centimetre (g cm⁻³) — canonical density unit.
+/// The gram per cubic centimeter (g cm⁻³) — canonical density unit.
 ///
 /// 1 g cm⁻³ = 1000 kg m⁻³.
 pub struct GramPerCubicCentimeter;
@@ -38,7 +38,7 @@ impl DensityUnit for GramPerCubicCentimeter {
     const SYMBOL: &'static str = "g cm⁻³";
 }
 
-/// The kilogram per cubic metre (kg m⁻³) — SI unit of density.
+/// The kilogram per cubic meter (kg m⁻³) — SI unit of density.
 ///
 /// 1 kg m⁻³ = 0.001 g cm⁻³.
 pub struct KilogramPerCubicMeter;

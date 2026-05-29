@@ -25,7 +25,7 @@ pub trait AreaUnit {
 }
 
 define_quantity!(
-    /// An area parameterised by scalar type `V` and unit marker `U`.
+    /// An area parameterized by scalar type `V` and unit marker `U`.
     Area,
     AreaUnit
 );
@@ -50,7 +50,7 @@ impl AreaUnit for SquareBohr {
     const SYMBOL: &'static str = "a₀²";
 }
 
-/// The square nanometre (nm²).
+/// The square nanometer (nm²).
 ///
 /// 1 nm² = 100 Å².
 pub struct SquareNanometer;
@@ -60,7 +60,7 @@ impl AreaUnit for SquareNanometer {
     const SYMBOL: &'static str = "nm²";
 }
 
-/// The square picometre (pm²).
+/// The square picometer (pm²).
 ///
 /// 1 pm² = 1e-4 Å².
 pub struct SquarePicometer;
@@ -70,7 +70,7 @@ impl AreaUnit for SquarePicometer {
     const SYMBOL: &'static str = "pm²";
 }
 
-/// The square metre (m²) — SI base unit of area.
+/// The square meter (m²) — SI base unit of area.
 ///
 /// 1 m² = 1e20 Å².
 pub struct SquareMeter;
