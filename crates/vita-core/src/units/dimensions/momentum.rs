@@ -83,8 +83,6 @@ impl MomentumUnit for KilogramMeterPerSecond {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use alloc::format;
-    use alloc::string::ToString;
     use core::iter;
 
     #[test]

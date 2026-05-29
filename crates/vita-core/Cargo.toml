@@ -13,7 +13,7 @@ categories = [
     "science::computational-biology",
     "science::computational-chemistry",
     "science::materials",
-    "no-std",
+    "mathematics",
 ]
 readme = "README.md"
 edition.workspace = true
