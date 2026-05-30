@@ -4,7 +4,7 @@ use core::ops::{
     Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Rem, RemAssign, Sub, SubAssign,
 };
 
-/// Numeric scalar type for values in physical-quantity types.
+/// Numeric scalar type for values in physical-quantity and tensor types.
 ///
 /// Implemented for [`f32`] and [`f64`].
 pub trait Scalar:
@@ -30,6 +30,15 @@ pub trait Scalar:
     + Product
     + for<'a> Product<&'a Self>
 {
+    /// The additive identity, `0.0`.
+    const ZERO: Self;
+
+    /// The multiplicative identity, `1.0`.
+    const ONE: Self;
+
+    /// Machine epsilon — the difference between `1` and the next larger representable value.
+    const EPSILON: Self;
+
     /// Returns the absolute value.
     fn abs(self) -> Self;
 
@@ -213,6 +222,10 @@ macro_rules! impl_scalar {
     ($($T:ty),+ $(,)?) => {
         $(
             impl Scalar for $T {
+                const ZERO: Self = 0.0;
+                const ONE: Self = 1.0;
+                const EPSILON: Self = <$T>::EPSILON;
+
                 #[inline]
                 fn abs(self) -> Self { <$T>::abs(self) }
 
