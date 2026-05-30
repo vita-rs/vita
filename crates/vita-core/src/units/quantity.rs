@@ -44,6 +44,9 @@ macro_rules! define_quantity {
         }
 
         impl<V: $crate::scalar::Scalar, U: $UnitTrait> $Qty<V, U> {
+            /// The additive identity: zero quantity in unit `U`.
+            pub const ZERO: Self = Self::new(V::ZERO);
+
             /// Returns the underlying scalar expressed in unit `U`.
             #[inline]
             pub const fn value(self) -> V { self.0 }
