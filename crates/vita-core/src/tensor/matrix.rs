@@ -407,3 +407,354 @@ impl<V: Scalar> MulAssign for Matrix3<V> {
         *self = *self * rhs;
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use core::f64::consts::FRAC_PI_2;
+
+    fn columns() -> Matrix3<f64> {
+        Matrix3::from_cols(
+            Vector3::new(1.0, 2.0, 3.0),
+            Vector3::new(4.0, 5.0, 6.0),
+            Vector3::new(7.0, 8.0, 9.0),
+        )
+    }
+
+    #[test]
+    fn from_cols() {
+        let m = columns();
+        assert_eq!(m.col(0), Vector3::new(1.0, 2.0, 3.0));
+        assert_eq!(m.col(1), Vector3::new(4.0, 5.0, 6.0));
+        assert_eq!(m.col(2), Vector3::new(7.0, 8.0, 9.0));
+    }
+
+    #[test]
+    fn from_rows() {
+        let m = Matrix3::from_rows(
+            Vector3::new(1.0, 2.0, 3.0),
+            Vector3::new(4.0, 5.0, 6.0),
+            Vector3::new(7.0, 8.0, 9.0),
+        );
+        assert_eq!(m.row(0), Vector3::new(1.0, 2.0, 3.0));
+        assert_eq!(m.row(1), Vector3::new(4.0, 5.0, 6.0));
+        assert_eq!(m.row(2), Vector3::new(7.0, 8.0, 9.0));
+    }
+
+    #[test]
+    fn from_cols_array() {
+        let m = Matrix3::from_cols_array(&[1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0]);
+        assert_eq!(m, columns());
+    }
+
+    #[test]
+    fn to_cols_array() {
+        assert_eq!(
+            columns().to_cols_array(),
+            [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0]
+        );
+    }
+
+    #[test]
+    fn from_diagonal() {
+        let m = Matrix3::from_diagonal(Vector3::new(1.0, 2.0, 3.0));
+        assert_eq!(
+            m.to_cols_array(),
+            [1.0, 0.0, 0.0, 0.0, 2.0, 0.0, 0.0, 0.0, 3.0]
+        );
+    }
+
+    #[test]
+    fn diagonal() {
+        assert_eq!(columns().diagonal(), Vector3::new(1.0, 5.0, 9.0));
+    }
+
+    #[test]
+    fn map() {
+        assert_eq!(
+            columns().map(|e| e * 2.0).to_cols_array(),
+            [2.0, 4.0, 6.0, 8.0, 10.0, 12.0, 14.0, 16.0, 18.0]
+        );
+    }
+
+    #[test]
+    fn zip_map() {
+        let sum = columns().zip_map(columns(), |a, b| a + b);
+        assert_eq!(sum, columns().map(|e| e * 2.0));
+    }
+
+    #[test]
+    fn col() {
+        assert_eq!(columns().col(2), Vector3::new(7.0, 8.0, 9.0));
+    }
+
+    #[test]
+    #[should_panic]
+    fn col_panics_when_out_of_bounds() {
+        let _ = columns().col(3);
+    }
+
+    #[test]
+    fn row() {
+        assert_eq!(columns().row(1), Vector3::new(2.0, 5.0, 8.0));
+    }
+
+    #[test]
+    fn transpose() {
+        assert_eq!(
+            columns().transpose().to_cols_array(),
+            [1.0, 4.0, 7.0, 2.0, 5.0, 8.0, 3.0, 6.0, 9.0]
+        );
+        assert_eq!(columns().transpose().transpose(), columns());
+    }
+
+    #[test]
+    fn default_is_zero() {
+        assert_eq!(Matrix3::<f64>::default(), Matrix3::ZERO);
+    }
+
+    #[test]
+    fn copy_and_clone() {
+        let a = columns();
+        let b = a;
+        let c = ::core::clone::Clone::clone(&a);
+        assert_eq!(a, b);
+        assert_eq!(a, c);
+    }
+
+    #[test]
+    fn eq() {
+        assert_eq!(columns(), columns());
+        assert_ne!(columns(), Matrix3::<f64>::IDENTITY);
+    }
+
+    #[test]
+    fn debug() {
+        assert_eq!(
+            format!("{:?}", Matrix3::<f64>::IDENTITY),
+            concat!(
+                "Matrix3 { ",
+                "x_col: Vector3 { x: 1.0, y: 0.0, z: 0.0 }, ",
+                "y_col: Vector3 { x: 0.0, y: 1.0, z: 0.0 }, ",
+                "z_col: Vector3 { x: 0.0, y: 0.0, z: 1.0 } }"
+            )
+        );
+    }
+
+    #[test]
+    fn zero_constant() {
+        assert_eq!(Matrix3::<f64>::ZERO.to_cols_array(), [0.0; 9]);
+    }
+
+    #[test]
+    fn identity_constant() {
+        assert_eq!(
+            Matrix3::<f64>::IDENTITY.to_cols_array(),
+            [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]
+        );
+    }
+
+    #[test]
+    fn neg() {
+        assert_eq!((-columns()), columns().map(|e| -e));
+    }
+
+    #[test]
+    fn add() {
+        assert_eq!(columns() + columns(), columns().map(|e| e * 2.0));
+    }
+
+    #[test]
+    fn add_assign() {
+        let mut m = columns();
+        m += columns();
+        assert_eq!(m, columns().map(|e| e * 2.0));
+    }
+
+    #[test]
+    fn sub() {
+        assert_eq!(columns() - columns(), Matrix3::ZERO);
+    }
+
+    #[test]
+    fn sub_assign() {
+        let mut m = columns();
+        m -= columns();
+        assert_eq!(m, Matrix3::ZERO);
+    }
+
+    #[test]
+    fn mul_scalar() {
+        assert_eq!(columns() * 2.0, columns().map(|e| e * 2.0));
+    }
+
+    #[test]
+    fn mul_assign_scalar() {
+        let mut m = columns();
+        m *= 2.0;
+        assert_eq!(m, columns().map(|e| e * 2.0));
+    }
+
+    #[test]
+    fn div_scalar() {
+        assert_eq!(columns().map(|e| e * 2.0) / 2.0, columns());
+    }
+
+    #[test]
+    fn div_assign_scalar() {
+        let mut m = columns().map(|e| e * 2.0);
+        m /= 2.0;
+        assert_eq!(m, columns());
+    }
+
+    #[test]
+    fn mul_vector() {
+        assert_eq!(
+            Matrix3::<f64>::IDENTITY * Vector3::new(1.0, 2.0, 3.0),
+            Vector3::new(1.0, 2.0, 3.0)
+        );
+        assert_eq!(
+            Matrix3::from_scale(Vector3::new(2.0, 3.0, 4.0)) * Vector3::new(1.0, 1.0, 1.0),
+            Vector3::new(2.0, 3.0, 4.0)
+        );
+    }
+
+    #[test]
+    fn mul_matrix() {
+        assert_eq!(Matrix3::<f64>::IDENTITY * columns(), columns());
+        assert_eq!(
+            Matrix3::from_scale(Vector3::new(2.0, 2.0, 2.0))
+                * Matrix3::from_scale(Vector3::new(3.0, 3.0, 3.0)),
+            Matrix3::from_scale(Vector3::new(6.0, 6.0, 6.0))
+        );
+    }
+
+    #[test]
+    fn mul_assign_matrix() {
+        let mut m = columns();
+        m *= Matrix3::IDENTITY;
+        assert_eq!(m, columns());
+    }
+
+    #[test]
+    fn from_scale() {
+        assert_eq!(
+            Matrix3::from_scale(Vector3::new(2.0, 3.0, 4.0)).to_cols_array(),
+            [2.0, 0.0, 0.0, 0.0, 3.0, 0.0, 0.0, 0.0, 4.0]
+        );
+    }
+
+    #[test]
+    fn outer_product() {
+        assert_eq!(
+            Matrix3::outer_product(Vector3::new(1.0, 2.0, 3.0), Vector3::new(4.0, 5.0, 6.0)),
+            Matrix3::from_cols(
+                Vector3::new(4.0, 8.0, 12.0),
+                Vector3::new(5.0, 10.0, 15.0),
+                Vector3::new(6.0, 12.0, 18.0),
+            )
+        );
+    }
+
+    #[test]
+    fn from_rotation_x() {
+        let m = Matrix3::from_rotation_x(FRAC_PI_2);
+        assert!((m * Vector3::Y - Vector3::Z).norm() < 1e-12);
+        assert!((m * Vector3::Z - (-Vector3::<f64>::Y)).norm() < 1e-12);
+    }
+
+    #[test]
+    fn from_rotation_y() {
+        let m = Matrix3::from_rotation_y(FRAC_PI_2);
+        assert!((m * Vector3::Z - Vector3::X).norm() < 1e-12);
+        assert!((m * Vector3::X - (-Vector3::<f64>::Z)).norm() < 1e-12);
+    }
+
+    #[test]
+    fn from_rotation_z() {
+        let m = Matrix3::from_rotation_z(FRAC_PI_2);
+        assert!((m * Vector3::X - Vector3::Y).norm() < 1e-12);
+        assert!((m * Vector3::Y - (-Vector3::<f64>::X)).norm() < 1e-12);
+    }
+
+    #[test]
+    fn from_axis_angle() {
+        let a = Matrix3::from_axis_angle(Vector3::Z, 0.7).to_cols_array();
+        let b = Matrix3::from_rotation_z(0.7).to_cols_array();
+        for i in 0..9 {
+            assert!((a[i] - b[i]).abs() < 1e-12);
+        }
+    }
+
+    #[test]
+    fn trace() {
+        assert_eq!(columns().trace(), 15.0);
+    }
+
+    #[test]
+    fn determinant() {
+        assert_eq!(Matrix3::<f64>::IDENTITY.determinant(), 1.0);
+        assert_eq!(
+            Matrix3::from_diagonal(Vector3::new(2.0, 3.0, 4.0)).determinant(),
+            24.0
+        );
+    }
+
+    #[test]
+    fn is_invertible() {
+        assert!(Matrix3::<f64>::IDENTITY.is_invertible());
+        assert!(!Matrix3::from_scale(Vector3::new(1.0, 0.0, 1.0)).is_invertible());
+    }
+
+    #[test]
+    fn try_inverse() {
+        assert_eq!(
+            Matrix3::from_scale(Vector3::new(2.0, 4.0, 8.0)).try_inverse(),
+            Some(Matrix3::from_scale(Vector3::new(0.5, 0.25, 0.125)))
+        );
+    }
+
+    #[test]
+    fn try_inverse_singular_is_none() {
+        assert_eq!(
+            Matrix3::from_scale(Vector3::new(1.0, 0.0, 1.0)).try_inverse(),
+            None
+        );
+    }
+
+    #[test]
+    fn inverse() {
+        assert_eq!(
+            Matrix3::from_scale(Vector3::new(2.0, 4.0, 8.0)).inverse(),
+            Matrix3::from_scale(Vector3::new(0.5, 0.25, 0.125))
+        );
+    }
+
+    #[test]
+    #[should_panic]
+    fn inverse_panics_when_singular() {
+        Matrix3::from_scale(Vector3::new(1.0, 0.0, 1.0)).inverse();
+    }
+
+    #[test]
+    fn inverse_roundtrip() {
+        let m = Matrix3::from_cols(
+            Vector3::new(2.0, 1.0, 0.0),
+            Vector3::new(1.0, 2.0, 1.0),
+            Vector3::new(0.0, 1.0, 2.0),
+        );
+        let product = (m * m.inverse()).to_cols_array();
+        let identity = Matrix3::<f64>::IDENTITY.to_cols_array();
+        for i in 0..9 {
+            assert!((product[i] - identity[i]).abs() < 1e-12);
+        }
+    }
+
+    #[test]
+    fn f32_mul_vector() {
+        assert_eq!(
+            Matrix3::from_scale(Vector3::<f32>::new(2.0, 3.0, 4.0)) * Vector3::new(1.0, 1.0, 1.0),
+            Vector3::new(2.0, 3.0, 4.0)
+        );
+    }
+}
