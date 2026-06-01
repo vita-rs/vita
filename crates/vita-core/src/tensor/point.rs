@@ -256,7 +256,7 @@ impl<T: Add<Output = T> + Sub<Output = T> + Copy> Point3<T> {
     ///
     /// `t == 0` yields `self`, `t == 1` yields `rhs`.
     #[inline]
-    pub fn lerp<S: Copy>(self, rhs: Self, t: S) -> Self
+    pub fn lerp<S: Scalar>(self, rhs: Self, t: S) -> Self
     where
         T: Mul<S, Output = T>,
     {

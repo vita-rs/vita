@@ -345,38 +345,38 @@ impl<V: Scalar> Matrix3<V> {
     }
 }
 
-impl<V: Scalar> Mul<V> for Matrix3<V> {
+impl<T: Mul<S, Output = T> + Copy, S: Scalar> Mul<S> for Matrix3<T> {
     type Output = Self;
-    /// Scales every element by `rhs`.
+    /// Scales every element by the scalar `rhs`.
     #[inline]
-    fn mul(self, rhs: V) -> Self {
+    fn mul(self, rhs: S) -> Self {
         let [c0, c1, c2] = self.cols;
         Self::from_cols(c0 * rhs, c1 * rhs, c2 * rhs)
     }
 }
 
-impl<V: Scalar> MulAssign<V> for Matrix3<V> {
+impl<T: MulAssign<S> + Copy, S: Scalar> MulAssign<S> for Matrix3<T> {
     #[inline]
-    fn mul_assign(&mut self, rhs: V) {
+    fn mul_assign(&mut self, rhs: S) {
         self.cols[0] *= rhs;
         self.cols[1] *= rhs;
         self.cols[2] *= rhs;
     }
 }
 
-impl<V: Scalar> Div<V> for Matrix3<V> {
+impl<T: Div<S, Output = T> + Copy, S: Scalar> Div<S> for Matrix3<T> {
     type Output = Self;
-    /// Divides every element by `rhs`.
+    /// Divides every element by the scalar `rhs`.
     #[inline]
-    fn div(self, rhs: V) -> Self {
+    fn div(self, rhs: S) -> Self {
         let [c0, c1, c2] = self.cols;
         Self::from_cols(c0 / rhs, c1 / rhs, c2 / rhs)
     }
 }
 
-impl<V: Scalar> DivAssign<V> for Matrix3<V> {
+impl<T: DivAssign<S> + Copy, S: Scalar> DivAssign<S> for Matrix3<T> {
     #[inline]
-    fn div_assign(&mut self, rhs: V) {
+    fn div_assign(&mut self, rhs: S) {
         self.cols[0] /= rhs;
         self.cols[1] /= rhs;
         self.cols[2] /= rhs;

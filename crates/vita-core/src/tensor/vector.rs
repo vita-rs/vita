@@ -237,19 +237,19 @@ impl<T: SubAssign> SubAssign for Vector3<T> {
     }
 }
 
-impl<T, S: Copy> Mul<S> for Vector3<T>
+impl<T, S: Scalar> Mul<S> for Vector3<T>
 where
     T: Mul<S, Output = T>,
 {
     type Output = Self;
-    /// Scales every component by `rhs`, preserving the element's unit.
+    /// Scales every component by the scalar `rhs`, preserving the element's unit.
     #[inline]
     fn mul(self, rhs: S) -> Self {
         Self::new(self.x * rhs, self.y * rhs, self.z * rhs)
     }
 }
 
-impl<T, S: Copy> MulAssign<S> for Vector3<T>
+impl<T, S: Scalar> MulAssign<S> for Vector3<T>
 where
     T: MulAssign<S>,
 {
@@ -261,19 +261,19 @@ where
     }
 }
 
-impl<T, S: Copy> Div<S> for Vector3<T>
+impl<T, S: Scalar> Div<S> for Vector3<T>
 where
     T: Div<S, Output = T>,
 {
     type Output = Self;
-    /// Divides every component by `rhs`, preserving the element's unit.
+    /// Divides every component by the scalar `rhs`, preserving the element's unit.
     #[inline]
     fn div(self, rhs: S) -> Self {
         Self::new(self.x / rhs, self.y / rhs, self.z / rhs)
     }
 }
 
-impl<T, S: Copy> DivAssign<S> for Vector3<T>
+impl<T, S: Scalar> DivAssign<S> for Vector3<T>
 where
     T: DivAssign<S>,
 {
@@ -312,7 +312,7 @@ impl<T: Add<Output = T> + Sub<Output = T> + Copy> Vector3<T> {
     ///
     /// `t == 0` yields `self`, `t == 1` yields `rhs`.
     #[inline]
-    pub fn lerp<S: Copy>(self, rhs: Self, t: S) -> Self
+    pub fn lerp<S: Scalar>(self, rhs: Self, t: S) -> Self
     where
         T: Mul<S, Output = T>,
     {
