@@ -575,3 +575,505 @@ impl<V: Scalar> Vector3<V> {
         self.x.is_nan() || self.y.is_nan() || self.z.is_nan()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use core::f64::consts::FRAC_PI_2;
+    use core::iter;
+
+    #[test]
+    fn new() {
+        let v = Vector3::new(1.0, 2.0, 3.0);
+        assert_eq!((v.x, v.y, v.z), (1.0, 2.0, 3.0));
+    }
+
+    #[test]
+    fn from_array() {
+        assert_eq!(
+            Vector3::from_array([1.0, 2.0, 3.0]),
+            Vector3::new(1.0, 2.0, 3.0)
+        );
+    }
+
+    #[test]
+    fn to_array() {
+        assert_eq!(Vector3::new(1.0, 2.0, 3.0).to_array(), [1.0, 2.0, 3.0]);
+    }
+
+    #[test]
+    fn splat() {
+        assert_eq!(Vector3::splat(5.0), Vector3::new(5.0, 5.0, 5.0));
+    }
+
+    #[test]
+    fn from_slice() {
+        assert_eq!(
+            Vector3::from_slice(&[1.0, 2.0, 3.0, 4.0]),
+            Vector3::new(1.0, 2.0, 3.0)
+        );
+    }
+
+    #[test]
+    #[should_panic]
+    fn from_slice_panics_when_too_short() {
+        Vector3::<f64>::from_slice(&[1.0, 2.0]);
+    }
+
+    #[test]
+    fn with_x() {
+        assert_eq!(
+            Vector3::new(1.0, 2.0, 3.0).with_x(9.0),
+            Vector3::new(9.0, 2.0, 3.0)
+        );
+    }
+
+    #[test]
+    fn with_y() {
+        assert_eq!(
+            Vector3::new(1.0, 2.0, 3.0).with_y(9.0),
+            Vector3::new(1.0, 9.0, 3.0)
+        );
+    }
+
+    #[test]
+    fn with_z() {
+        assert_eq!(
+            Vector3::new(1.0, 2.0, 3.0).with_z(9.0),
+            Vector3::new(1.0, 2.0, 9.0)
+        );
+    }
+
+    #[test]
+    fn map() {
+        assert_eq!(
+            Vector3::new(1.0, 2.0, 3.0).map(|c| c * 2.0),
+            Vector3::new(2.0, 4.0, 6.0)
+        );
+    }
+
+    #[test]
+    fn zip_map() {
+        assert_eq!(
+            Vector3::new(1.0, 2.0, 3.0).zip_map(Vector3::new(4.0, 5.0, 6.0), |a, b| a + b),
+            Vector3::new(5.0, 7.0, 9.0)
+        );
+    }
+
+    #[test]
+    fn default_is_zero() {
+        assert_eq!(Vector3::<f64>::default(), Vector3::new(0.0, 0.0, 0.0));
+    }
+
+    #[test]
+    fn copy_and_clone() {
+        let a = Vector3::new(1.0, 2.0, 3.0);
+        let b = a;
+        let c = ::core::clone::Clone::clone(&a);
+        assert_eq!(a, b);
+        assert_eq!(a, c);
+    }
+
+    #[test]
+    fn eq() {
+        let a = Vector3::new(1.0, 2.0, 3.0);
+        assert_eq!(a, Vector3::new(1.0, 2.0, 3.0));
+        assert_ne!(a, Vector3::new(1.0, 2.0, 4.0));
+    }
+
+    #[test]
+    fn debug() {
+        assert_eq!(
+            format!("{:?}", Vector3::new(1.0, 2.0, 3.0)),
+            "Vector3 { x: 1.0, y: 2.0, z: 3.0 }"
+        );
+    }
+
+    #[test]
+    fn index() {
+        let v = Vector3::new(1.0, 2.0, 3.0);
+        assert_eq!((v[0], v[1], v[2]), (1.0, 2.0, 3.0));
+    }
+
+    #[test]
+    fn index_mut() {
+        let mut v = Vector3::new(1.0, 2.0, 3.0);
+        v[1] = 9.0;
+        assert_eq!(v.y, 9.0);
+    }
+
+    #[test]
+    #[should_panic]
+    fn index_panics_when_out_of_bounds() {
+        let _ = Vector3::new(1.0, 2.0, 3.0)[3];
+    }
+
+    #[test]
+    #[should_panic]
+    fn index_mut_panics_when_out_of_bounds() {
+        Vector3::new(1.0, 2.0, 3.0)[3] = 0.0;
+    }
+
+    #[test]
+    fn constants() {
+        assert_eq!(Vector3::<f64>::ZERO, Vector3::new(0.0, 0.0, 0.0));
+        assert_eq!(Vector3::<f64>::ONE, Vector3::new(1.0, 1.0, 1.0));
+        assert_eq!(Vector3::<f64>::X, Vector3::new(1.0, 0.0, 0.0));
+        assert_eq!(Vector3::<f64>::Y, Vector3::new(0.0, 1.0, 0.0));
+        assert_eq!(Vector3::<f64>::Z, Vector3::new(0.0, 0.0, 1.0));
+    }
+
+    #[test]
+    fn neg() {
+        assert_eq!(-Vector3::new(1.0, -2.0, 3.0), Vector3::new(-1.0, 2.0, -3.0));
+    }
+
+    #[test]
+    fn add() {
+        assert_eq!(
+            Vector3::new(1.0, 2.0, 3.0) + Vector3::new(4.0, 5.0, 6.0),
+            Vector3::new(5.0, 7.0, 9.0)
+        );
+    }
+
+    #[test]
+    fn add_assign() {
+        let mut v = Vector3::new(1.0, 2.0, 3.0);
+        v += Vector3::new(4.0, 5.0, 6.0);
+        assert_eq!(v, Vector3::new(5.0, 7.0, 9.0));
+    }
+
+    #[test]
+    fn sub() {
+        assert_eq!(
+            Vector3::new(4.0, 5.0, 6.0) - Vector3::new(1.0, 2.0, 3.0),
+            Vector3::new(3.0, 3.0, 3.0)
+        );
+    }
+
+    #[test]
+    fn sub_assign() {
+        let mut v = Vector3::new(4.0, 5.0, 6.0);
+        v -= Vector3::new(1.0, 2.0, 3.0);
+        assert_eq!(v, Vector3::new(3.0, 3.0, 3.0));
+    }
+
+    #[test]
+    fn mul_scalar() {
+        assert_eq!(
+            Vector3::new(1.0, 2.0, 3.0) * 2.0,
+            Vector3::new(2.0, 4.0, 6.0)
+        );
+    }
+
+    #[test]
+    fn mul_assign_scalar() {
+        let mut v = Vector3::new(1.0, 2.0, 3.0);
+        v *= 2.0;
+        assert_eq!(v, Vector3::new(2.0, 4.0, 6.0));
+    }
+
+    #[test]
+    fn div_scalar() {
+        assert_eq!(
+            Vector3::new(2.0, 4.0, 6.0) / 2.0,
+            Vector3::new(1.0, 2.0, 3.0)
+        );
+    }
+
+    #[test]
+    fn div_assign_scalar() {
+        let mut v = Vector3::new(2.0, 4.0, 6.0);
+        v /= 2.0;
+        assert_eq!(v, Vector3::new(1.0, 2.0, 3.0));
+    }
+
+    #[test]
+    fn sum_owned() {
+        let v = [
+            Vector3::new(1.0, 1.0, 1.0),
+            Vector3::new(2.0, 2.0, 2.0),
+            Vector3::new(3.0, 3.0, 3.0),
+        ];
+        let total: Vector3<f64> = v.iter().copied().sum();
+        assert_eq!(total, Vector3::new(6.0, 6.0, 6.0));
+    }
+
+    #[test]
+    fn sum_borrowed() {
+        let v = [
+            Vector3::new(1.0, 1.0, 1.0),
+            Vector3::new(2.0, 2.0, 2.0),
+            Vector3::new(3.0, 3.0, 3.0),
+        ];
+        let total: Vector3<f64> = v.iter().sum();
+        assert_eq!(total, Vector3::new(6.0, 6.0, 6.0));
+    }
+
+    #[test]
+    fn sum_empty() {
+        let total: Vector3<f64> = iter::empty::<Vector3<f64>>().sum();
+        assert_eq!(total, Vector3::new(0.0, 0.0, 0.0));
+    }
+
+    #[test]
+    fn element_sum() {
+        assert_eq!(Vector3::new(1.0, 2.0, 3.0).element_sum(), 6.0);
+    }
+
+    #[test]
+    fn element_product() {
+        assert_eq!(Vector3::new(2.0, 3.0, 4.0).element_product(), 24.0);
+    }
+
+    #[test]
+    fn lerp() {
+        assert_eq!(
+            Vector3::new(0.0, 0.0, 0.0).lerp(Vector3::new(2.0, 4.0, 6.0), 0.5),
+            Vector3::new(1.0, 2.0, 3.0)
+        );
+    }
+
+    #[test]
+    fn dot() {
+        assert_eq!(
+            Vector3::new(1.0, 2.0, 3.0).dot(Vector3::new(4.0, 5.0, 6.0)),
+            32.0
+        );
+    }
+
+    #[test]
+    fn cross() {
+        assert_eq!(Vector3::<f64>::X.cross(Vector3::Y), Vector3::Z);
+        assert_eq!(
+            Vector3::new(1.0, 2.0, 3.0).cross(Vector3::new(4.0, 5.0, 6.0)),
+            Vector3::new(-3.0, 6.0, -3.0)
+        );
+    }
+
+    #[test]
+    fn norm_squared() {
+        assert_eq!(Vector3::new(1.0, 2.0, 2.0).norm_squared(), 9.0);
+    }
+
+    #[test]
+    fn norm() {
+        assert_eq!(Vector3::new(3.0, 4.0, 0.0).norm(), 5.0);
+    }
+
+    #[test]
+    fn normalize() {
+        let n = Vector3::new(3.0, 4.0, 0.0).normalize();
+        assert!((n - Vector3::new(0.6, 0.8, 0.0)).norm() < 1e-12);
+    }
+
+    #[test]
+    fn try_normalize() {
+        let n = Vector3::new(3.0, 4.0, 0.0).try_normalize().unwrap();
+        assert!((n - Vector3::new(0.6, 0.8, 0.0)).norm() < 1e-12);
+    }
+
+    #[test]
+    fn try_normalize_zero_is_none() {
+        assert_eq!(Vector3::<f64>::ZERO.try_normalize(), None);
+    }
+
+    #[test]
+    fn normalize_or_zero() {
+        let n = Vector3::new(3.0, 4.0, 0.0).normalize_or_zero();
+        assert!((n - Vector3::new(0.6, 0.8, 0.0)).norm() < 1e-12);
+    }
+
+    #[test]
+    fn normalize_or_zero_zero_is_zero() {
+        assert_eq!(Vector3::<f64>::ZERO.normalize_or_zero(), Vector3::ZERO);
+    }
+
+    #[test]
+    fn is_normalized() {
+        assert!(Vector3::<f64>::X.is_normalized());
+        assert!(!Vector3::new(2.0, 0.0, 0.0).is_normalized());
+    }
+
+    #[test]
+    fn angle_between() {
+        assert!((Vector3::<f64>::X.angle_between(Vector3::Y) - FRAC_PI_2).abs() < 1e-12);
+        assert!(Vector3::<f64>::X.angle_between(Vector3::X).abs() < 1e-12);
+    }
+
+    #[test]
+    fn project_onto() {
+        assert_eq!(
+            Vector3::new(2.0, 3.0, 0.0).project_onto(Vector3::X),
+            Vector3::new(2.0, 0.0, 0.0)
+        );
+    }
+
+    #[test]
+    fn reject_from() {
+        assert_eq!(
+            Vector3::new(2.0, 3.0, 0.0).reject_from(Vector3::X),
+            Vector3::new(0.0, 3.0, 0.0)
+        );
+    }
+
+    #[test]
+    fn reflect() {
+        assert_eq!(
+            Vector3::new(1.0, -1.0, 0.0).reflect(Vector3::Y),
+            Vector3::new(1.0, 1.0, 0.0)
+        );
+    }
+
+    #[test]
+    fn recip() {
+        assert_eq!(
+            Vector3::new(2.0, 4.0, 8.0).recip(),
+            Vector3::new(0.5, 0.25, 0.125)
+        );
+    }
+
+    #[test]
+    fn abs() {
+        assert_eq!(
+            Vector3::new(-1.0, 2.0, -3.0).abs(),
+            Vector3::new(1.0, 2.0, 3.0)
+        );
+    }
+
+    #[test]
+    fn min() {
+        assert_eq!(
+            Vector3::new(1.0, 5.0, 3.0).min(Vector3::new(4.0, 2.0, 6.0)),
+            Vector3::new(1.0, 2.0, 3.0)
+        );
+    }
+
+    #[test]
+    fn max() {
+        assert_eq!(
+            Vector3::new(1.0, 5.0, 3.0).max(Vector3::new(4.0, 2.0, 6.0)),
+            Vector3::new(4.0, 5.0, 6.0)
+        );
+    }
+
+    #[test]
+    fn clamp() {
+        assert_eq!(
+            Vector3::new(5.0, -1.0, 2.0).clamp(Vector3::splat(0.0), Vector3::splat(3.0)),
+            Vector3::new(3.0, 0.0, 2.0)
+        );
+    }
+
+    #[test]
+    #[should_panic]
+    fn clamp_panics_when_min_gt_max() {
+        Vector3::new(1.0, 1.0, 1.0).clamp(Vector3::splat(3.0), Vector3::splat(0.0));
+    }
+
+    #[test]
+    fn min_element() {
+        assert_eq!(Vector3::new(3.0, 1.0, 2.0).min_element(), 1.0);
+    }
+
+    #[test]
+    fn max_element() {
+        assert_eq!(Vector3::new(3.0, 1.0, 2.0).max_element(), 3.0);
+    }
+
+    #[test]
+    fn floor() {
+        assert_eq!(
+            Vector3::new(1.7, -1.2, 2.0).floor(),
+            Vector3::new(1.0, -2.0, 2.0)
+        );
+    }
+
+    #[test]
+    fn ceil() {
+        assert_eq!(
+            Vector3::new(1.2, -1.7, 2.0).ceil(),
+            Vector3::new(2.0, -1.0, 2.0)
+        );
+    }
+
+    #[test]
+    fn round() {
+        assert_eq!(
+            Vector3::new(1.5, -1.5, 2.4).round(),
+            Vector3::new(2.0, -2.0, 2.0)
+        );
+    }
+
+    #[test]
+    fn round_ties_even() {
+        assert_eq!(
+            Vector3::new(1.5, 2.5, -1.5).round_ties_even(),
+            Vector3::new(2.0, 2.0, -2.0)
+        );
+    }
+
+    #[test]
+    fn trunc() {
+        assert_eq!(
+            Vector3::new(1.7, -1.7, 2.0).trunc(),
+            Vector3::new(1.0, -1.0, 2.0)
+        );
+    }
+
+    #[test]
+    fn fract() {
+        assert_eq!(
+            Vector3::new(2.5, -1.25, 0.0).fract(),
+            Vector3::new(0.5, -0.25, 0.0)
+        );
+    }
+
+    #[test]
+    fn copysign() {
+        assert_eq!(
+            Vector3::new(3.0, -4.0, 5.0).copysign(Vector3::new(-1.0, 1.0, -1.0)),
+            Vector3::new(-3.0, 4.0, -5.0)
+        );
+    }
+
+    #[test]
+    fn signum() {
+        assert_eq!(
+            Vector3::new(3.0, -2.0, 5.0).signum(),
+            Vector3::new(1.0, -1.0, 1.0)
+        );
+    }
+
+    #[test]
+    fn rem_euclid() {
+        assert_eq!(
+            Vector3::new(-7.0, 7.0, 8.0).rem_euclid(Vector3::splat(3.0)),
+            Vector3::new(2.0, 1.0, 2.0)
+        );
+    }
+
+    #[test]
+    fn is_finite() {
+        assert!(Vector3::new(1.0, 2.0, 3.0).is_finite());
+        assert!(!Vector3::new(1.0, f64::INFINITY, 3.0).is_finite());
+    }
+
+    #[test]
+    fn is_infinite() {
+        assert!(Vector3::new(1.0, f64::INFINITY, 3.0).is_infinite());
+        assert!(!Vector3::new(1.0, 2.0, 3.0).is_infinite());
+    }
+
+    #[test]
+    fn is_nan() {
+        assert!(Vector3::new(1.0, f64::NAN, 3.0).is_nan());
+        assert!(!Vector3::new(1.0, 2.0, 3.0).is_nan());
+    }
+
+    #[test]
+    fn f32_normalize() {
+        let n = Vector3::<f32>::new(3.0, 4.0, 0.0).normalize();
+        assert!((n - Vector3::new(0.6, 0.8, 0.0)).norm() < 1e-6);
+    }
+}
