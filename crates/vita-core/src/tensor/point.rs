@@ -393,3 +393,350 @@ impl<V: Scalar> Point3<V> {
         self.x.is_nan() || self.y.is_nan() || self.z.is_nan()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn new() {
+        let p = Point3::new(1.0, 2.0, 3.0);
+        assert_eq!((p.x, p.y, p.z), (1.0, 2.0, 3.0));
+    }
+
+    #[test]
+    fn from_array() {
+        assert_eq!(
+            Point3::from_array([1.0, 2.0, 3.0]),
+            Point3::new(1.0, 2.0, 3.0)
+        );
+    }
+
+    #[test]
+    fn to_array() {
+        assert_eq!(Point3::new(1.0, 2.0, 3.0).to_array(), [1.0, 2.0, 3.0]);
+    }
+
+    #[test]
+    fn splat() {
+        assert_eq!(Point3::splat(5.0), Point3::new(5.0, 5.0, 5.0));
+    }
+
+    #[test]
+    fn from_slice() {
+        assert_eq!(
+            Point3::from_slice(&[1.0, 2.0, 3.0, 4.0]),
+            Point3::new(1.0, 2.0, 3.0)
+        );
+    }
+
+    #[test]
+    #[should_panic]
+    fn from_slice_panics_when_too_short() {
+        Point3::<f64>::from_slice(&[1.0, 2.0]);
+    }
+
+    #[test]
+    fn with_x() {
+        assert_eq!(
+            Point3::new(1.0, 2.0, 3.0).with_x(9.0),
+            Point3::new(9.0, 2.0, 3.0)
+        );
+    }
+
+    #[test]
+    fn with_y() {
+        assert_eq!(
+            Point3::new(1.0, 2.0, 3.0).with_y(9.0),
+            Point3::new(1.0, 9.0, 3.0)
+        );
+    }
+
+    #[test]
+    fn with_z() {
+        assert_eq!(
+            Point3::new(1.0, 2.0, 3.0).with_z(9.0),
+            Point3::new(1.0, 2.0, 9.0)
+        );
+    }
+
+    #[test]
+    fn from_vector() {
+        assert_eq!(
+            Point3::from_vector(Vector3::new(1.0, 2.0, 3.0)),
+            Point3::new(1.0, 2.0, 3.0)
+        );
+    }
+
+    #[test]
+    fn to_vector() {
+        assert_eq!(
+            Point3::new(1.0, 2.0, 3.0).to_vector(),
+            Vector3::new(1.0, 2.0, 3.0)
+        );
+    }
+
+    #[test]
+    fn map() {
+        assert_eq!(
+            Point3::new(1.0, 2.0, 3.0).map(|c| c * 2.0),
+            Point3::new(2.0, 4.0, 6.0)
+        );
+    }
+
+    #[test]
+    fn zip_map() {
+        assert_eq!(
+            Point3::new(1.0, 2.0, 3.0).zip_map(Point3::new(4.0, 5.0, 6.0), |a, b| a + b),
+            Point3::new(5.0, 7.0, 9.0)
+        );
+    }
+
+    #[test]
+    fn default_is_origin() {
+        assert_eq!(Point3::<f64>::default(), Point3::new(0.0, 0.0, 0.0));
+    }
+
+    #[test]
+    fn copy_and_clone() {
+        let a = Point3::new(1.0, 2.0, 3.0);
+        let b = a;
+        let c = ::core::clone::Clone::clone(&a);
+        assert_eq!(a, b);
+        assert_eq!(a, c);
+    }
+
+    #[test]
+    fn eq() {
+        let a = Point3::new(1.0, 2.0, 3.0);
+        assert_eq!(a, Point3::new(1.0, 2.0, 3.0));
+        assert_ne!(a, Point3::new(1.0, 2.0, 4.0));
+    }
+
+    #[test]
+    fn debug() {
+        assert_eq!(
+            format!("{:?}", Point3::new(1.0, 2.0, 3.0)),
+            "Point3 { x: 1.0, y: 2.0, z: 3.0 }"
+        );
+    }
+
+    #[test]
+    fn index() {
+        let p = Point3::new(1.0, 2.0, 3.0);
+        assert_eq!((p[0], p[1], p[2]), (1.0, 2.0, 3.0));
+    }
+
+    #[test]
+    fn index_mut() {
+        let mut p = Point3::new(1.0, 2.0, 3.0);
+        p[1] = 9.0;
+        assert_eq!(p.y, 9.0);
+    }
+
+    #[test]
+    #[should_panic]
+    fn index_panics_when_out_of_bounds() {
+        let _ = Point3::new(1.0, 2.0, 3.0)[3];
+    }
+
+    #[test]
+    #[should_panic]
+    fn index_mut_panics_when_out_of_bounds() {
+        Point3::new(1.0, 2.0, 3.0)[3] = 0.0;
+    }
+
+    #[test]
+    fn origin_constant() {
+        assert_eq!(Point3::<f64>::ORIGIN, Point3::new(0.0, 0.0, 0.0));
+    }
+
+    #[test]
+    fn add_vector() {
+        assert_eq!(
+            Point3::new(1.0, 2.0, 3.0) + Vector3::new(1.0, 1.0, 1.0),
+            Point3::new(2.0, 3.0, 4.0)
+        );
+    }
+
+    #[test]
+    fn add_assign_vector() {
+        let mut p = Point3::new(1.0, 2.0, 3.0);
+        p += Vector3::new(1.0, 1.0, 1.0);
+        assert_eq!(p, Point3::new(2.0, 3.0, 4.0));
+    }
+
+    #[test]
+    fn sub_vector() {
+        assert_eq!(
+            Point3::new(2.0, 3.0, 4.0) - Vector3::new(1.0, 1.0, 1.0),
+            Point3::new(1.0, 2.0, 3.0)
+        );
+    }
+
+    #[test]
+    fn sub_assign_vector() {
+        let mut p = Point3::new(2.0, 3.0, 4.0);
+        p -= Vector3::new(1.0, 1.0, 1.0);
+        assert_eq!(p, Point3::new(1.0, 2.0, 3.0));
+    }
+
+    #[test]
+    fn sub_point_yields_vector() {
+        assert_eq!(
+            Point3::new(3.0, 3.0, 3.0) - Point3::new(1.0, 1.0, 1.0),
+            Vector3::new(2.0, 2.0, 2.0)
+        );
+    }
+
+    #[test]
+    fn lerp() {
+        assert_eq!(
+            Point3::new(0.0, 0.0, 0.0).lerp(Point3::new(2.0, 4.0, 6.0), 0.5),
+            Point3::new(1.0, 2.0, 3.0)
+        );
+    }
+
+    #[test]
+    fn distance_squared() {
+        assert_eq!(
+            Point3::new(0.0, 0.0, 0.0).distance_squared(Point3::new(3.0, 4.0, 0.0)),
+            25.0
+        );
+    }
+
+    #[test]
+    fn distance() {
+        assert_eq!(
+            Point3::new(0.0, 0.0, 0.0).distance(Point3::new(3.0, 4.0, 0.0)),
+            5.0
+        );
+    }
+
+    #[test]
+    fn midpoint() {
+        assert_eq!(
+            Point3::new(0.0, 0.0, 0.0).midpoint(Point3::new(2.0, 4.0, 6.0)),
+            Point3::new(1.0, 2.0, 3.0)
+        );
+    }
+
+    #[test]
+    fn centroid() {
+        let points = [
+            Point3::new(0.0, 0.0, 0.0),
+            Point3::new(2.0, 0.0, 0.0),
+            Point3::new(1.0, 3.0, 0.0),
+        ];
+        assert_eq!(Point3::centroid(&points), Point3::new(1.0, 1.0, 0.0));
+    }
+
+    #[test]
+    fn centroid_empty_is_origin() {
+        assert_eq!(Point3::<f64>::centroid(&[]), Point3::ORIGIN);
+    }
+
+    #[test]
+    fn min() {
+        assert_eq!(
+            Point3::new(1.0, 5.0, 3.0).min(Point3::new(4.0, 2.0, 6.0)),
+            Point3::new(1.0, 2.0, 3.0)
+        );
+    }
+
+    #[test]
+    fn max() {
+        assert_eq!(
+            Point3::new(1.0, 5.0, 3.0).max(Point3::new(4.0, 2.0, 6.0)),
+            Point3::new(4.0, 5.0, 6.0)
+        );
+    }
+
+    #[test]
+    fn clamp() {
+        assert_eq!(
+            Point3::new(5.0, -1.0, 2.0).clamp(Point3::splat(0.0), Point3::splat(3.0)),
+            Point3::new(3.0, 0.0, 2.0)
+        );
+    }
+
+    #[test]
+    #[should_panic]
+    fn clamp_panics_when_min_gt_max() {
+        Point3::new(1.0, 1.0, 1.0).clamp(Point3::splat(3.0), Point3::splat(0.0));
+    }
+
+    #[test]
+    fn floor() {
+        assert_eq!(
+            Point3::new(1.7, -1.2, 2.0).floor(),
+            Point3::new(1.0, -2.0, 2.0)
+        );
+    }
+
+    #[test]
+    fn ceil() {
+        assert_eq!(
+            Point3::new(1.2, -1.7, 2.0).ceil(),
+            Point3::new(2.0, -1.0, 2.0)
+        );
+    }
+
+    #[test]
+    fn round() {
+        assert_eq!(
+            Point3::new(1.5, -1.5, 2.4).round(),
+            Point3::new(2.0, -2.0, 2.0)
+        );
+    }
+
+    #[test]
+    fn round_ties_even() {
+        assert_eq!(
+            Point3::new(1.5, 2.5, -1.5).round_ties_even(),
+            Point3::new(2.0, 2.0, -2.0)
+        );
+    }
+
+    #[test]
+    fn trunc() {
+        assert_eq!(
+            Point3::new(1.7, -1.7, 2.0).trunc(),
+            Point3::new(1.0, -1.0, 2.0)
+        );
+    }
+
+    #[test]
+    fn fract() {
+        assert_eq!(
+            Point3::new(2.5, -1.25, 0.0).fract(),
+            Point3::new(0.5, -0.25, 0.0)
+        );
+    }
+
+    #[test]
+    fn is_finite() {
+        assert!(Point3::new(1.0, 2.0, 3.0).is_finite());
+        assert!(!Point3::new(1.0, f64::INFINITY, 3.0).is_finite());
+    }
+
+    #[test]
+    fn is_infinite() {
+        assert!(Point3::new(1.0, f64::INFINITY, 3.0).is_infinite());
+        assert!(!Point3::new(1.0, 2.0, 3.0).is_infinite());
+    }
+
+    #[test]
+    fn is_nan() {
+        assert!(Point3::new(1.0, f64::NAN, 3.0).is_nan());
+        assert!(!Point3::new(1.0, 2.0, 3.0).is_nan());
+    }
+
+    #[test]
+    fn f32_distance() {
+        assert_eq!(
+            Point3::<f32>::new(0.0, 0.0, 0.0).distance(Point3::new(3.0, 4.0, 0.0)),
+            5.0
+        );
+    }
+}
