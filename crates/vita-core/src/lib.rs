@@ -15,4 +15,6 @@ pub use id::SiteId;
 pub use isotope::Isotope;
 pub use lattice::Lattice;
 
-pub use capability::{HasElements, HasIsotopes, HasMasses, HasPositions, HasSites, HasVelocities};
+pub use capability::{
+    HasAccelerations, HasElements, HasIsotopes, HasMasses, HasPositions, HasSites, HasVelocities,
+};
