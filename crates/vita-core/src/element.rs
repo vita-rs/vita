@@ -216,3 +216,117 @@ mod data {
         if b.is_ascii_lowercase() { b - 32 } else { b }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn new() {
+        assert!(Element::new(0).is_none());
+        assert!(Element::new(1).is_some());
+        assert!(Element::new(255).is_some());
+    }
+
+    #[test]
+    fn from_nonzero() {
+        let z = NonZeroU8::new(6).unwrap();
+        assert_eq!(Element::from_nonzero(z).atomic_number(), 6);
+    }
+
+    #[test]
+    fn atomic_number_roundtrip() {
+        assert_eq!(Element::new(92).unwrap().atomic_number(), 92);
+    }
+
+    #[test]
+    fn symbol_named() {
+        assert_eq!(Element::new(1).unwrap().symbol(), "H");
+        assert_eq!(Element::new(6).unwrap().symbol(), "C");
+        assert_eq!(Element::new(118).unwrap().symbol(), "Og");
+    }
+
+    #[test]
+    fn name_named() {
+        assert_eq!(Element::new(1).unwrap().name(), "Hydrogen");
+        assert_eq!(Element::new(6).unwrap().name(), "Carbon");
+        assert_eq!(Element::new(118).unwrap().name(), "Oganesson");
+    }
+
+    #[test]
+    fn symbol_systematic() {
+        assert_eq!(Element::new(119).unwrap().symbol(), "Uue");
+        assert_eq!(Element::new(120).unwrap().symbol(), "Ubn");
+        assert_eq!(Element::new(190).unwrap().symbol(), "Uen");
+        assert_eq!(Element::new(255).unwrap().symbol(), "Bpp");
+    }
+
+    #[test]
+    fn name_systematic() {
+        assert_eq!(Element::new(119).unwrap().name(), "Ununennium");
+        assert_eq!(Element::new(120).unwrap().name(), "Unbinilium");
+        assert_eq!(Element::new(122).unwrap().name(), "Unbibium");
+        assert_eq!(Element::new(123).unwrap().name(), "Unbitrium");
+        assert_eq!(Element::new(190).unwrap().name(), "Unennilium");
+        assert_eq!(Element::new(255).unwrap().name(), "Bipentpentium");
+    }
+
+    #[test]
+    fn period() {
+        assert_eq!(Element::new(1).unwrap().period(), Some(1));
+        assert_eq!(Element::new(2).unwrap().period(), Some(1));
+        assert_eq!(Element::new(3).unwrap().period(), Some(2));
+        assert_eq!(Element::new(18).unwrap().period(), Some(3));
+        assert_eq!(Element::new(118).unwrap().period(), Some(7));
+    }
+
+    #[test]
+    fn period_is_none_beyond_named() {
+        assert_eq!(Element::new(119).unwrap().period(), None);
+        assert_eq!(Element::new(255).unwrap().period(), None);
+    }
+
+    #[test]
+    fn copy_and_clone() {
+        let a = Element::new(6).unwrap();
+        let b = a;
+        let c = ::core::clone::Clone::clone(&a);
+        assert_eq!(a, b);
+        assert_eq!(a, c);
+    }
+
+    #[test]
+    fn eq() {
+        let a = Element::new(6).unwrap();
+        assert_eq!(a, Element::new(6).unwrap());
+        assert_ne!(a, Element::new(7).unwrap());
+    }
+
+    #[test]
+    fn ord() {
+        let h = Element::new(1).unwrap();
+        let c = Element::new(6).unwrap();
+        assert!(h < c);
+        assert!(c > h);
+        assert_eq!(c.cmp(&c), ::core::cmp::Ordering::Equal);
+    }
+
+    #[test]
+    fn debug() {
+        assert_eq!(format!("{:?}", Element::new(6).unwrap()), "Element(6)");
+    }
+
+    #[test]
+    fn display() {
+        assert_eq!(format!("{}", Element::new(6).unwrap()), "C");
+        assert_eq!(format!("{}", Element::new(119).unwrap()), "Uue");
+    }
+
+    #[test]
+    fn option_is_same_size_as_u8() {
+        assert_eq!(
+            ::core::mem::size_of::<Option<Element>>(),
+            ::core::mem::size_of::<u8>()
+        );
+    }
+}
