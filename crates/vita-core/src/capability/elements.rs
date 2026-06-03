@@ -15,7 +15,7 @@ pub trait HasElements: HasSites {
     ///
     /// # Panics
     ///
-    /// Panics if `site` is not one of this configuration's [`sites`](HasSites::sites).
+    /// Panics if `site` is not in [`sites`](HasSites::sites).
     fn element(&self, site: SiteId) -> Element;
 
     /// Returns an iterator over every `(site, element)` pair.

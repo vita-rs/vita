@@ -16,8 +16,7 @@ pub trait HasIsotopes: HasElements {
     ///
     /// # Panics
     ///
-    /// Panics if `site` is not one of this configuration's
-    /// [`sites`](crate::HasSites::sites).
+    /// Panics if `site` is not in [`sites`](crate::HasSites::sites).
     fn isotope(&self, site: SiteId) -> Isotope;
 
     /// Returns an iterator over every `(site, isotope)` pair.
