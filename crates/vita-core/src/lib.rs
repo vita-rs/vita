@@ -16,5 +16,6 @@ pub use isotope::Isotope;
 pub use lattice::Lattice;
 
 pub use capability::{
-    HasAccelerations, HasElements, HasIsotopes, HasMasses, HasPositions, HasSites, HasVelocities,
+    HasAccelerations, HasElements, HasIsotopes, HasLattice, HasMasses, HasPositions, HasSites,
+    HasVelocities,
 };
