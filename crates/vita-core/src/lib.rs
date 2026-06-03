@@ -15,4 +15,4 @@ pub use id::SiteId;
 pub use isotope::Isotope;
 pub use lattice::Lattice;
 
-pub use capability::{HasElements, HasIsotopes, HasMasses, HasSites};
+pub use capability::{HasElements, HasIsotopes, HasMasses, HasPositions, HasSites};
