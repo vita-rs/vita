@@ -9,7 +9,7 @@ permissions:
   pull-requests: read
 
 env:
-  CC_PATTERN: '^(feat|fix|perf|refactor|test|docs|chore|ci)\((core|workspace)\)!?: [A-Z].+[^.]$'
+  CC_PATTERN: '^(feat|fix|perf|refactor|test|docs|chore|ci)\((core|vita|workspace)\)!?: [A-Z].+[^.]$'
 
 jobs:
   pr-title:
