@@ -1,0 +1,31 @@
+[package]
+name = "vita"
+version = "0.0.0"
+description = "Atomistic and molecular life sciences in Rust."
+keywords = [
+    "atomistic",
+    "molecular",
+    "bioinformatics",
+    "cheminformatics",
+    "biochemistry",
+]
+categories = [
+    "science",
+    "science::computational-biology",
+    "science::computational-chemistry",
+    "science::materials",
+    "mathematics",
+]
+readme = "README.md"
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+vita-core = { version = "0.0.0", path = "../vita-core" }
+
+[lib]
+name = "vita"
+path = "src/lib.rs"
