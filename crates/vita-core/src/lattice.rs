@@ -71,9 +71,10 @@ impl<V: Scalar> Lattice<V> {
     /// (∠**a**,**c**), `gamma` (∠**a**,**b**).
     ///
     /// **a** is placed along the `x` axis and **b** in the `xy` plane
-    /// (standard crystallographic orientation). Returns `None` if the
-    /// parameters describe no realizable cell (inconsistent angles or
-    /// non-finite degenerate volume).
+    /// (standard crystallographic orientation). Returns `None` if any edge
+    /// length is not strictly positive and finite, or if the parameters
+    /// describe no realizable cell (inconsistent angles or degenerate
+    /// volume).
     pub fn from_parameters<L: LengthUnit, A: AngleUnit>(
         a: Length<V, L>,
         b: Length<V, L>,
@@ -85,6 +86,10 @@ impl<V: Scalar> Lattice<V> {
         let a = into_angstroms(a);
         let b = into_angstroms(b);
         let c = into_angstroms(c);
+        let positive = |s: V| s > V::ZERO && s.is_finite();
+        if !(positive(a) && positive(b) && positive(c)) {
+            return None;
+        }
         let (_, ca) = alpha.to::<Radian>().value().sin_cos();
         let (_, cb) = beta.to::<Radian>().value().sin_cos();
         let (sg, cg) = gamma.to::<Radian>().value().sin_cos();
@@ -257,6 +262,33 @@ mod tests {
         .unwrap();
         assert!((l.volume::<CubicAngstrom>().value() - 8.0).abs() < 1e-12);
         assert!((l.b::<Angstrom>().y.value() - 2.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn from_parameters_rejects_nonpositive_edge() {
+        let right = Angle::<f64, Degree>::new(90.0);
+        assert!(
+            Lattice::from_parameters(
+                angstrom(0.0),
+                angstrom(1.0),
+                angstrom(1.0),
+                right,
+                right,
+                right,
+            )
+            .is_none()
+        );
+        assert!(
+            Lattice::from_parameters(
+                angstrom(1.0),
+                angstrom(1.0),
+                angstrom(-1.0),
+                right,
+                right,
+                right,
+            )
+            .is_none()
+        );
     }
 
     #[test]
