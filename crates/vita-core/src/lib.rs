@@ -34,6 +34,8 @@ mod scalar;
 pub mod tensor;
 pub mod units;
 
+pub mod prelude;
+
 pub use scalar::Scalar;
 
 pub use element::Element;
