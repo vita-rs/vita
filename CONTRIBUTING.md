@@ -104,7 +104,9 @@ If you find an unrelated issue while working, fix it in a separate PR.
 
 ## Issues
 
-<!--TODO: Add issue guidelines here. -->
+Search existing issues before opening. Choose the appropriate template and fill in every required field. Use **Title Case** for the title — `Add Charge Query Trait`, not `add charge query trait`.
+
+State the problem before the solution: "I need X because Y" over "We should add X".
 
 ## Accountability
 
