@@ -6,10 +6,10 @@
 
 ## Crates
 
-| crate                             | status      | description                                                                           |
-| --------------------------------- | ----------- | ------------------------------------------------------------------------------------- |
-| [`vita`](./crates/vita)           | 🚧 _v0.0.0_ | Umbrella crate re-exporting the ecosystem                                             |
-| [`vita-core`](./crates/vita-core) | 🚧 _v0.0.0_ | Primitives, linear algebra, capabilities, and physical quantities — zero dependencies |
+| crate                             | version  | description                                                                           |
+| --------------------------------- | -------- | ------------------------------------------------------------------------------------- |
+| [`vita`](./crates/vita)           | `v0.1.0` | Umbrella crate re-exporting the ecosystem                                             |
+| [`vita-core`](./crates/vita-core) | `v0.1.0` | Primitives, linear algebra, capabilities, and physical quantities — zero dependencies |
 
 ## Contributing
 
