@@ -1,0 +1,25 @@
+[package]
+name = "vita-io"
+version = "0.0.0"
+description = "Readers and writers for standard atomistic and molecular file formats."
+keywords = ["atomistic", "molecular", "trajectory", "parsing", "serialization"]
+categories = [
+    "science",
+    "science::computational-biology",
+    "science::computational-chemistry",
+    "science::materials",
+    "parser-implementations",
+]
+readme = "README.md"
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+vita-core = { version = "0.1.0", path = "../vita-core" }
+
+[lib]
+name = "vita_io"
+path = "src/lib.rs"

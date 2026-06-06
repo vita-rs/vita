@@ -48,7 +48,7 @@ Vita uses [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/)
 
 ### Scopes
 
-Use the crate's short name (without the `vita-` prefix): `core` · `vita` · `workspace`
+Use the crate's short name (without the `vita-` prefix): `core` · `io` · `vita` · `workspace`
 
 Additional scopes will be added as new crates are introduced.
 
