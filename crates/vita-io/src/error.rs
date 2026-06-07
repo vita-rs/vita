@@ -101,3 +101,173 @@ impl<K> From<ParseError<K>> for Error<K> {
         Self::Parse(e)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::error::Error as StdError;
+
+    #[derive(Clone, Debug, PartialEq, Eq)]
+    enum Kind {
+        Unexpected,
+        Invalid(String),
+    }
+
+    impl fmt::Display for Kind {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            match self {
+                Kind::Unexpected => f.write_str("unexpected end of input"),
+                Kind::Invalid(s) => write!(f, "invalid value: {s}"),
+            }
+        }
+    }
+
+    #[test]
+    fn location_text_with_column() {
+        assert_eq!(
+            Location::Text {
+                line: 3,
+                column: Some(7)
+            }
+            .to_string(),
+            "3:7",
+        );
+    }
+
+    #[test]
+    fn location_text_without_column() {
+        assert_eq!(
+            Location::Text {
+                line: 3,
+                column: None
+            }
+            .to_string(),
+            "3",
+        );
+    }
+
+    #[test]
+    fn location_binary() {
+        assert_eq!(
+            Location::Binary { offset: 0x1a2b }.to_string(),
+            "offset 0x1a2b",
+        );
+    }
+
+    #[test]
+    fn location_binary_zero() {
+        assert_eq!(Location::Binary { offset: 0 }.to_string(), "offset 0x0",);
+    }
+
+    #[test]
+    fn location_clone_and_eq() {
+        let a = Location::Text {
+            line: 1,
+            column: Some(1),
+        };
+        assert_eq!(a.clone(), a);
+        assert_ne!(
+            a,
+            Location::Text {
+                line: 2,
+                column: Some(1)
+            }
+        );
+    }
+
+    #[test]
+    fn parse_error_display_text() {
+        let e = ParseError::new(
+            Location::Text {
+                line: 5,
+                column: Some(3),
+            },
+            Kind::Unexpected,
+        );
+        assert_eq!(e.to_string(), "5:3: unexpected end of input");
+    }
+
+    #[test]
+    fn parse_error_display_binary() {
+        let e = ParseError::new(
+            Location::Binary { offset: 0xff },
+            Kind::Invalid("bad".into()),
+        );
+        assert_eq!(e.to_string(), "offset 0xff: invalid value: bad");
+    }
+
+    #[test]
+    fn parse_error_clone_and_eq() {
+        let a = ParseError::new(
+            Location::Text {
+                line: 1,
+                column: None,
+            },
+            Kind::Unexpected,
+        );
+        let b = ParseError::new(
+            Location::Text {
+                line: 2,
+                column: None,
+            },
+            Kind::Unexpected,
+        );
+        assert_eq!(a.clone(), a);
+        assert_ne!(a, b);
+    }
+
+    #[test]
+    fn error_from_io() {
+        let e: Error<Kind> = io::Error::new(io::ErrorKind::UnexpectedEof, "eof").into();
+        assert!(matches!(e, Error::Io(_)));
+    }
+
+    #[test]
+    fn error_from_parse() {
+        let pe = ParseError::new(
+            Location::Text {
+                line: 1,
+                column: None,
+            },
+            Kind::Unexpected,
+        );
+        let e: Error<Kind> = pe.into();
+        assert!(matches!(e, Error::Parse(_)));
+    }
+
+    #[test]
+    fn error_io_display() {
+        let e: Error<Kind> = io::Error::new(io::ErrorKind::UnexpectedEof, "end of stream").into();
+        assert!(e.to_string().contains("end of stream"));
+    }
+
+    #[test]
+    fn error_parse_display() {
+        let e: Error<Kind> = Error::Parse(ParseError::new(
+            Location::Text {
+                line: 2,
+                column: Some(1),
+            },
+            Kind::Unexpected,
+        ));
+        assert_eq!(e.to_string(), "2:1: unexpected end of input");
+    }
+
+    #[test]
+    fn error_source_io_is_some() {
+        let e: Error<Kind> = io::Error::other("x").into();
+        assert!(e.source().is_some());
+    }
+
+    #[test]
+    fn error_source_parse_is_none() {
+        let e: Error<Kind> = Error::Parse(ParseError::new(
+            Location::Text {
+                line: 1,
+                column: None,
+            },
+            Kind::Unexpected,
+        ));
+        assert!(e.source().is_none());
+    }
+}
