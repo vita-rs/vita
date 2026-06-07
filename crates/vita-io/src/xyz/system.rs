@@ -86,3 +86,192 @@ impl<V: Scalar> HasPositions<V> for System<V> {
         )
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use vita_core::units::length::Nanometer;
+
+    fn site(n: u32) -> SiteId {
+        SiteId::new(n).unwrap()
+    }
+
+    fn hydrogen() -> Element {
+        Element::new(1).unwrap()
+    }
+
+    fn oxygen() -> Element {
+        Element::new(8).unwrap()
+    }
+
+    fn angstrom(x: f64, y: f64, z: f64) -> Point3<Length<f64, Angstrom>> {
+        Point3::new(Length::new(x), Length::new(y), Length::new(z))
+    }
+
+    fn water() -> System<f64> {
+        System::from_parts(
+            "water".into(),
+            vec![oxygen(), hydrogen(), hydrogen()].into_boxed_slice(),
+            vec![
+                angstrom(0.0, 0.0, 0.0),
+                angstrom(0.757, 0.586, 0.0),
+                angstrom(-0.757, 0.586, 0.0),
+            ]
+            .into_boxed_slice(),
+        )
+    }
+
+    fn empty() -> System<f64> {
+        System::from_parts(
+            "".into(),
+            vec![].into_boxed_slice(),
+            vec![].into_boxed_slice(),
+        )
+    }
+
+    #[test]
+    fn comment() {
+        assert_eq!(water().comment(), "water");
+    }
+
+    #[test]
+    fn comment_empty() {
+        assert_eq!(empty().comment(), "");
+    }
+
+    #[test]
+    fn site_count() {
+        assert_eq!(water().site_count(), 3);
+    }
+
+    #[test]
+    fn site_count_empty_is_zero() {
+        assert_eq!(empty().site_count(), 0);
+    }
+
+    #[test]
+    fn sites_are_one_based() {
+        assert_eq!(water().sites().next(), Some(site(1)));
+    }
+
+    #[test]
+    fn sites_are_sequential() {
+        assert_eq!(
+            water().sites().collect::<Vec<_>>(),
+            vec![site(1), site(2), site(3)],
+        );
+    }
+
+    #[test]
+    fn sites_empty() {
+        assert_eq!(empty().sites().count(), 0);
+    }
+
+    #[test]
+    fn contains_site() {
+        let sys = water();
+        assert!(sys.contains_site(site(1)));
+        assert!(sys.contains_site(site(3)));
+        assert!(!sys.contains_site(site(4)));
+    }
+
+    #[test]
+    fn element() {
+        let sys = water();
+        assert_eq!(sys.element(site(1)), oxygen());
+        assert_eq!(sys.element(site(2)), hydrogen());
+        assert_eq!(sys.element(site(3)), hydrogen());
+    }
+
+    #[test]
+    fn elements() {
+        let sys = water();
+        assert_eq!(
+            sys.elements().collect::<Vec<_>>(),
+            vec![
+                (site(1), oxygen()),
+                (site(2), hydrogen()),
+                (site(3), hydrogen()),
+            ],
+        );
+    }
+
+    #[test]
+    fn elements_empty() {
+        assert_eq!(empty().elements().count(), 0);
+    }
+
+    #[test]
+    fn position() {
+        let sys = water();
+        assert_eq!(sys.position::<Angstrom>(site(1)), angstrom(0.0, 0.0, 0.0));
+        assert_eq!(
+            sys.position::<Angstrom>(site(2)),
+            angstrom(0.757, 0.586, 0.0),
+        );
+    }
+
+    #[test]
+    fn position_unit_conversion() {
+        let sys = System::from_parts(
+            "".into(),
+            vec![hydrogen()].into_boxed_slice(),
+            vec![angstrom(1.0, 0.0, 0.0)].into_boxed_slice(),
+        );
+        let p = sys.position::<Nanometer>(site(1));
+        assert_eq!(p.x, Length::new(0.1));
+        assert_eq!(p.y, Length::new(0.0));
+        assert_eq!(p.z, Length::new(0.0));
+    }
+
+    #[test]
+    fn positions() {
+        let sys = water();
+        assert_eq!(
+            sys.positions::<Angstrom>().collect::<Vec<_>>(),
+            vec![
+                (site(1), angstrom(0.0, 0.0, 0.0)),
+                (site(2), angstrom(0.757, 0.586, 0.0)),
+                (site(3), angstrom(-0.757, 0.586, 0.0)),
+            ],
+        );
+    }
+
+    #[test]
+    fn positions_empty() {
+        assert_eq!(empty().positions::<Angstrom>().count(), 0);
+    }
+
+    #[test]
+    fn f32_scalar() {
+        let sys: System<f32> = System::from_parts(
+            "c".into(),
+            vec![hydrogen()].into_boxed_slice(),
+            vec![Point3::new(
+                Length::<f32, Angstrom>::new(1.5),
+                Length::<f32, Angstrom>::new(0.0),
+                Length::<f32, Angstrom>::new(0.0),
+            )]
+            .into_boxed_slice(),
+        );
+        assert_eq!(sys.site_count(), 1);
+        assert_eq!(sys.element(site(1)), hydrogen());
+        assert_eq!(
+            sys.position::<Angstrom>(site(1)).x,
+            Length::<f32, Angstrom>::new(1.5)
+        );
+    }
+
+    #[test]
+    fn clone_and_eq() {
+        let a = water();
+        let b = a.clone();
+        assert_eq!(a, b);
+        let c = System::from_parts(
+            "other".into(),
+            vec![hydrogen()].into_boxed_slice(),
+            vec![angstrom(0.0, 0.0, 0.0)].into_boxed_slice(),
+        );
+        assert_ne!(a, c);
+    }
+}
