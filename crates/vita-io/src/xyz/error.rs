@@ -60,3 +60,65 @@ pub type ParseError = crate::ParseError<ErrorKind>;
 
 /// An error from reading or writing XYZ: either an I/O failure or a [`ParseError`].
 pub type Error = crate::Error<ErrorKind>;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn display_unexpected_eof() {
+        assert_eq!(
+            ErrorKind::UnexpectedEof.to_string(),
+            "unexpected end of input"
+        );
+    }
+
+    #[test]
+    fn display_atom_count() {
+        assert_eq!(
+            ErrorKind::AtomCount {
+                found: "two".into()
+            }
+            .to_string(),
+            "expected an atom count, found \"two\""
+        );
+    }
+
+    #[test]
+    fn display_atom_count_range() {
+        assert_eq!(
+            ErrorKind::AtomCountRange {
+                count: 5_000_000_000
+            }
+            .to_string(),
+            "atom count 5000000000 exceeds the maximum (4294967295)",
+        );
+    }
+
+    #[test]
+    fn display_field_count() {
+        assert_eq!(
+            ErrorKind::FieldCount { found: 3 }.to_string(),
+            "expected 4 fields (symbol x y z), found 3"
+        );
+    }
+
+    #[test]
+    fn display_element_symbol() {
+        assert_eq!(
+            ErrorKind::ElementSymbol { found: "Xx".into() }.to_string(),
+            "unknown element symbol \"Xx\""
+        );
+    }
+
+    #[test]
+    fn display_coordinate() {
+        assert_eq!(
+            ErrorKind::Coordinate {
+                found: "1.x".into()
+            }
+            .to_string(),
+            "invalid coordinate \"1.x\""
+        );
+    }
+}
