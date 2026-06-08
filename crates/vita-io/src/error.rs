@@ -12,7 +12,7 @@ pub enum Location {
     Text {
         /// One-based line number.
         line: u32,
-        /// One-based column number, when available.
+        /// One-based byte column, when available.
         column: Option<u32>,
     },
     /// A byte position in a binary source.
