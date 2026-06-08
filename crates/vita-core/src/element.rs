@@ -25,6 +25,20 @@ impl Element {
         Self(z)
     }
 
+    /// Constructs an element from its symbol (e.g. `"C"`, `"Og"`, `"Uue"`),
+    /// returning `None` if no element has that symbol.
+    ///
+    /// The exact, case-sensitive inverse of [`symbol`](Self::symbol).
+    #[inline]
+    pub fn from_symbol(symbol: &str) -> Option<Self> {
+        match symbol.len() {
+            1 | 2 => data::named_from_symbol(symbol),
+            3 => data::systematic_from_symbol(symbol),
+            _ => None,
+        }
+        .and_then(Self::new)
+    }
+
     /// Returns the atomic number *Z* (the proton count), always greater than zero.
     #[inline]
     pub const fn atomic_number(self) -> u8 {
@@ -112,6 +126,14 @@ mod data {
         /* 111-118 */ "Roentgenium", "Copernicium", "Nihonium", "Flerovium", "Moscovium", "Livermorium", "Tennessine", "Oganesson",
     ];
 
+    /// Returns the atomic number of the IUPAC-named element with this `symbol`, if any.
+    pub(super) fn named_from_symbol(symbol: &str) -> Option<u8> {
+        IUPAC_SYMBOLS[1..]
+            .iter()
+            .position(|&s| s == symbol)
+            .map(|i| i as u8 + 1)
+    }
+
     /// Initial letter of each digit root, for systematic symbols.
     const ROOT_INITIAL: [u8; 10] = [b'n', b'u', b'b', b't', b'q', b'p', b'h', b's', b'o', b'e'];
 
@@ -150,6 +172,31 @@ mod data {
         let len = SYSTEMATIC.name_len[idx] as usize;
         // SAFETY: `build` writes only ASCII digit-root letters within `len`.
         unsafe { core::str::from_utf8_unchecked(&SYSTEMATIC.name[idx][..len]) }
+    }
+
+    /// Returns the atomic number for a three-letter systematic `symbol`, if it denotes
+    /// an element in `SYSTEMATIC_LO..=SYSTEMATIC_HI`.
+    pub(super) fn systematic_from_symbol(symbol: &str) -> Option<u8> {
+        let &[c0, c1, c2] = symbol.as_bytes() else {
+            return None;
+        };
+        if !c0.is_ascii_uppercase() {
+            return None;
+        }
+        let d0 = digit_of_initial(c0.to_ascii_lowercase())? as u16;
+        let d1 = digit_of_initial(c1)? as u16;
+        let d2 = digit_of_initial(c2)? as u16;
+        let z = 100 * d0 + 10 * d1 + d2;
+        if (SYSTEMATIC_LO..=SYSTEMATIC_HI).contains(&z) {
+            Some(z as u8)
+        } else {
+            None
+        }
+    }
+
+    /// Returns the digit whose systematic root has the lowercase initial `b`.
+    fn digit_of_initial(b: u8) -> Option<u8> {
+        ROOT_INITIAL.iter().position(|&r| r == b).map(|d| d as u8)
     }
 
     /// Materializes the systematic table at compile time (IUPAC 1979 rules).
@@ -235,6 +282,45 @@ mod tests {
     }
 
     #[test]
+    fn from_symbol_named() {
+        assert_eq!(Element::from_symbol("H"), Element::new(1));
+        assert_eq!(Element::from_symbol("C"), Element::new(6));
+        assert_eq!(Element::from_symbol("Fe"), Element::new(26));
+        assert_eq!(Element::from_symbol("Og"), Element::new(118));
+    }
+
+    #[test]
+    fn from_symbol_systematic() {
+        assert_eq!(Element::from_symbol("Uue"), Element::new(119));
+        assert_eq!(Element::from_symbol("Ubn"), Element::new(120));
+        assert_eq!(Element::from_symbol("Uen"), Element::new(190));
+        assert_eq!(Element::from_symbol("Bpp"), Element::new(255));
+    }
+
+    #[test]
+    fn from_symbol_is_case_sensitive() {
+        assert!(Element::from_symbol("h").is_none());
+        assert!(Element::from_symbol("fe").is_none());
+        assert!(Element::from_symbol("FE").is_none());
+        assert!(Element::from_symbol("uue").is_none());
+        assert!(Element::from_symbol("UUE").is_none());
+    }
+
+    #[test]
+    fn from_symbol_rejects_systematic_form_of_named_element() {
+        assert!(Element::from_symbol("Unn").is_none());
+        assert!(Element::from_symbol("Uuo").is_none());
+    }
+
+    #[test]
+    fn from_symbol_rejects_unknown() {
+        assert!(Element::from_symbol("").is_none());
+        assert!(Element::from_symbol("Xx").is_none());
+        assert!(Element::from_symbol("Uux").is_none());
+        assert!(Element::from_symbol("Carbon").is_none());
+    }
+
+    #[test]
     fn atomic_number_roundtrip() {
         assert_eq!(Element::new(92).unwrap().atomic_number(), 92);
     }
@@ -269,6 +355,14 @@ mod tests {
         assert_eq!(Element::new(123).unwrap().name(), "Unbitrium");
         assert_eq!(Element::new(190).unwrap().name(), "Unennilium");
         assert_eq!(Element::new(255).unwrap().name(), "Bipentpentium");
+    }
+
+    #[test]
+    fn symbol_roundtrip() {
+        for z in 1..=u8::MAX {
+            let e = Element::new(z).unwrap();
+            assert_eq!(Element::from_symbol(e.symbol()), Some(e));
+        }
     }
 
     #[test]

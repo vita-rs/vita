@@ -1,20 +1,14 @@
 [package]
-name = "vita"
-version = "0.1.0"
-description = "Atomistic and molecular life sciences in Rust."
-keywords = [
-    "atomistic",
-    "molecular",
-    "bioinformatics",
-    "cheminformatics",
-    "biochemistry",
-]
+name = "vita-io"
+version = "0.0.0"
+description = "Readers and writers for standard atomistic and molecular file formats."
+keywords = ["atomistic", "molecular", "trajectory", "parsing", "serialization"]
 categories = [
     "science",
     "science::computational-biology",
     "science::computational-chemistry",
     "science::materials",
-    "mathematics",
+    "parser-implementations",
 ]
 readme = "README.md"
 edition.workspace = true
@@ -25,8 +19,7 @@ repository.workspace = true
 
 [dependencies]
 vita-core = { version = "0.1.0", path = "../vita-core" }
-vita-io = { version = "0.0.0", path = "../vita-io" }
 
 [lib]
-name = "vita"
+name = "vita_io"
 path = "src/lib.rs"
