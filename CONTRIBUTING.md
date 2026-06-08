@@ -26,7 +26,7 @@ CI enforces zero clippy warnings and correct formatting.
 Vita uses [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/).
 
 ```text
-<type>[!](<scope>): <description>
+<type>(<scope>)[!]: <description>
 
 [optional body]
 
@@ -54,10 +54,10 @@ Additional scopes will be added as new crates are introduced.
 
 ### Breaking changes
 
-Append `!` to the type, or add a `BREAKING CHANGE:` footer:
+Append `!` after the scope, or add a `BREAKING CHANGE:` footer:
 
 ```text
-feat!(core): Rename atom identifier type
+feat(core)!: Rename atom identifier type
 
 BREAKING CHANGE: The atom ID type has been renamed. Update all call sites.
 ```
