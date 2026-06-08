@@ -237,7 +237,8 @@ fn parse_coordinate<V: Scalar>(field: &str) -> Option<V> {
 ///
 /// `field` must be a sub-slice of `line`, as produced by splitting it.
 fn column_of(line: &str, field: &str) -> u32 {
-    (field.as_ptr() as usize - line.as_ptr() as usize) as u32 + 1
+    let offset = field.as_ptr() as usize - line.as_ptr() as usize;
+    offset.saturating_add(1).min(u32::MAX as usize) as u32
 }
 
 /// Builds a parse error at a text location.
