@@ -176,7 +176,7 @@ fn parse_atom<V: Scalar>(
         ));
     };
 
-    let element = Element::from_symbol(symbol).ok_or_else(|| {
+    let element = Element::from_symbol(&canonical_symbol(symbol)).ok_or_else(|| {
         text_error(
             number,
             Some(column_of(line, symbol)),
@@ -193,6 +193,22 @@ fn parse_atom<V: Scalar>(
         element,
         Point3::new(Length::new(px), Length::new(py), Length::new(pz)),
     ))
+}
+
+/// Converts `s` to canonical element-symbol case: initial cap, rest lowercase.
+fn canonical_symbol(s: &str) -> String {
+    let mut chars = s.chars();
+    match chars.next() {
+        None => String::new(),
+        Some(first) => {
+            let mut out = String::with_capacity(s.len());
+            out.push(first.to_ascii_uppercase());
+            for c in chars {
+                out.push(c.to_ascii_lowercase());
+            }
+            out
+        }
+    }
 }
 
 /// Parses one coordinate field, reporting its column on failure.
@@ -332,6 +348,13 @@ mod tests {
         let mol = one("  1  \n c \n\tH\t1.0   2.0\t3.0  \n");
         assert_eq!(mol.site_count(), 1);
         assert_eq!(mol.position::<Angstrom>(site(1)).z.value(), 3.0);
+    }
+
+    #[test]
+    fn tolerates_noncanonical_element_case() {
+        let mol = one("2\nc\nfe 0 0 0\nCL 1 0 0\n");
+        assert_eq!(mol.element(site(1)), Element::from_symbol("Fe").unwrap());
+        assert_eq!(mol.element(site(2)), Element::from_symbol("Cl").unwrap());
     }
 
     #[test]

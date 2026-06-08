@@ -10,7 +10,7 @@
 //!     ⋮  (count lines)
 //! ```
 //!
-//! Fields are whitespace-separated; element symbols are case-sensitive (`Fe`, not `fe`).
+//! Fields are whitespace-separated; element symbols are case-insensitive.
 //! Each frame yields a [`System`]: [`HasSites`](vita_core::HasSites),
 //! [`HasElements`](vita_core::HasElements), [`HasPositions`](vita_core::HasPositions).
 //!
