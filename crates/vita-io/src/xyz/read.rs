@@ -264,3 +264,276 @@ impl<R: BufRead> Lines<R> {
         Ok(Some((self.number, line)))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use vita_core::units::length::Angstrom;
+    use vita_core::{HasElements, HasPositions, HasSites, SiteId};
+
+    fn site(n: u32) -> SiteId {
+        SiteId::new(n).unwrap()
+    }
+
+    fn one(input: &str) -> System<f64> {
+        read(input.as_bytes()).system::<f64>().unwrap()
+    }
+
+    fn all(input: &str) -> Vec<System<f64>> {
+        read(input.as_bytes())
+            .systems::<f64>()
+            .collect::<Result<_, _>>()
+            .unwrap()
+    }
+
+    fn error_of(input: &str) -> ParseError {
+        match read(input.as_bytes()).system::<f64>() {
+            Err(Error::Parse(error)) => error,
+            other => panic!("expected a parse error, got {other:?}"),
+        }
+    }
+
+    const WATER: &str = "3\nwater\nO 0.0 0.0 0.0\nH 0.757 0.586 0.0\nH -0.757 0.586 0.0\n";
+
+    #[test]
+    fn reads_frame() {
+        let mol = one(WATER);
+        assert_eq!(mol.comment(), "water");
+        assert_eq!(mol.site_count(), 3);
+        assert_eq!(mol.element(site(1)), Element::from_symbol("O").unwrap());
+        assert_eq!(mol.position::<Angstrom>(site(2)).x.value(), 0.757);
+    }
+
+    #[test]
+    fn reads_empty_comment() {
+        assert_eq!(one("1\n\nH 0 0 0\n").comment(), "");
+    }
+
+    #[test]
+    fn reads_zero_atom_frame() {
+        assert_eq!(one("0\nempty\n").site_count(), 0);
+    }
+
+    #[test]
+    fn reads_scientific_and_signed_coordinates() {
+        let p = one("1\nc\nH 1e1 -2.5 +0.0\n").position::<Angstrom>(site(1));
+        assert_eq!((p.x.value(), p.y.value(), p.z.value()), (10.0, -2.5, 0.0));
+    }
+
+    #[test]
+    fn reads_crlf_line_endings() {
+        let mol = one("1\r\ncomment\r\nH 0 0 0\r\n");
+        assert_eq!(mol.comment(), "comment");
+        assert_eq!(mol.site_count(), 1);
+    }
+
+    #[test]
+    fn tolerates_irregular_whitespace() {
+        let mol = one("  1  \n c \n\tH\t1.0   2.0\t3.0  \n");
+        assert_eq!(mol.site_count(), 1);
+        assert_eq!(mol.position::<Angstrom>(site(1)).z.value(), 3.0);
+    }
+
+    #[test]
+    fn reads_f32() {
+        let mol = read("1\nc\nH 1.5 0 0\n".as_bytes())
+            .system::<f32>()
+            .unwrap();
+        assert_eq!(mol.position::<Angstrom>(site(1)).x.value(), 1.5_f32);
+    }
+
+    #[test]
+    fn reads_frame_ignores_trailing_frames() {
+        let mol = one("1\nfirst\nH 0 0 0\n1\nsecond\nHe 1 1 1\n");
+        assert_eq!(mol.comment(), "first");
+        assert_eq!(mol.element(site(1)), Element::from_symbol("H").unwrap());
+    }
+
+    #[test]
+    fn streams_trajectory() {
+        let frames = all("1\nframe 1\nH 0 0 0\n2\nframe 2\nH 0 0 0\nHe 1 1 1\n");
+        assert_eq!(frames.len(), 2);
+        assert_eq!(frames[0].comment(), "frame 1");
+        assert_eq!(frames[1].site_count(), 2);
+    }
+
+    #[test]
+    fn streams_empty_input_yields_nothing() {
+        assert!(read("".as_bytes()).systems::<f64>().next().is_none());
+    }
+
+    #[test]
+    fn streams_trailing_newline_yields_one_frame() {
+        assert_eq!(all("1\nc\nH 0 0 0\n").len(), 1);
+    }
+
+    #[test]
+    fn streams_trailing_newline_yields_all_frames() {
+        let frames = all("1\nframe 1\nH 0 0 0\n1\nframe 2\nHe 1 1 1\n");
+        assert_eq!(frames.len(), 2);
+        assert_eq!(frames[1].comment(), "frame 2");
+    }
+
+    #[test]
+    fn streams_empty_lines_between_frames() {
+        let frames = all("1\nfirst\nH 0 0 0\n\n\n1\nsecond\nHe 1 1 1\n");
+        assert_eq!(frames.len(), 2);
+        assert_eq!(frames[0].comment(), "first");
+        assert_eq!(frames[1].comment(), "second");
+    }
+
+    #[test]
+    fn streams_stops_after_error() {
+        let mut frames = read("1\nok\nH 0 0 0\n1\nbad\nXx 0 0 0\n".as_bytes()).systems::<f64>();
+        assert!(frames.next().unwrap().is_ok());
+        assert!(frames.next().unwrap().is_err());
+        assert!(frames.next().is_none());
+    }
+
+    #[test]
+    fn empty_input_is_unexpected_eof_at_line_one() {
+        assert_eq!(
+            error_of(""),
+            ParseError::new(
+                Location::Text {
+                    line: 1,
+                    column: None
+                },
+                ErrorKind::UnexpectedEof,
+            ),
+        );
+    }
+
+    #[test]
+    fn rejects_non_integer_count() {
+        assert_eq!(
+            error_of("two\nc\n"),
+            ParseError::new(
+                Location::Text {
+                    line: 1,
+                    column: None
+                },
+                ErrorKind::AtomCount {
+                    found: "two".into()
+                },
+            ),
+        );
+    }
+
+    #[test]
+    fn rejects_count_above_u32_max() {
+        let count: u64 = u32::MAX as u64 + 1;
+        assert_eq!(
+            error_of(&format!("{count}\nc\n")),
+            ParseError::new(
+                Location::Text {
+                    line: 1,
+                    column: None
+                },
+                ErrorKind::AtomCountRange { count },
+            ),
+        );
+    }
+
+    #[test]
+    fn rejects_missing_comment() {
+        assert_eq!(
+            error_of("1\n"),
+            ParseError::new(
+                Location::Text {
+                    line: 2,
+                    column: None
+                },
+                ErrorKind::UnexpectedEof,
+            ),
+        );
+    }
+
+    #[test]
+    fn rejects_truncated_atom_block() {
+        assert_eq!(
+            error_of("2\nc\nH 0 0 0\n"),
+            ParseError::new(
+                Location::Text {
+                    line: 4,
+                    column: None
+                },
+                ErrorKind::UnexpectedEof,
+            ),
+        );
+    }
+
+    #[test]
+    fn rejects_too_few_fields() {
+        assert_eq!(
+            error_of("1\nc\nH 0 0\n"),
+            ParseError::new(
+                Location::Text {
+                    line: 3,
+                    column: None
+                },
+                ErrorKind::FieldCount { found: 3 },
+            ),
+        );
+    }
+
+    #[test]
+    fn rejects_too_many_fields() {
+        assert_eq!(
+            error_of("1\nc\nH 0 0 0 0\n"),
+            ParseError::new(
+                Location::Text {
+                    line: 3,
+                    column: None
+                },
+                ErrorKind::FieldCount { found: 5 },
+            ),
+        );
+    }
+
+    #[test]
+    fn rejects_unknown_element() {
+        assert_eq!(
+            error_of("1\nc\nXx 0 0 0\n"),
+            ParseError::new(
+                Location::Text {
+                    line: 3,
+                    column: Some(1)
+                },
+                ErrorKind::ElementSymbol { found: "Xx".into() },
+            ),
+        );
+    }
+
+    #[test]
+    fn rejects_invalid_coordinate() {
+        assert_eq!(
+            error_of("1\nc\nH  bad 0 0\n"),
+            ParseError::new(
+                Location::Text {
+                    line: 3,
+                    column: Some(4)
+                },
+                ErrorKind::Coordinate {
+                    found: "bad".into()
+                },
+            ),
+        );
+    }
+
+    #[test]
+    fn rejects_non_finite_coordinate() {
+        assert_eq!(
+            error_of("1\nc\nH nan 0 0\n"),
+            ParseError::new(
+                Location::Text {
+                    line: 3,
+                    column: Some(3)
+                },
+                ErrorKind::Coordinate {
+                    found: "nan".into()
+                },
+            ),
+        );
+    }
+}
