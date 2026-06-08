@@ -96,7 +96,7 @@ PRs that add `unsafe` without a `SAFETY:` comment will not be merged.
 
 ## Pull Requests
 
-Before opening a PR, make sure your follow the contributing guidelines.
+Before opening a PR, make sure you follow the contributing guidelines.
 
 Vita uses **merge commits**. Each merged PR produces one merge commit in `main`, marking the PR boundary. The PR title becomes the merge commit message and must follow the commit convention. Individual commits within the PR must also follow the commit convention and represent exactly one logical change. Maintainers will ask you to rebase and clean up before merge if commits are not atomic.
 
