@@ -1,6 +1,6 @@
 [package]
 name = "vita"
-version = "0.1.0"
+version = "0.2.0"
 description = "Atomistic and molecular life sciences in Rust."
 keywords = [
     "atomistic",
@@ -24,8 +24,8 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
-vita-core = { version = "0.1.0", path = "../vita-core" }
-vita-io = { version = "0.0.0", path = "../vita-io" }
+vita-core = { version = "0.2.0", path = "../vita-core" }
+vita-io = { version = "0.1.0", path = "../vita-io" }
 
 [lib]
 name = "vita"

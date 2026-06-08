@@ -8,9 +8,9 @@
 
 | crate                             | version  | description                                                                           |
 | --------------------------------- | -------- | ------------------------------------------------------------------------------------- |
-| [`vita`](./crates/vita)           | `v0.1.0` | Umbrella crate re-exporting the ecosystem                                             |
-| [`vita-core`](./crates/vita-core) | `v0.1.0` | Primitives, linear algebra, capabilities, and physical quantities — zero dependencies |
-| [`vita-io`](./crates/vita-io)     | `v0.0.0` | Readers and writers for standard atomistic file formats                               |
+| [`vita`](./crates/vita)           | `v0.2.0` | Umbrella crate re-exporting the ecosystem                                             |
+| [`vita-core`](./crates/vita-core) | `v0.2.0` | Primitives, linear algebra, capabilities, and physical quantities — zero dependencies |
+| [`vita-io`](./crates/vita-io)     | `v0.1.0` | Readers and writers for standard atomistic file formats                               |
 
 ## Contributing
 

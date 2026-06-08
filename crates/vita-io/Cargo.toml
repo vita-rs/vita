@@ -1,6 +1,6 @@
 [package]
 name = "vita-io"
-version = "0.0.0"
+version = "0.1.0"
 description = "Readers and writers for standard atomistic and molecular file formats."
 keywords = ["atomistic", "molecular", "trajectory", "parsing", "serialization"]
 categories = [
@@ -18,7 +18,7 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
-vita-core = { version = "0.1.0", path = "../vita-core" }
+vita-core = { version = "0.2.0", path = "../vita-core" }
 
 [lib]
 name = "vita_io"
