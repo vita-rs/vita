@@ -2,6 +2,8 @@
 
 #[doc(inline)]
 pub use vita_core as core;
+#[doc(inline)]
+pub use vita_io as io;
 
 pub mod prelude {
     pub use crate::core::prelude::*;
