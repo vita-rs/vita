@@ -1,0 +1,19 @@
+[package]
+name = "vita-chem"
+version = "0.0.0"
+description = ""
+keywords = []
+categories = ["science", "science::computational-chemistry"]
+readme = "README.md"
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+vita-core = { version = "0.2.0", path = "../vita-core" }
+
+[lib]
+name = "vita_chem"
+path = "src/lib.rs"
