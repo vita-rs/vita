@@ -5,4 +5,4 @@ mod id;
 pub use bond_order::BondOrder;
 pub use id::BondId;
 
-pub use capability::HasBonds;
+pub use capability::{HasBondOrders, HasBonds};
