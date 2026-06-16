@@ -45,3 +45,63 @@ impl BondOrder {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn copy_and_clone() {
+        let a = BondOrder::Triple;
+        let b = a;
+        let c = ::core::clone::Clone::clone(&a);
+        assert_eq!(a, b);
+        assert_eq!(a, c);
+    }
+
+    #[test]
+    fn eq() {
+        assert_eq!(BondOrder::Single, BondOrder::Single);
+        assert_ne!(BondOrder::Single, BondOrder::Double);
+        assert_ne!(BondOrder::Double, BondOrder::Triple);
+        assert_ne!(BondOrder::Triple, BondOrder::Aromatic);
+    }
+
+    #[test]
+    fn debug() {
+        assert_eq!(format!("{:?}", BondOrder::Single), "Single");
+        assert_eq!(format!("{:?}", BondOrder::Double), "Double");
+        assert_eq!(format!("{:?}", BondOrder::Triple), "Triple");
+        assert_eq!(format!("{:?}", BondOrder::Quadruple), "Quadruple");
+        assert_eq!(format!("{:?}", BondOrder::Quintuple), "Quintuple");
+        assert_eq!(format!("{:?}", BondOrder::Hextuple), "Hextuple");
+        assert_eq!(format!("{:?}", BondOrder::Aromatic), "Aromatic");
+    }
+
+    #[test]
+    fn all_variants_distinct() {
+        use std::collections::HashSet;
+        let variants = [
+            BondOrder::Single,
+            BondOrder::Double,
+            BondOrder::Triple,
+            BondOrder::Quadruple,
+            BondOrder::Quintuple,
+            BondOrder::Hextuple,
+            BondOrder::Aromatic,
+        ];
+        let set: HashSet<_> = variants.into_iter().collect();
+        assert_eq!(set.len(), 7);
+    }
+
+    #[test]
+    fn as_f64() {
+        assert_eq!(BondOrder::Single.as_f64(), 1.0);
+        assert_eq!(BondOrder::Double.as_f64(), 2.0);
+        assert_eq!(BondOrder::Triple.as_f64(), 3.0);
+        assert_eq!(BondOrder::Quadruple.as_f64(), 4.0);
+        assert_eq!(BondOrder::Quintuple.as_f64(), 5.0);
+        assert_eq!(BondOrder::Hextuple.as_f64(), 6.0);
+        assert_eq!(BondOrder::Aromatic.as_f64(), 1.5);
+    }
+}
