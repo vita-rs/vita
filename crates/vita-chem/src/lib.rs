@@ -9,4 +9,5 @@ pub use id::BondId;
 
 pub use capability::{
     HasBondOrders, HasBonds, HasFormalCharges, HasHybridizations, HasPartialCharges,
+    HasRadicalElectrons,
 };
