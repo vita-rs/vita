@@ -4,15 +4,17 @@ use crate::{HasSites, Scalar, SiteId};
 
 /// Per-site acceleration: the [`Vector3`] acceleration of each site.
 ///
-/// Access is by lookup: [`acceleration`](HasAccelerations::acceleration) maps a [`SiteId`]
-/// to its acceleration, in any requested [unit](AccelerationUnit).
-/// [`accelerations`](HasAccelerations::accelerations) iterates every `(site, acceleration)`
-/// pair.
+/// Access is by keyed lookup: [`acceleration`](HasAccelerations::acceleration) maps a
+/// [`SiteId`] to its acceleration, in any requested [unit](AccelerationUnit).
+/// [`accelerations`](HasAccelerations::accelerations) yields one acceleration per site
+/// in [`sites`](HasSites::sites) order.
 ///
 /// # Contract
 ///
 /// [`acceleration`](HasAccelerations::acceleration) is total over [`sites`](HasSites::sites):
 /// every site has exactly one acceleration.
+/// [`accelerations`](HasAccelerations::accelerations) yields values in the same order as
+/// [`sites`](HasSites::sites).
 pub trait HasAccelerations<V: Scalar>: HasSites {
     /// Returns the acceleration of `site`, in unit `U`.
     ///
@@ -21,18 +23,16 @@ pub trait HasAccelerations<V: Scalar>: HasSites {
     /// Panics if `site` is not in [`sites`](HasSites::sites).
     fn acceleration<U: AccelerationUnit>(&self, site: SiteId) -> Vector3<Acceleration<V, U>>;
 
-    /// Returns an iterator over every `(site, acceleration)` pair, each acceleration in
-    /// unit `U`.
+    /// Yields one acceleration per site, in [`sites`](HasSites::sites) order.
     ///
-    /// Each acceleration is yielded with its [`SiteId`]. The default implementation looks
-    /// up [`acceleration`](HasAccelerations::acceleration) per site; override it when the
-    /// pairs can be produced directly.
+    /// The default implementation looks up
+    /// [`acceleration`](HasAccelerations::acceleration) per site; override it when the
+    /// accelerations can be produced directly.
     #[inline]
     fn accelerations<U: AccelerationUnit>(
         &self,
-    ) -> impl Iterator<Item = (SiteId, Vector3<Acceleration<V, U>>)> + '_ {
-        self.sites()
-            .map(move |site| (site, self.acceleration::<U>(site)))
+    ) -> impl Iterator<Item = Vector3<Acceleration<V, U>>> + '_ {
+        self.sites().map(move |site| self.acceleration::<U>(site))
     }
 }
 
@@ -90,13 +90,11 @@ mod tests {
 
         fn accelerations<U: AccelerationUnit>(
             &self,
-        ) -> impl Iterator<Item = (SiteId, Vector3<Acceleration<f64, U>>)> + '_ {
-            self.sites.iter().copied().zip(
-                self.accelerations
-                    .iter()
-                    .copied()
-                    .map(|a| a.map(|c| c.to::<U>())),
-            )
+        ) -> impl Iterator<Item = Vector3<Acceleration<f64, U>>> + '_ {
+            self.accelerations
+                .iter()
+                .copied()
+                .map(|a| a.map(|c| c.to::<U>()))
         }
     }
 
@@ -131,10 +129,10 @@ mod tests {
             sys.accelerations::<AngstromPerSquarePicosecond>()
                 .collect::<Vec<_>>(),
             vec![
-                (site(1), angstrom_per_square_picosecond(0.0, 0.0, 0.0)),
-                (site(2), angstrom_per_square_picosecond(2.0, -1.0, 0.0)),
-                (site(3), angstrom_per_square_picosecond(-2.0, -1.0, 0.0))
-            ]
+                angstrom_per_square_picosecond(0.0, 0.0, 0.0),
+                angstrom_per_square_picosecond(2.0, -1.0, 0.0),
+                angstrom_per_square_picosecond(-2.0, -1.0, 0.0),
+            ],
         );
     }
 
@@ -152,8 +150,6 @@ mod tests {
 
     #[test]
     fn override_matches_default() {
-        use std::collections::BTreeMap;
-
         let sites = vec![site(1), site(2), site(3)];
         let accelerations = vec![
             angstrom_per_square_picosecond(0.0, 0.0, 0.0),
@@ -169,12 +165,12 @@ mod tests {
             accelerations,
         };
 
-        let bare_accelerations: BTreeMap<_, _> = bare
-            .accelerations::<AngstromPerSquarePicosecond>()
-            .collect();
-        let columnar_accelerations: BTreeMap<_, _> = columnar
-            .accelerations::<AngstromPerSquarePicosecond>()
-            .collect();
-        assert_eq!(bare_accelerations, columnar_accelerations);
+        assert_eq!(
+            bare.accelerations::<AngstromPerSquarePicosecond>()
+                .collect::<Vec<_>>(),
+            columnar
+                .accelerations::<AngstromPerSquarePicosecond>()
+                .collect::<Vec<_>>(),
+        );
     }
 }

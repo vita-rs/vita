@@ -3,14 +3,16 @@ use crate::{HasSites, Scalar, SiteId};
 
 /// Per-site mass: the [`Mass`] of the particle at each site.
 ///
-/// Access is by lookup: [`mass`](HasMasses::mass) maps a [`SiteId`] to its mass, in any
-/// requested [unit](MassUnit). [`masses`](HasMasses::masses) iterates every `(site, mass)`
-/// pair.
+/// Access is by keyed lookup: [`mass`](HasMasses::mass) maps a [`SiteId`] to its mass,
+/// in any requested [unit](MassUnit). [`masses`](HasMasses::masses) yields one mass per
+/// site in [`sites`](HasSites::sites) order.
 ///
 /// # Contract
 ///
 /// [`mass`](HasMasses::mass) is total over [`sites`](HasSites::sites): every site has
 /// exactly one mass.
+/// [`masses`](HasMasses::masses) yields values in the same order as
+/// [`sites`](HasSites::sites).
 pub trait HasMasses<V: Scalar>: HasSites {
     /// Returns the mass of `site`, in unit `U`.
     ///
@@ -19,14 +21,13 @@ pub trait HasMasses<V: Scalar>: HasSites {
     /// Panics if `site` is not in [`sites`](HasSites::sites).
     fn mass<U: MassUnit>(&self, site: SiteId) -> Mass<V, U>;
 
-    /// Returns an iterator over every `(site, mass)` pair, each mass in unit `U`.
+    /// Yields one mass per site, in [`sites`](HasSites::sites) order.
     ///
-    /// Each mass is yielded with its [`SiteId`]. The default implementation looks up
-    /// [`mass`](HasMasses::mass) per site; override it when the pairs can be produced
-    /// directly.
+    /// The default implementation looks up [`mass`](HasMasses::mass) per site; override
+    /// it when the masses can be produced directly.
     #[inline]
-    fn masses<U: MassUnit>(&self) -> impl Iterator<Item = (SiteId, Mass<V, U>)> + '_ {
-        self.sites().map(move |site| (site, self.mass::<U>(site)))
+    fn masses<U: MassUnit>(&self) -> impl Iterator<Item = Mass<V, U>> + '_ {
+        self.sites().map(move |site| self.mass::<U>(site))
     }
 }
 
@@ -74,11 +75,8 @@ mod tests {
             self.masses[i].to()
         }
 
-        fn masses<U: MassUnit>(&self) -> impl Iterator<Item = (SiteId, Mass<f64, U>)> + '_ {
-            self.sites
-                .iter()
-                .copied()
-                .zip(self.masses.iter().copied().map(|m| m.to::<U>()))
+        fn masses<U: MassUnit>(&self) -> impl Iterator<Item = Mass<f64, U>> + '_ {
+            self.masses.iter().copied().map(|m| m.to::<U>())
         }
     }
 
@@ -101,11 +99,7 @@ mod tests {
         let mol = water();
         assert_eq!(
             mol.masses::<Dalton>().collect::<Vec<_>>(),
-            vec![
-                (site(1), dalton(15.999)),
-                (site(2), dalton(1.008)),
-                (site(3), dalton(1.008))
-            ]
+            vec![dalton(15.999), dalton(1.008), dalton(1.008)],
         );
     }
 
@@ -120,8 +114,6 @@ mod tests {
 
     #[test]
     fn override_matches_default() {
-        use std::collections::BTreeMap;
-
         let sites = vec![site(1), site(2), site(3)];
         let masses = vec![dalton(15.999), dalton(1.008), dalton(1.008)];
         let bare = Bare {
@@ -130,8 +122,9 @@ mod tests {
         };
         let columnar = Columnar { sites, masses };
 
-        let bare_masses: BTreeMap<_, _> = bare.masses::<Dalton>().collect();
-        let columnar_masses: BTreeMap<_, _> = columnar.masses::<Dalton>().collect();
-        assert_eq!(bare_masses, columnar_masses);
+        assert_eq!(
+            bare.masses::<Dalton>().collect::<Vec<_>>(),
+            columnar.masses::<Dalton>().collect::<Vec<_>>(),
+        );
     }
 }

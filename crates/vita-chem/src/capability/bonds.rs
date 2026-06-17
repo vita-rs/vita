@@ -117,13 +117,11 @@ mod tests {
         bonds: Vec<BondId>,
         endpoints: Vec<(SiteId, SiteId)>,
     }
-
     impl HasSites for Bare {
         fn sites(&self) -> impl Iterator<Item = SiteId> + '_ {
             self.sites.iter().copied()
         }
     }
-
     impl HasBonds for Bare {
         fn bonds(&self) -> impl Iterator<Item = BondId> + '_ {
             self.bonds.iter().copied()
@@ -140,13 +138,11 @@ mod tests {
         bonds: Vec<BondId>,
         endpoints: Vec<(SiteId, SiteId)>,
     }
-
     impl HasSites for Adjacency {
         fn sites(&self) -> impl Iterator<Item = SiteId> + '_ {
             self.sites.iter().copied()
         }
     }
-
     impl HasBonds for Adjacency {
         fn bonds(&self) -> impl Iterator<Item = BondId> + '_ {
             self.bonds.iter().copied()

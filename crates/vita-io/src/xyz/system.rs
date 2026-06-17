@@ -63,8 +63,8 @@ impl<V: Scalar> HasElements for System<V> {
     }
 
     #[inline]
-    fn elements(&self) -> impl Iterator<Item = (SiteId, Element)> + '_ {
-        self.sites().zip(self.elements.iter().copied())
+    fn elements(&self) -> impl Iterator<Item = Element> + '_ {
+        self.elements.iter().copied()
     }
 }
 
@@ -75,15 +75,11 @@ impl<V: Scalar> HasPositions<V> for System<V> {
     }
 
     #[inline]
-    fn positions<U: LengthUnit>(
-        &self,
-    ) -> impl Iterator<Item = (SiteId, Point3<Length<V, U>>)> + '_ {
-        self.sites().zip(
-            self.positions
-                .iter()
-                .copied()
-                .map(|position| position.map(|length| length.to::<U>())),
-        )
+    fn positions<U: LengthUnit>(&self) -> impl Iterator<Item = Point3<Length<V, U>>> + '_ {
+        self.positions
+            .iter()
+            .copied()
+            .map(|position| position.map(|length| length.to::<U>()))
     }
 }
 
@@ -188,11 +184,7 @@ mod tests {
         let sys = water();
         assert_eq!(
             sys.elements().collect::<Vec<_>>(),
-            vec![
-                (site(1), oxygen()),
-                (site(2), hydrogen()),
-                (site(3), hydrogen()),
-            ],
+            vec![oxygen(), hydrogen(), hydrogen()],
         );
     }
 
@@ -230,9 +222,9 @@ mod tests {
         assert_eq!(
             sys.positions::<Angstrom>().collect::<Vec<_>>(),
             vec![
-                (site(1), angstrom(0.0, 0.0, 0.0)),
-                (site(2), angstrom(0.757, 0.586, 0.0)),
-                (site(3), angstrom(-0.757, 0.586, 0.0)),
+                angstrom(0.0, 0.0, 0.0),
+                angstrom(0.757, 0.586, 0.0),
+                angstrom(-0.757, 0.586, 0.0),
             ],
         );
     }

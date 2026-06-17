@@ -4,16 +4,18 @@ use crate::{HasBonds, Hybridization};
 
 /// Per-site orbital geometry: the [`Hybridization`] of each site.
 ///
-/// Access is by lookup:
+/// Access is by keyed lookup:
 /// [`hybridization`](HasHybridizations::hybridization) maps a [`SiteId`] to
 /// its hybridization state.
-/// [`hybridizations`](HasHybridizations::hybridizations) iterates every
-/// `(site, hybridization)` pair.
+/// [`hybridizations`](HasHybridizations::hybridizations) yields one
+/// hybridization per site in [`sites`](vita_core::HasSites::sites) order.
 ///
 /// # Contract
 ///
 /// [`hybridization`](HasHybridizations::hybridization) is total over
 /// [`sites`](vita_core::HasSites::sites): every site has exactly one hybridization.
+/// [`hybridizations`](HasHybridizations::hybridizations) yields values in the
+/// same order as [`sites`](vita_core::HasSites::sites).
 pub trait HasHybridizations: HasBonds {
     /// Returns the hybridization of `site`.
     ///
@@ -22,16 +24,14 @@ pub trait HasHybridizations: HasBonds {
     /// Panics if `site` is not in [`sites`](vita_core::HasSites::sites).
     fn hybridization(&self, site: SiteId) -> Hybridization;
 
-    /// Returns an iterator over every `(site, hybridization)` pair.
+    /// Yields one hybridization per site, in [`sites`](vita_core::HasSites::sites) order.
     ///
-    /// Each hybridization is yielded with its [`SiteId`]. The default
-    /// implementation looks up
-    /// [`hybridization`](HasHybridizations::hybridization) per site;
-    /// override it when the pairs can be produced directly.
+    /// The default implementation looks up
+    /// [`hybridization`](HasHybridizations::hybridization) per site; override
+    /// it when the hybridizations can be produced directly.
     #[inline]
-    fn hybridizations(&self) -> impl Iterator<Item = (SiteId, Hybridization)> + '_ {
-        self.sites()
-            .map(move |site| (site, self.hybridization(site)))
+    fn hybridizations(&self) -> impl Iterator<Item = Hybridization> + '_ {
+        self.sites().map(move |site| self.hybridization(site))
     }
 }
 
@@ -55,13 +55,11 @@ mod tests {
         endpoints: Vec<(SiteId, SiteId)>,
         hybridizations: Vec<Hybridization>,
     }
-
     impl HasSites for Bare {
         fn sites(&self) -> impl Iterator<Item = SiteId> + '_ {
             self.sites.iter().copied()
         }
     }
-
     impl HasBonds for Bare {
         fn bonds(&self) -> impl Iterator<Item = BondId> + '_ {
             self.bonds.iter().copied()
@@ -72,7 +70,6 @@ mod tests {
             self.endpoints[i]
         }
     }
-
     impl HasHybridizations for Bare {
         fn hybridization(&self, site: SiteId) -> Hybridization {
             let i = self.sites.iter().position(|&s| s == site).unwrap();
@@ -86,13 +83,11 @@ mod tests {
         endpoints: Vec<(SiteId, SiteId)>,
         hybridizations: Vec<Hybridization>,
     }
-
     impl HasSites for Columnar {
         fn sites(&self) -> impl Iterator<Item = SiteId> + '_ {
             self.sites.iter().copied()
         }
     }
-
     impl HasBonds for Columnar {
         fn bonds(&self) -> impl Iterator<Item = BondId> + '_ {
             self.bonds.iter().copied()
@@ -103,18 +98,14 @@ mod tests {
             self.endpoints[i]
         }
     }
-
     impl HasHybridizations for Columnar {
         fn hybridization(&self, site: SiteId) -> Hybridization {
             let i = self.sites.iter().position(|&s| s == site).unwrap();
             self.hybridizations[i]
         }
 
-        fn hybridizations(&self) -> impl Iterator<Item = (SiteId, Hybridization)> + '_ {
-            self.sites
-                .iter()
-                .copied()
-                .zip(self.hybridizations.iter().copied())
+        fn hybridizations(&self) -> impl Iterator<Item = Hybridization> + '_ {
+            self.hybridizations.iter().copied()
         }
     }
 
@@ -140,11 +131,7 @@ mod tests {
         let mol = hcn();
         assert_eq!(
             mol.hybridizations().collect::<Vec<_>>(),
-            vec![
-                (site(1), Hybridization::S),
-                (site(2), Hybridization::Sp),
-                (site(3), Hybridization::Sp),
-            ]
+            vec![Hybridization::S, Hybridization::Sp, Hybridization::Sp],
         );
     }
 
@@ -218,8 +205,6 @@ mod tests {
 
     #[test]
     fn override_matches_default() {
-        use std::collections::BTreeMap;
-
         let sites = vec![site(1), site(2), site(3)];
         let bonds_vec = vec![bond(1), bond(2)];
         let endpoints_vec = vec![(site(1), site(2)), (site(2), site(3))];
@@ -238,8 +223,9 @@ mod tests {
             hybridizations: hybridizations_vec,
         };
 
-        let bare_hybs: BTreeMap<_, _> = bare.hybridizations().collect();
-        let col_hybs: BTreeMap<_, _> = col.hybridizations().collect();
-        assert_eq!(bare_hybs, col_hybs);
+        assert_eq!(
+            bare.hybridizations().collect::<Vec<_>>(),
+            col.hybridizations().collect::<Vec<_>>(),
+        );
     }
 }

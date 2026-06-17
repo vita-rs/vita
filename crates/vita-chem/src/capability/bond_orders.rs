@@ -2,14 +2,17 @@ use crate::{BondId, BondOrder, HasBonds};
 
 /// Per-bond multiplicity: the [`BondOrder`] of each bond.
 ///
-/// Access is by lookup: [`bond_order`](HasBondOrders::bond_order) maps a
-/// [`BondId`] to its order. [`bond_orders`](HasBondOrders::bond_orders)
-/// iterates every `(bond, order)` pair.
+/// Access is by keyed lookup: [`bond_order`](HasBondOrders::bond_order) maps a
+/// [`BondId`] to its order.
+/// [`bond_orders`](HasBondOrders::bond_orders) yields one order per bond in
+/// [`bonds`](HasBonds::bonds) order.
 ///
 /// # Contract
 ///
 /// [`bond_order`](HasBondOrders::bond_order) is total over
 /// [`bonds`](HasBonds::bonds): every bond has exactly one order.
+/// [`bond_orders`](HasBondOrders::bond_orders) yields values in the same
+/// order as [`bonds`](HasBonds::bonds).
 pub trait HasBondOrders: HasBonds {
     /// Returns the order of `bond`.
     ///
@@ -18,14 +21,14 @@ pub trait HasBondOrders: HasBonds {
     /// Panics if `bond` is not in [`bonds`](HasBonds::bonds).
     fn bond_order(&self, bond: BondId) -> BondOrder;
 
-    /// Returns an iterator over every `(bond, order)` pair.
+    /// Yields one order per bond, in [`bonds`](HasBonds::bonds) order.
     ///
-    /// Each order is yielded with its [`BondId`]. The default implementation looks
-    /// up [`bond_order`](HasBondOrders::bond_order) per bond; override it when
-    /// the pairs can be produced directly.
+    /// The default implementation looks up
+    /// [`bond_order`](HasBondOrders::bond_order) per bond; override it when
+    /// the orders can be produced directly.
     #[inline]
-    fn bond_orders(&self) -> impl Iterator<Item = (BondId, BondOrder)> + '_ {
-        self.bonds().map(move |bond| (bond, self.bond_order(bond)))
+    fn bond_orders(&self) -> impl Iterator<Item = BondOrder> + '_ {
+        self.bonds().map(move |bond| self.bond_order(bond))
     }
 }
 
@@ -48,13 +51,11 @@ mod tests {
         endpoints: Vec<(SiteId, SiteId)>,
         orders: Vec<BondOrder>,
     }
-
     impl HasSites for Bare {
         fn sites(&self) -> impl Iterator<Item = SiteId> + '_ {
             self.sites.iter().copied()
         }
     }
-
     impl HasBonds for Bare {
         fn bonds(&self) -> impl Iterator<Item = BondId> + '_ {
             self.bonds.iter().copied()
@@ -65,7 +66,6 @@ mod tests {
             self.endpoints[i]
         }
     }
-
     impl HasBondOrders for Bare {
         fn bond_order(&self, b: BondId) -> BondOrder {
             let i = self.bonds.iter().position(|&x| x == b).unwrap();
@@ -79,13 +79,11 @@ mod tests {
         endpoints: Vec<(SiteId, SiteId)>,
         orders: Vec<BondOrder>,
     }
-
     impl HasSites for Columnar {
         fn sites(&self) -> impl Iterator<Item = SiteId> + '_ {
             self.sites.iter().copied()
         }
     }
-
     impl HasBonds for Columnar {
         fn bonds(&self) -> impl Iterator<Item = BondId> + '_ {
             self.bonds.iter().copied()
@@ -96,15 +94,14 @@ mod tests {
             self.endpoints[i]
         }
     }
-
     impl HasBondOrders for Columnar {
         fn bond_order(&self, b: BondId) -> BondOrder {
             let i = self.bonds.iter().position(|&x| x == b).unwrap();
             self.orders[i]
         }
 
-        fn bond_orders(&self) -> impl Iterator<Item = (BondId, BondOrder)> + '_ {
-            self.bonds.iter().copied().zip(self.orders.iter().copied())
+        fn bond_orders(&self) -> impl Iterator<Item = BondOrder> + '_ {
+            self.orders.iter().copied()
         }
     }
 
@@ -129,7 +126,7 @@ mod tests {
         let mol = hcn();
         assert_eq!(
             mol.bond_orders().collect::<Vec<_>>(),
-            vec![(bond(1), BondOrder::Single), (bond(2), BondOrder::Triple),]
+            vec![BondOrder::Single, BondOrder::Triple],
         );
     }
 
@@ -184,8 +181,6 @@ mod tests {
 
     #[test]
     fn override_matches_default() {
-        use std::collections::BTreeMap;
-
         let sites = vec![site(1), site(2), site(3)];
         let bonds_vec = vec![bond(1), bond(2)];
         let endpoints_vec = vec![(site(1), site(2)), (site(2), site(3))];
@@ -204,8 +199,9 @@ mod tests {
             orders: orders_vec,
         };
 
-        let bare_orders: BTreeMap<_, _> = bare.bond_orders().collect();
-        let col_orders: BTreeMap<_, _> = col.bond_orders().collect();
-        assert_eq!(bare_orders, col_orders);
+        assert_eq!(
+            bare.bond_orders().collect::<Vec<_>>(),
+            col.bond_orders().collect::<Vec<_>>(),
+        );
     }
 }

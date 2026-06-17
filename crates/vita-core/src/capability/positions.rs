@@ -4,14 +4,16 @@ use crate::{HasSites, Scalar, SiteId};
 
 /// Per-site position: the [`Point3`] locating each site in space.
 ///
-/// Access is by lookup: [`position`](HasPositions::position) maps a [`SiteId`] to its
-/// position, in any requested [unit](LengthUnit). [`positions`](HasPositions::positions)
-/// iterates every `(site, position)` pair.
+/// Access is by keyed lookup: [`position`](HasPositions::position) maps a [`SiteId`] to
+/// its position, in any requested [unit](LengthUnit). [`positions`](HasPositions::positions)
+/// yields one position per site in [`sites`](HasSites::sites) order.
 ///
 /// # Contract
 ///
 /// [`position`](HasPositions::position) is total over [`sites`](HasSites::sites): every
 /// site has exactly one position.
+/// [`positions`](HasPositions::positions) yields values in the same order as
+/// [`sites`](HasSites::sites).
 pub trait HasPositions<V: Scalar>: HasSites {
     /// Returns the position of `site`, in unit `U`.
     ///
@@ -20,17 +22,13 @@ pub trait HasPositions<V: Scalar>: HasSites {
     /// Panics if `site` is not in [`sites`](HasSites::sites).
     fn position<U: LengthUnit>(&self, site: SiteId) -> Point3<Length<V, U>>;
 
-    /// Returns an iterator over every `(site, position)` pair, each position in unit `U`.
+    /// Yields one position per site, in [`sites`](HasSites::sites) order.
     ///
-    /// Each position is yielded with its [`SiteId`]. The default implementation looks up
-    /// [`position`](HasPositions::position) per site; override it when the pairs can be
-    /// produced directly.
+    /// The default implementation looks up [`position`](HasPositions::position) per site;
+    /// override it when the positions can be produced directly.
     #[inline]
-    fn positions<U: LengthUnit>(
-        &self,
-    ) -> impl Iterator<Item = (SiteId, Point3<Length<V, U>>)> + '_ {
-        self.sites()
-            .map(move |site| (site, self.position::<U>(site)))
+    fn positions<U: LengthUnit>(&self) -> impl Iterator<Item = Point3<Length<V, U>>> + '_ {
+        self.sites().map(move |site| self.position::<U>(site))
     }
 }
 
@@ -78,15 +76,11 @@ mod tests {
             self.positions[i].map(|l| l.to())
         }
 
-        fn positions<U: LengthUnit>(
-            &self,
-        ) -> impl Iterator<Item = (SiteId, Point3<Length<f64, U>>)> + '_ {
-            self.sites.iter().copied().zip(
-                self.positions
-                    .iter()
-                    .copied()
-                    .map(|p| p.map(|l| l.to::<U>())),
-            )
+        fn positions<U: LengthUnit>(&self) -> impl Iterator<Item = Point3<Length<f64, U>>> + '_ {
+            self.positions
+                .iter()
+                .copied()
+                .map(|p| p.map(|l| l.to::<U>()))
         }
     }
 
@@ -117,10 +111,10 @@ mod tests {
         assert_eq!(
             mol.positions::<Angstrom>().collect::<Vec<_>>(),
             vec![
-                (site(1), angstrom(0.0, 0.0, 0.0)),
-                (site(2), angstrom(0.757, 0.586, 0.0)),
-                (site(3), angstrom(-0.757, 0.586, 0.0))
-            ]
+                angstrom(0.0, 0.0, 0.0),
+                angstrom(0.757, 0.586, 0.0),
+                angstrom(-0.757, 0.586, 0.0),
+            ],
         );
     }
 
@@ -135,8 +129,6 @@ mod tests {
 
     #[test]
     fn override_matches_default() {
-        use std::collections::BTreeMap;
-
         let sites = vec![site(1), site(2), site(3)];
         let positions = vec![
             angstrom(0.0, 0.0, 0.0),
@@ -149,8 +141,9 @@ mod tests {
         };
         let columnar = Columnar { sites, positions };
 
-        let bare_positions: BTreeMap<_, _> = bare.positions::<Angstrom>().collect();
-        let columnar_positions: BTreeMap<_, _> = columnar.positions::<Angstrom>().collect();
-        assert_eq!(bare_positions, columnar_positions);
+        assert_eq!(
+            bare.positions::<Angstrom>().collect::<Vec<_>>(),
+            columnar.positions::<Angstrom>().collect::<Vec<_>>(),
+        );
     }
 }
