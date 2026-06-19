@@ -257,3 +257,265 @@ pub fn blocks<M: HasBonds + HasSites>(mol: &M) -> Blocks {
         bond_index,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashSet;
+    use vita_core::HasSites;
+
+    fn s(n: u32) -> SiteId {
+        SiteId::new(n).unwrap()
+    }
+
+    fn b(n: u32) -> BondId {
+        BondId::new(n).unwrap()
+    }
+
+    struct Mol {
+        sites: Vec<SiteId>,
+        bonds: Vec<BondId>,
+        endpoints: Vec<(SiteId, SiteId)>,
+    }
+
+    impl HasSites for Mol {
+        fn sites(&self) -> impl Iterator<Item = SiteId> + '_ {
+            self.sites.iter().copied()
+        }
+    }
+
+    impl HasBonds for Mol {
+        fn bonds(&self) -> impl Iterator<Item = BondId> + '_ {
+            self.bonds.iter().copied()
+        }
+
+        fn bond_endpoints(&self, bond: BondId) -> (SiteId, SiteId) {
+            let i = self.bonds.iter().position(|&x| x == bond).unwrap();
+            self.endpoints[i]
+        }
+    }
+
+    fn empty() -> Mol {
+        Mol {
+            sites: vec![],
+            bonds: vec![],
+            endpoints: vec![],
+        }
+    }
+
+    fn single() -> Mol {
+        Mol {
+            sites: vec![s(1)],
+            bonds: vec![],
+            endpoints: vec![],
+        }
+    }
+
+    fn chain() -> Mol {
+        Mol {
+            sites: vec![s(1), s(2), s(3)],
+            bonds: vec![b(1), b(2)],
+            endpoints: vec![(s(1), s(2)), (s(2), s(3))],
+        }
+    }
+
+    fn triangle() -> Mol {
+        Mol {
+            sites: vec![s(1), s(2), s(3)],
+            bonds: vec![b(1), b(2), b(3)],
+            endpoints: vec![(s(1), s(2)), (s(2), s(3)), (s(1), s(3))],
+        }
+    }
+
+    fn lollipop() -> Mol {
+        Mol {
+            sites: vec![s(1), s(2), s(3), s(4)],
+            bonds: vec![b(1), b(2), b(3), b(4)],
+            endpoints: vec![(s(1), s(2)), (s(2), s(3)), (s(1), s(3)), (s(1), s(4))],
+        }
+    }
+
+    fn dumbbell() -> Mol {
+        Mol {
+            sites: vec![s(1), s(2), s(3), s(4), s(5), s(6)],
+            bonds: vec![b(1), b(2), b(3), b(4), b(5), b(6), b(7)],
+            endpoints: vec![
+                (s(1), s(2)),
+                (s(2), s(3)),
+                (s(1), s(3)),
+                (s(3), s(4)),
+                (s(4), s(5)),
+                (s(5), s(6)),
+                (s(4), s(6)),
+            ],
+        }
+    }
+
+    #[test]
+    fn empty_molecule_has_no_blocks() {
+        let blks = blocks(&empty());
+        assert_eq!(blks.len(), 0);
+        assert!(blks.is_empty());
+        assert!(!blks.is_biconnected());
+    }
+
+    #[test]
+    fn single_site_has_no_blocks() {
+        assert_eq!(blocks(&single()).len(), 0);
+    }
+
+    #[test]
+    fn chain_has_two_blocks() {
+        assert_eq!(blocks(&chain()).len(), 2);
+    }
+
+    #[test]
+    fn triangle_has_one_block() {
+        assert_eq!(blocks(&triangle()).len(), 1);
+    }
+
+    #[test]
+    fn lollipop_has_two_blocks() {
+        assert_eq!(blocks(&lollipop()).len(), 2);
+    }
+
+    #[test]
+    fn triangle_is_biconnected() {
+        assert!(blocks(&triangle()).is_biconnected());
+    }
+
+    #[test]
+    fn chain_is_not_biconnected() {
+        assert!(!blocks(&chain()).is_biconnected());
+    }
+
+    #[test]
+    fn triangle_blocks_are_rings() {
+        assert!(blocks(&triangle()).iter().all(|b| b.is_ring()));
+    }
+
+    #[test]
+    fn chain_blocks_are_not_rings() {
+        assert!(blocks(&chain()).iter().all(|b| !b.is_ring()));
+    }
+
+    #[test]
+    fn triangle_has_no_cuts() {
+        assert_eq!(blocks(&triangle()).cuts().count(), 0);
+    }
+
+    #[test]
+    fn triangle_has_no_bridges() {
+        assert_eq!(blocks(&triangle()).bridges().count(), 0);
+    }
+
+    #[test]
+    fn chain_cuts() {
+        let mut cuts: Vec<SiteId> = blocks(&chain()).cuts().collect();
+        cuts.sort();
+        assert_eq!(cuts, vec![s(2)]);
+    }
+
+    #[test]
+    fn lollipop_cuts() {
+        let mut cuts: Vec<SiteId> = blocks(&lollipop()).cuts().collect();
+        cuts.sort();
+        assert_eq!(cuts, vec![s(1)]);
+    }
+
+    #[test]
+    fn dumbbell_cuts() {
+        let mut cuts: Vec<SiteId> = blocks(&dumbbell()).cuts().collect();
+        cuts.sort();
+        assert_eq!(cuts, vec![s(3), s(4)]);
+    }
+
+    #[test]
+    fn chain_bridges() {
+        let mut bridges: Vec<BondId> = blocks(&chain()).bridges().collect();
+        bridges.sort();
+        assert_eq!(bridges, vec![b(1), b(2)]);
+    }
+
+    #[test]
+    fn lollipop_bridges() {
+        let mut bridges: Vec<BondId> = blocks(&lollipop()).bridges().collect();
+        bridges.sort();
+        assert_eq!(bridges, vec![b(4)]);
+    }
+
+    #[test]
+    fn dumbbell_bridges() {
+        let mut bridges: Vec<BondId> = blocks(&dumbbell()).bridges().collect();
+        bridges.sort();
+        assert_eq!(bridges, vec![b(4)]);
+    }
+
+    #[test]
+    fn lollipop_contains_cut() {
+        let blks = blocks(&lollipop());
+        assert!(blks.contains_cut(s(1)));
+        assert!(!blks.contains_cut(s(2)));
+        assert!(!blks.contains_cut(s(99)));
+    }
+
+    #[test]
+    fn lollipop_contains_bridge() {
+        let blks = blocks(&lollipop());
+        assert!(blks.contains_bridge(b(4)));
+        assert!(!blks.contains_bridge(b(1)));
+        assert!(!blks.contains_bridge(b(99)));
+    }
+
+    #[test]
+    fn site_belongs_to_one_block_in_triangle() {
+        let blks = blocks(&triangle());
+        for site in [s(1), s(2), s(3)] {
+            assert_eq!(blks.of_site(site).count(), 1);
+        }
+    }
+
+    #[test]
+    fn articulation_site_belongs_to_multiple_blocks() {
+        assert_eq!(blocks(&lollipop()).of_site(s(1)).count(), 2);
+    }
+
+    #[test]
+    fn isolated_site_has_no_blocks() {
+        assert_eq!(blocks(&single()).of_site(s(1)).count(), 0);
+    }
+
+    #[test]
+    fn unknown_site_has_no_blocks() {
+        assert_eq!(blocks(&chain()).of_site(s(99)).count(), 0);
+    }
+
+    #[test]
+    fn bond_belongs_to_ring_block() {
+        let blks = blocks(&triangle());
+        assert!(blks.of_bond(b(1)).is_some_and(|blk| blk.is_ring()));
+    }
+
+    #[test]
+    fn bridge_bond_belongs_to_non_ring_block() {
+        let blks = blocks(&lollipop());
+        assert!(blks.of_bond(b(4)).is_some_and(|blk| !blk.is_ring()));
+    }
+
+    #[test]
+    fn unknown_bond_returns_none() {
+        assert!(blocks(&chain()).of_bond(b(99)).is_none());
+    }
+
+    #[test]
+    fn blocks_partition_all_bonds() {
+        let mol = dumbbell();
+        let blks = blocks(&mol);
+        let via_blocks: HashSet<BondId> = blks
+            .iter()
+            .flat_map(|b| b.bonds().iter().copied())
+            .collect();
+        let via_mol: HashSet<BondId> = mol.bonds().collect();
+        assert_eq!(via_blocks, via_mol);
+    }
+}
