@@ -169,3 +169,257 @@ pub fn distances<M: HasBonds + HasSites>(mol: &M) -> DistanceMatrix {
 
     DistanceMatrix { sites, index, mat }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::BondId;
+    use vita_core::HasSites;
+
+    fn s(n: u32) -> SiteId {
+        SiteId::new(n).unwrap()
+    }
+
+    fn b(n: u32) -> BondId {
+        BondId::new(n).unwrap()
+    }
+
+    struct Mol {
+        sites: Vec<SiteId>,
+        bonds: Vec<BondId>,
+        endpoints: Vec<(SiteId, SiteId)>,
+    }
+
+    impl HasSites for Mol {
+        fn sites(&self) -> impl Iterator<Item = SiteId> + '_ {
+            self.sites.iter().copied()
+        }
+    }
+
+    impl HasBonds for Mol {
+        fn bonds(&self) -> impl Iterator<Item = BondId> + '_ {
+            self.bonds.iter().copied()
+        }
+
+        fn bond_endpoints(&self, bond: BondId) -> (SiteId, SiteId) {
+            let i = self.bonds.iter().position(|&x| x == bond).unwrap();
+            self.endpoints[i]
+        }
+    }
+
+    fn single() -> Mol {
+        Mol {
+            sites: vec![s(1)],
+            bonds: vec![],
+            endpoints: vec![],
+        }
+    }
+
+    fn chain() -> Mol {
+        Mol {
+            sites: vec![s(1), s(2), s(3)],
+            bonds: vec![b(1), b(2)],
+            endpoints: vec![(s(1), s(2)), (s(2), s(3))],
+        }
+    }
+
+    fn triangle() -> Mol {
+        Mol {
+            sites: vec![s(1), s(2), s(3)],
+            bonds: vec![b(1), b(2), b(3)],
+            endpoints: vec![(s(1), s(2)), (s(2), s(3)), (s(1), s(3))],
+        }
+    }
+
+    fn star() -> Mol {
+        Mol {
+            sites: vec![s(1), s(2), s(3), s(4)],
+            bonds: vec![b(1), b(2), b(3)],
+            endpoints: vec![(s(1), s(2)), (s(1), s(3)), (s(1), s(4))],
+        }
+    }
+
+    fn pentane() -> Mol {
+        Mol {
+            sites: vec![s(1), s(2), s(3), s(4), s(5)],
+            bonds: vec![b(1), b(2), b(3), b(4)],
+            endpoints: vec![(s(1), s(2)), (s(2), s(3)), (s(3), s(4)), (s(4), s(5))],
+        }
+    }
+
+    fn two_components() -> Mol {
+        Mol {
+            sites: vec![s(1), s(2), s(3)],
+            bonds: vec![b(1)],
+            endpoints: vec![(s(1), s(2))],
+        }
+    }
+
+    #[test]
+    fn self_distance_is_zero() {
+        let dm = distances(&chain());
+        assert_eq!(dm.get(s(1), s(1)), Some(0));
+        assert_eq!(dm.get(s(2), s(2)), Some(0));
+        assert_eq!(dm.get(s(3), s(3)), Some(0));
+    }
+
+    #[test]
+    fn adjacent_distance_is_one() {
+        assert_eq!(distances(&chain()).get(s(1), s(2)), Some(1));
+        assert_eq!(distances(&star()).get(s(1), s(4)), Some(1));
+    }
+
+    #[test]
+    fn non_adjacent_distance() {
+        assert_eq!(distances(&chain()).get(s(1), s(3)), Some(2));
+        assert_eq!(distances(&star()).get(s(2), s(3)), Some(2));
+    }
+
+    #[test]
+    fn distance_is_symmetric() {
+        let dm = distances(&chain());
+        assert_eq!(dm.get(s(1), s(3)), dm.get(s(3), s(1)));
+        let dm = distances(&star());
+        assert_eq!(dm.get(s(2), s(4)), dm.get(s(4), s(2)));
+    }
+
+    #[test]
+    fn disconnected_pair_returns_none() {
+        let dm = distances(&two_components());
+        assert_eq!(dm.get(s(1), s(3)), None);
+        assert_eq!(dm.get(s(3), s(1)), None);
+        assert_eq!(dm.get(s(3), s(2)), None);
+    }
+
+    #[test]
+    fn unknown_site_returns_none() {
+        let dm = distances(&chain());
+        assert_eq!(dm.get(s(99), s(1)), None);
+        assert_eq!(dm.get(s(1), s(99)), None);
+        assert_eq!(dm.eccentricity(s(99)), None);
+    }
+
+    #[test]
+    fn chain_eccentricities() {
+        let dm = distances(&chain());
+        assert_eq!(dm.eccentricity(s(1)), Some(2));
+        assert_eq!(dm.eccentricity(s(2)), Some(1));
+        assert_eq!(dm.eccentricity(s(3)), Some(2));
+    }
+
+    #[test]
+    fn star_eccentricities() {
+        let dm = distances(&star());
+        assert_eq!(dm.eccentricity(s(1)), Some(1));
+        assert_eq!(dm.eccentricity(s(2)), Some(2));
+        assert_eq!(dm.eccentricity(s(3)), Some(2));
+        assert_eq!(dm.eccentricity(s(4)), Some(2));
+    }
+
+    #[test]
+    fn eccentricity_is_none_when_disconnected() {
+        let dm = distances(&two_components());
+        assert_eq!(dm.eccentricity(s(1)), None);
+        assert_eq!(dm.eccentricity(s(3)), None);
+    }
+
+    #[test]
+    fn chain_diameter() {
+        assert_eq!(distances(&chain()).diameter(), Some(2));
+    }
+
+    #[test]
+    fn pentane_diameter() {
+        assert_eq!(distances(&pentane()).diameter(), Some(4));
+    }
+
+    #[test]
+    fn disconnected_diameter_is_none() {
+        assert_eq!(distances(&two_components()).diameter(), None);
+    }
+
+    #[test]
+    fn chain_radius() {
+        assert_eq!(distances(&chain()).radius(), Some(1));
+    }
+
+    #[test]
+    fn triangle_radius() {
+        assert_eq!(distances(&triangle()).radius(), Some(1));
+    }
+
+    #[test]
+    fn disconnected_radius_is_none() {
+        assert_eq!(distances(&two_components()).radius(), None);
+    }
+
+    #[test]
+    fn chain_center() {
+        let center: Vec<SiteId> = distances(&chain()).center().collect();
+        assert_eq!(center, vec![s(2)]);
+    }
+
+    #[test]
+    fn star_center() {
+        let center: Vec<SiteId> = distances(&star()).center().collect();
+        assert_eq!(center, vec![s(1)]);
+    }
+
+    #[test]
+    fn triangle_all_sites_are_center() {
+        let mut center: Vec<SiteId> = distances(&triangle()).center().collect();
+        center.sort();
+        assert_eq!(center, vec![s(1), s(2), s(3)]);
+    }
+
+    #[test]
+    fn disconnected_center_is_empty() {
+        assert_eq!(distances(&two_components()).center().count(), 0);
+    }
+
+    #[test]
+    fn chain_peripheral() {
+        let mut peripheral: Vec<SiteId> = distances(&chain()).peripheral().collect();
+        peripheral.sort();
+        assert_eq!(peripheral, vec![s(1), s(3)]);
+    }
+
+    #[test]
+    fn star_peripheral() {
+        let mut peripheral: Vec<SiteId> = distances(&star()).peripheral().collect();
+        peripheral.sort();
+        assert_eq!(peripheral, vec![s(2), s(3), s(4)]);
+    }
+
+    #[test]
+    fn disconnected_peripheral_is_empty() {
+        assert_eq!(distances(&two_components()).peripheral().count(), 0);
+    }
+
+    #[test]
+    fn chain_wiener() {
+        assert_eq!(distances(&chain()).wiener(), 4);
+    }
+
+    #[test]
+    fn pentane_wiener() {
+        assert_eq!(distances(&pentane()).wiener(), 20);
+    }
+
+    #[test]
+    fn wiener_skips_disconnected_pairs() {
+        assert_eq!(distances(&two_components()).wiener(), 1);
+    }
+
+    #[test]
+    fn single_site_trivial_metrics() {
+        let dm = distances(&single());
+        assert_eq!(dm.get(s(1), s(1)), Some(0));
+        assert_eq!(dm.eccentricity(s(1)), Some(0));
+        assert_eq!(dm.diameter(), Some(0));
+        assert_eq!(dm.radius(), Some(0));
+        assert_eq!(dm.center().collect::<Vec<_>>(), vec![s(1)]);
+        assert_eq!(dm.peripheral().collect::<Vec<_>>(), vec![s(1)]);
+        assert_eq!(dm.wiener(), 0);
+    }
+}
