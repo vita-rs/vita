@@ -1,3 +1,4 @@
+mod algorithm;
 mod bond_order;
 mod capability;
 mod hybridization;
@@ -11,3 +12,5 @@ pub use capability::{
     HasBondOrders, HasBonds, HasFormalCharges, HasHybridizations, HasPartialCharges,
     HasRadicalElectrons,
 };
+
+pub use algorithm::topology;
