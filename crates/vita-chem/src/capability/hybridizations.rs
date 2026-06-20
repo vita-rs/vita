@@ -115,7 +115,7 @@ mod tests {
     #[test]
     fn all_hybridization_variants() {
         let mol = Bare {
-            sites: (1..=9).map(|n| site(n)).collect(),
+            sites: (1..=9).map(site).collect(),
             hybridizations: vec![
                 Hybridization::S,
                 Hybridization::Sp,
