@@ -145,3 +145,239 @@ pub fn membership<M: HasBonds + HasSites>(mol: &M) -> RingMembership {
         bonds: ring_bonds,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use vita_core::HasSites;
+
+    fn s(n: u32) -> SiteId {
+        SiteId::new(n).unwrap()
+    }
+
+    fn b(n: u32) -> BondId {
+        BondId::new(n).unwrap()
+    }
+
+    struct Mol {
+        sites: Vec<SiteId>,
+        bonds: Vec<BondId>,
+        endpoints: Vec<(SiteId, SiteId)>,
+    }
+
+    impl HasSites for Mol {
+        fn sites(&self) -> impl Iterator<Item = SiteId> + '_ {
+            self.sites.iter().copied()
+        }
+    }
+
+    impl HasBonds for Mol {
+        fn bonds(&self) -> impl Iterator<Item = BondId> + '_ {
+            self.bonds.iter().copied()
+        }
+
+        fn bond_endpoints(&self, bond: BondId) -> (SiteId, SiteId) {
+            let i = self.bonds.iter().position(|&x| x == bond).unwrap();
+            self.endpoints[i]
+        }
+    }
+
+    fn empty() -> Mol {
+        Mol {
+            sites: vec![],
+            bonds: vec![],
+            endpoints: vec![],
+        }
+    }
+
+    fn single() -> Mol {
+        Mol {
+            sites: vec![s(1)],
+            bonds: vec![],
+            endpoints: vec![],
+        }
+    }
+
+    fn chain() -> Mol {
+        Mol {
+            sites: vec![s(1), s(2), s(3)],
+            bonds: vec![b(1), b(2)],
+            endpoints: vec![(s(1), s(2)), (s(2), s(3))],
+        }
+    }
+
+    fn triangle() -> Mol {
+        Mol {
+            sites: vec![s(1), s(2), s(3)],
+            bonds: vec![b(1), b(2), b(3)],
+            endpoints: vec![(s(1), s(2)), (s(2), s(3)), (s(1), s(3))],
+        }
+    }
+
+    fn lollipop() -> Mol {
+        Mol {
+            sites: vec![s(1), s(2), s(3), s(4)],
+            bonds: vec![b(1), b(2), b(3), b(4)],
+            endpoints: vec![(s(1), s(2)), (s(2), s(3)), (s(1), s(3)), (s(1), s(4))],
+        }
+    }
+
+    fn dumbbell() -> Mol {
+        Mol {
+            sites: vec![s(1), s(2), s(3), s(4), s(5), s(6)],
+            bonds: vec![b(1), b(2), b(3), b(4), b(5), b(6), b(7)],
+            endpoints: vec![
+                (s(1), s(2)),
+                (s(2), s(3)),
+                (s(1), s(3)),
+                (s(3), s(4)),
+                (s(4), s(5)),
+                (s(5), s(6)),
+                (s(4), s(6)),
+            ],
+        }
+    }
+
+    fn two_triangles() -> Mol {
+        Mol {
+            sites: vec![s(1), s(2), s(3), s(4), s(5), s(6)],
+            bonds: vec![b(1), b(2), b(3), b(4), b(5), b(6)],
+            endpoints: vec![
+                (s(1), s(2)),
+                (s(2), s(3)),
+                (s(1), s(3)),
+                (s(4), s(5)),
+                (s(5), s(6)),
+                (s(4), s(6)),
+            ],
+        }
+    }
+
+    #[test]
+    fn empty_molecule_is_acyclic() {
+        assert!(membership(&empty()).is_acyclic());
+    }
+
+    #[test]
+    fn single_site_is_acyclic() {
+        assert!(membership(&single()).is_acyclic());
+    }
+
+    #[test]
+    fn chain_is_acyclic() {
+        assert!(membership(&chain()).is_acyclic());
+    }
+
+    #[test]
+    fn triangle_is_not_acyclic() {
+        assert!(!membership(&triangle()).is_acyclic());
+    }
+
+    #[test]
+    fn chain_site_not_in_ring() {
+        let m = membership(&chain());
+        assert!(!m.site(s(1)));
+        assert!(!m.site(s(2)));
+        assert!(!m.site(s(3)));
+    }
+
+    #[test]
+    fn chain_bond_not_in_ring() {
+        let m = membership(&chain());
+        assert!(!m.bond(b(1)));
+        assert!(!m.bond(b(2)));
+    }
+
+    #[test]
+    fn chain_has_no_ring_sites() {
+        assert_eq!(membership(&chain()).sites().count(), 0);
+    }
+
+    #[test]
+    fn triangle_every_site_in_ring() {
+        let m = membership(&triangle());
+        assert!([s(1), s(2), s(3)].iter().all(|&site| m.site(site)));
+    }
+
+    #[test]
+    fn triangle_every_bond_in_ring() {
+        let m = membership(&triangle());
+        assert!([b(1), b(2), b(3)].iter().all(|&bond| m.bond(bond)));
+    }
+
+    #[test]
+    fn triangle_ring_sites() {
+        let mut sites: Vec<SiteId> = membership(&triangle()).sites().collect();
+        sites.sort();
+        assert_eq!(sites, vec![s(1), s(2), s(3)]);
+    }
+
+    #[test]
+    fn triangle_ring_bonds() {
+        let mut bonds: Vec<BondId> = membership(&triangle()).bonds().collect();
+        bonds.sort();
+        assert_eq!(bonds, vec![b(1), b(2), b(3)]);
+    }
+
+    #[test]
+    fn lollipop_ring_sites() {
+        let mut sites: Vec<SiteId> = membership(&lollipop()).sites().collect();
+        sites.sort();
+        assert_eq!(sites, vec![s(1), s(2), s(3)]);
+    }
+
+    #[test]
+    fn lollipop_ring_bonds() {
+        let mut bonds: Vec<BondId> = membership(&lollipop()).bonds().collect();
+        bonds.sort();
+        assert_eq!(bonds, vec![b(1), b(2), b(3)]);
+    }
+
+    #[test]
+    fn lollipop_tail_site_not_in_ring() {
+        assert!(!membership(&lollipop()).site(s(4)));
+    }
+
+    #[test]
+    fn lollipop_tail_bond_not_in_ring() {
+        assert!(!membership(&lollipop()).bond(b(4)));
+    }
+
+    #[test]
+    fn dumbbell_all_sites_in_ring() {
+        let m = membership(&dumbbell());
+        assert!(
+            [s(1), s(2), s(3), s(4), s(5), s(6)]
+                .iter()
+                .all(|&site| m.site(site))
+        );
+    }
+
+    #[test]
+    fn dumbbell_bridge_not_in_ring() {
+        let m = membership(&dumbbell());
+        assert!(!m.bond(b(4)));
+        assert!(
+            [b(1), b(2), b(3), b(5), b(6), b(7)]
+                .iter()
+                .all(|&bond| m.bond(bond))
+        );
+    }
+
+    #[test]
+    fn two_triangles_all_in_ring() {
+        let m = membership(&two_triangles());
+        assert_eq!(m.sites().count(), 6);
+        assert_eq!(m.bonds().count(), 6);
+    }
+
+    #[test]
+    fn unknown_site_not_in_ring() {
+        assert!(!membership(&triangle()).site(s(99)));
+    }
+
+    #[test]
+    fn unknown_bond_not_in_ring() {
+        assert!(!membership(&triangle()).bond(b(99)));
+    }
+}
