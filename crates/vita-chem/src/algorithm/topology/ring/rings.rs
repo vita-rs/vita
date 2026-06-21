@@ -374,3 +374,410 @@ fn trace_ring(bits: &[u64], m: usize, rows: &[(BondId, usize, usize)], sites: &[
         bonds: ring_bonds.into_iter().map(|e| rows[e].0).collect(),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use vita_core::HasSites;
+
+    fn s(n: u32) -> SiteId {
+        SiteId::new(n).unwrap()
+    }
+
+    fn b(n: u32) -> BondId {
+        BondId::new(n).unwrap()
+    }
+
+    struct Mol {
+        sites: Vec<SiteId>,
+        bonds: Vec<BondId>,
+        endpoints: Vec<(SiteId, SiteId)>,
+    }
+
+    impl HasSites for Mol {
+        fn sites(&self) -> impl Iterator<Item = SiteId> + '_ {
+            self.sites.iter().copied()
+        }
+    }
+
+    impl HasBonds for Mol {
+        fn bonds(&self) -> impl Iterator<Item = BondId> + '_ {
+            self.bonds.iter().copied()
+        }
+
+        fn bond_endpoints(&self, bond: BondId) -> (SiteId, SiteId) {
+            let i = self.bonds.iter().position(|&x| x == bond).unwrap();
+            self.endpoints[i]
+        }
+    }
+
+    fn empty() -> Mol {
+        Mol {
+            sites: vec![],
+            bonds: vec![],
+            endpoints: vec![],
+        }
+    }
+
+    fn single() -> Mol {
+        Mol {
+            sites: vec![s(1)],
+            bonds: vec![],
+            endpoints: vec![],
+        }
+    }
+
+    fn chain() -> Mol {
+        Mol {
+            sites: vec![s(1), s(2), s(3)],
+            bonds: vec![b(1), b(2)],
+            endpoints: vec![(s(1), s(2)), (s(2), s(3))],
+        }
+    }
+
+    fn triangle() -> Mol {
+        Mol {
+            sites: vec![s(1), s(2), s(3)],
+            bonds: vec![b(1), b(2), b(3)],
+            endpoints: vec![(s(1), s(2)), (s(2), s(3)), (s(1), s(3))],
+        }
+    }
+
+    fn square() -> Mol {
+        Mol {
+            sites: vec![s(1), s(2), s(3), s(4)],
+            bonds: vec![b(1), b(2), b(3), b(4)],
+            endpoints: vec![(s(1), s(2)), (s(2), s(3)), (s(3), s(4)), (s(1), s(4))],
+        }
+    }
+
+    fn tadpole() -> Mol {
+        Mol {
+            sites: vec![s(1), s(2), s(3), s(4)],
+            bonds: vec![b(1), b(2), b(3), b(4)],
+            endpoints: vec![(s(1), s(2)), (s(2), s(3)), (s(1), s(3)), (s(1), s(4))],
+        }
+    }
+
+    fn fused() -> Mol {
+        Mol {
+            sites: vec![s(1), s(2), s(3), s(4), s(5), s(6)],
+            bonds: vec![b(1), b(2), b(3), b(4), b(5), b(6), b(7)],
+            endpoints: vec![
+                (s(1), s(2)),
+                (s(2), s(3)),
+                (s(3), s(4)),
+                (s(1), s(4)),
+                (s(3), s(5)),
+                (s(5), s(6)),
+                (s(4), s(6)),
+            ],
+        }
+    }
+
+    fn spiro() -> Mol {
+        Mol {
+            sites: vec![s(1), s(2), s(3), s(4), s(5)],
+            bonds: vec![b(1), b(2), b(3), b(4), b(5), b(6)],
+            endpoints: vec![
+                (s(1), s(2)),
+                (s(2), s(3)),
+                (s(1), s(3)),
+                (s(3), s(4)),
+                (s(4), s(5)),
+                (s(3), s(5)),
+            ],
+        }
+    }
+
+    fn two_triangles() -> Mol {
+        Mol {
+            sites: vec![s(1), s(2), s(3), s(4), s(5), s(6)],
+            bonds: vec![b(1), b(2), b(3), b(4), b(5), b(6)],
+            endpoints: vec![
+                (s(1), s(2)),
+                (s(2), s(3)),
+                (s(1), s(3)),
+                (s(4), s(5)),
+                (s(5), s(6)),
+                (s(4), s(6)),
+            ],
+        }
+    }
+
+    fn cube() -> Mol {
+        Mol {
+            sites: vec![s(1), s(2), s(3), s(4), s(5), s(6), s(7), s(8)],
+            bonds: (1..=12).map(b).collect(),
+            endpoints: vec![
+                (s(1), s(2)),
+                (s(2), s(3)),
+                (s(3), s(4)),
+                (s(1), s(4)),
+                (s(5), s(6)),
+                (s(6), s(7)),
+                (s(7), s(8)),
+                (s(5), s(8)),
+                (s(1), s(5)),
+                (s(2), s(6)),
+                (s(3), s(7)),
+                (s(4), s(8)),
+            ],
+        }
+    }
+
+    #[test]
+    fn empty_has_no_rings() {
+        let r = rings(&empty());
+        assert_eq!(r.len(), 0);
+        assert!(r.is_empty());
+    }
+
+    #[test]
+    fn single_site_has_no_rings() {
+        assert_eq!(rings(&single()).len(), 0);
+    }
+
+    #[test]
+    fn chain_has_no_rings() {
+        assert!(rings(&chain()).is_empty());
+    }
+
+    #[test]
+    fn chain_girth_is_none() {
+        assert_eq!(rings(&chain()).girth(), None);
+    }
+
+    #[test]
+    fn triangle_has_one_ring() {
+        assert_eq!(rings(&triangle()).len(), 1);
+    }
+
+    #[test]
+    fn triangle_ring_size_is_three() {
+        let r = rings(&triangle());
+        let ring = r.iter().next().unwrap();
+        assert_eq!(ring.sites().len(), 3);
+        assert_eq!(ring.bonds().len(), 3);
+    }
+
+    #[test]
+    fn triangle_girth_is_three() {
+        assert_eq!(rings(&triangle()).girth(), Some(3));
+    }
+
+    #[test]
+    fn square_has_one_ring() {
+        assert_eq!(rings(&square()).len(), 1);
+    }
+
+    #[test]
+    fn square_girth_is_four() {
+        assert_eq!(rings(&square()).girth(), Some(4));
+    }
+
+    #[test]
+    fn fused_has_two_rings() {
+        assert_eq!(rings(&fused()).len(), 2);
+    }
+
+    #[test]
+    fn spiro_has_two_rings() {
+        assert_eq!(rings(&spiro()).len(), 2);
+    }
+
+    #[test]
+    fn two_triangles_has_two_rings() {
+        assert_eq!(rings(&two_triangles()).len(), 2);
+    }
+
+    #[test]
+    fn cube_has_five_rings() {
+        assert_eq!(rings(&cube()).len(), 5);
+    }
+
+    #[test]
+    fn cube_rings_are_all_squares() {
+        let r = rings(&cube());
+        assert!(r.iter().all(|ring| ring.sites().len() == 4));
+        assert_eq!(r.girth(), Some(4));
+    }
+
+    #[test]
+    fn ring_starts_at_smallest_site() {
+        let r = rings(&square());
+        let ring = r.iter().next().unwrap();
+        assert_eq!(ring.sites()[0], s(1));
+    }
+
+    #[test]
+    fn ring_sites_are_consecutively_bonded() {
+        let mol = square();
+        let r = rings(&mol);
+        let ring = r.iter().next().unwrap();
+        let sites = ring.sites();
+        let bonds = ring.bonds();
+        assert_eq!(sites.len(), bonds.len());
+        for i in 0..sites.len() {
+            let a = sites[i];
+            let b = sites[(i + 1) % sites.len()];
+            assert_eq!(mol.bond_between(a, b), Some(bonds[i]));
+        }
+    }
+
+    #[test]
+    fn triangle_each_site_in_one_ring() {
+        let r = rings(&triangle());
+        for site in [s(1), s(2), s(3)] {
+            assert_eq!(r.of_site(site).count(), 1);
+        }
+    }
+
+    #[test]
+    fn fused_shared_site_in_two_rings() {
+        let r = rings(&fused());
+        assert_eq!(r.of_site(s(3)).count(), 2);
+        assert_eq!(r.of_site(s(4)).count(), 2);
+    }
+
+    #[test]
+    fn fused_shared_bond_in_two_rings() {
+        let r = rings(&fused());
+        assert_eq!(r.of_bond(b(3)).count(), 2);
+    }
+
+    #[test]
+    fn of_site_unknown_is_empty() {
+        assert_eq!(rings(&triangle()).of_site(s(99)).count(), 0);
+    }
+
+    #[test]
+    fn of_site_acyclic_is_empty() {
+        assert_eq!(rings(&chain()).of_site(s(2)).count(), 0);
+    }
+
+    #[test]
+    fn of_bond_bridge_is_empty() {
+        assert_eq!(rings(&tadpole()).of_bond(b(4)).count(), 0);
+    }
+
+    #[test]
+    fn of_bond_unknown_is_empty() {
+        assert_eq!(rings(&triangle()).of_bond(b(99)).count(), 0);
+    }
+
+    #[test]
+    fn triangle_same_is_true() {
+        assert!(rings(&triangle()).same(s(1), s(2)));
+    }
+
+    #[test]
+    fn spiro_same_within_ring() {
+        assert!(rings(&spiro()).same(s(1), s(2)));
+    }
+
+    #[test]
+    fn spiro_same_across_rings_is_false() {
+        assert!(!rings(&spiro()).same(s(1), s(4)));
+    }
+
+    #[test]
+    fn same_shared_site_is_false_across_distinct_rings() {
+        let r = rings(&fused());
+        assert!(!r.same(s(1), s(6)));
+    }
+
+    #[test]
+    fn same_unknown_is_false() {
+        assert!(!rings(&triangle()).same(s(1), s(99)));
+    }
+
+    #[test]
+    fn membership_matches_free_function() {
+        let mol = fused();
+        let derived = rings(&mol).membership();
+        let direct = super::super::membership(&mol);
+
+        let mut a: Vec<SiteId> = derived.sites().collect();
+        let mut c: Vec<SiteId> = direct.sites().collect();
+        a.sort_unstable();
+        c.sort_unstable();
+        assert_eq!(a, c);
+
+        let mut a: Vec<BondId> = derived.bonds().collect();
+        let mut c: Vec<BondId> = direct.bonds().collect();
+        a.sort_unstable();
+        c.sort_unstable();
+        assert_eq!(a, c);
+    }
+
+    #[test]
+    fn acyclic_membership_is_acyclic() {
+        assert!(rings(&chain()).membership().is_acyclic());
+    }
+
+    #[test]
+    fn triangle_one_system() {
+        assert_eq!(rings(&triangle()).systems().count(), 1);
+    }
+
+    #[test]
+    fn fused_one_system() {
+        let systems: Vec<Vec<SiteId>> = rings(&fused()).systems().collect();
+        assert_eq!(systems.len(), 1);
+        assert_eq!(systems[0], vec![s(1), s(2), s(3), s(4), s(5), s(6)]);
+    }
+
+    #[test]
+    fn spiro_one_system() {
+        assert_eq!(rings(&spiro()).systems().count(), 1);
+    }
+
+    #[test]
+    fn two_triangles_two_systems() {
+        let systems: Vec<Vec<SiteId>> = rings(&two_triangles()).systems().collect();
+        assert_eq!(systems.len(), 2);
+        assert_eq!(systems[0], vec![s(1), s(2), s(3)]);
+        assert_eq!(systems[1], vec![s(4), s(5), s(6)]);
+    }
+
+    #[test]
+    fn systems_partition_ring_sites() {
+        let mol = fused();
+        let r = rings(&mol);
+        let from_systems: HashSet<SiteId> = r.systems().flatten().collect();
+        let from_membership: HashSet<SiteId> = r.membership().sites().collect();
+        assert_eq!(from_systems, from_membership);
+    }
+
+    #[test]
+    fn cube_is_deterministic() {
+        let first: Vec<Vec<SiteId>> = rings(&cube()).iter().map(|r| r.sites().to_vec()).collect();
+        let second: Vec<Vec<SiteId>> = rings(&cube()).iter().map(|r| r.sites().to_vec()).collect();
+        assert_eq!(first, second);
+    }
+
+    #[test]
+    fn output_is_independent_of_input_order() {
+        let shuffled = Mol {
+            sites: vec![s(4), s(1), s(6), s(3), s(5), s(2)],
+            bonds: vec![b(7), b(3), b(5), b(1), b(6), b(4), b(2)],
+            endpoints: vec![
+                (s(6), s(4)),
+                (s(4), s(3)),
+                (s(3), s(5)),
+                (s(2), s(1)),
+                (s(5), s(6)),
+                (s(1), s(4)),
+                (s(2), s(3)),
+            ],
+        };
+        let canonical: Vec<Vec<SiteId>> =
+            rings(&fused()).iter().map(|r| r.sites().to_vec()).collect();
+        let reordered: Vec<Vec<SiteId>> = rings(&shuffled)
+            .iter()
+            .map(|r| r.sites().to_vec())
+            .collect();
+        assert_eq!(canonical, reordered);
+    }
+}
