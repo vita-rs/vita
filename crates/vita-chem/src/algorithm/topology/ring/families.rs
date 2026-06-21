@@ -657,3 +657,419 @@ fn edge_overlap_components(
 fn ends(a: usize, b: usize) -> (usize, usize) {
     (a.min(b), a.max(b))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use vita_core::HasSites;
+
+    fn s(n: u32) -> SiteId {
+        SiteId::new(n).unwrap()
+    }
+
+    fn b(n: u32) -> BondId {
+        BondId::new(n).unwrap()
+    }
+
+    struct Mol {
+        sites: Vec<SiteId>,
+        bonds: Vec<BondId>,
+        endpoints: Vec<(SiteId, SiteId)>,
+    }
+
+    impl HasSites for Mol {
+        fn sites(&self) -> impl Iterator<Item = SiteId> + '_ {
+            self.sites.iter().copied()
+        }
+    }
+
+    impl HasBonds for Mol {
+        fn bonds(&self) -> impl Iterator<Item = BondId> + '_ {
+            self.bonds.iter().copied()
+        }
+
+        fn bond_endpoints(&self, bond: BondId) -> (SiteId, SiteId) {
+            let i = self.bonds.iter().position(|&x| x == bond).unwrap();
+            self.endpoints[i]
+        }
+    }
+
+    fn mol(sites: &[u32], bonds: &[(u32, u32, u32)]) -> Mol {
+        Mol {
+            sites: sites.iter().map(|&n| s(n)).collect(),
+            bonds: bonds.iter().map(|&(id, _, _)| b(id)).collect(),
+            endpoints: bonds.iter().map(|&(_, u, v)| (s(u), s(v))).collect(),
+        }
+    }
+
+    fn empty() -> Mol {
+        mol(&[], &[])
+    }
+
+    fn single() -> Mol {
+        mol(&[1], &[])
+    }
+
+    fn chain() -> Mol {
+        mol(&[1, 2, 3], &[(1, 1, 2), (2, 2, 3)])
+    }
+
+    fn triangle() -> Mol {
+        mol(&[1, 2, 3], &[(1, 1, 2), (2, 2, 3), (3, 1, 3)])
+    }
+
+    fn square() -> Mol {
+        mol(&[1, 2, 3, 4], &[(1, 1, 2), (2, 2, 3), (3, 3, 4), (4, 1, 4)])
+    }
+
+    fn fused() -> Mol {
+        mol(
+            &[1, 2, 3, 4, 5, 6],
+            &[
+                (1, 1, 2),
+                (2, 2, 3),
+                (3, 3, 4),
+                (4, 1, 4),
+                (5, 3, 5),
+                (6, 5, 6),
+                (7, 4, 6),
+            ],
+        )
+    }
+
+    fn spiro() -> Mol {
+        mol(
+            &[1, 2, 3, 4, 5],
+            &[
+                (1, 1, 2),
+                (2, 2, 3),
+                (3, 1, 3),
+                (4, 3, 4),
+                (5, 4, 5),
+                (6, 3, 5),
+            ],
+        )
+    }
+
+    fn two_triangles() -> Mol {
+        mol(
+            &[1, 2, 3, 4, 5, 6],
+            &[
+                (1, 1, 2),
+                (2, 2, 3),
+                (3, 1, 3),
+                (4, 4, 5),
+                (5, 5, 6),
+                (6, 4, 6),
+            ],
+        )
+    }
+
+    fn bicyclo222() -> Mol {
+        mol(
+            &[1, 2, 3, 4, 5, 6, 7, 8],
+            &[
+                (1, 1, 3),
+                (2, 3, 4),
+                (3, 4, 2),
+                (4, 1, 5),
+                (5, 5, 6),
+                (6, 6, 2),
+                (7, 1, 7),
+                (8, 7, 8),
+                (9, 8, 2),
+            ],
+        )
+    }
+
+    fn bridged_square() -> Mol {
+        mol(
+            &[1, 2, 3, 4, 5, 6],
+            &[
+                (1, 1, 2),
+                (2, 2, 3),
+                (3, 3, 4),
+                (4, 1, 4),
+                (5, 2, 5),
+                (6, 5, 6),
+                (7, 4, 6),
+            ],
+        )
+    }
+
+    fn cube() -> Mol {
+        mol(
+            &[1, 2, 3, 4, 5, 6, 7, 8],
+            &[
+                (1, 1, 2),
+                (2, 2, 3),
+                (3, 3, 4),
+                (4, 1, 4),
+                (5, 5, 6),
+                (6, 6, 7),
+                (7, 7, 8),
+                (8, 5, 8),
+                (9, 1, 5),
+                (10, 2, 6),
+                (11, 3, 7),
+                (12, 4, 8),
+            ],
+        )
+    }
+
+    fn k4() -> Mol {
+        mol(
+            &[1, 2, 3, 4],
+            &[
+                (1, 1, 2),
+                (2, 1, 3),
+                (3, 1, 4),
+                (4, 2, 3),
+                (5, 2, 4),
+                (6, 3, 4),
+            ],
+        )
+    }
+
+    #[test]
+    fn empty_has_no_families() {
+        let f = families(&empty());
+        assert_eq!(f.len(), 0);
+        assert!(f.is_empty());
+    }
+
+    #[test]
+    fn single_site_has_no_families() {
+        assert_eq!(families(&single()).len(), 0);
+    }
+
+    #[test]
+    fn chain_has_no_families() {
+        assert!(families(&chain()).is_empty());
+    }
+
+    #[test]
+    fn triangle_has_one_family() {
+        assert_eq!(families(&triangle()).len(), 1);
+    }
+
+    #[test]
+    fn triangle_family_size_is_three() {
+        let f = families(&triangle());
+        assert_eq!(f.iter().next().unwrap().size(), 3);
+    }
+
+    #[test]
+    fn square_has_one_family() {
+        assert_eq!(families(&square()).len(), 1);
+    }
+
+    #[test]
+    fn fused_has_two_families() {
+        assert_eq!(families(&fused()).len(), 2);
+    }
+
+    #[test]
+    fn spiro_has_two_families() {
+        assert_eq!(families(&spiro()).len(), 2);
+    }
+
+    #[test]
+    fn two_triangles_has_two_families() {
+        assert_eq!(families(&two_triangles()).len(), 2);
+    }
+
+    #[test]
+    fn bicyclo222_has_three_families() {
+        let f = families(&bicyclo222());
+        assert_eq!(f.len(), 3);
+        assert!(f.iter().all(|fam| fam.size() == 6));
+    }
+
+    #[test]
+    fn cube_has_six_families() {
+        let f = families(&cube());
+        assert_eq!(f.len(), 6);
+        assert!(f.iter().all(|fam| fam.size() == 4));
+    }
+
+    #[test]
+    fn k4_has_four_families() {
+        let f = families(&k4());
+        assert_eq!(f.len(), 4);
+        assert!(f.iter().all(|fam| fam.size() == 3));
+    }
+
+    #[test]
+    fn bridged_square_merges_interchangeable_rings() {
+        let f = families(&bridged_square());
+        assert_eq!(f.len(), 2);
+        let mut sizes: Vec<usize> = f.iter().map(|fam| fam.size()).collect();
+        sizes.sort_unstable();
+        assert_eq!(sizes, vec![4, 5]);
+    }
+
+    #[test]
+    fn bridged_square_size_five_family_spans_all_atoms() {
+        let f = families(&bridged_square());
+        let five = f.iter().find(|fam| fam.size() == 5).unwrap();
+        assert_eq!(five.sites().len(), 6);
+    }
+
+    #[test]
+    fn girth_is_smallest_family() {
+        assert_eq!(families(&triangle()).girth(), Some(3));
+        assert_eq!(families(&square()).girth(), Some(4));
+        assert_eq!(families(&bridged_square()).girth(), Some(4));
+    }
+
+    #[test]
+    fn acyclic_girth_is_none() {
+        assert_eq!(families(&chain()).girth(), None);
+    }
+
+    #[test]
+    fn triangle_each_site_in_one_family() {
+        let f = families(&triangle());
+        for site in [s(1), s(2), s(3)] {
+            assert_eq!(f.of_site(site).count(), 1);
+        }
+    }
+
+    #[test]
+    fn fused_shared_bond_in_two_families() {
+        let f = families(&fused());
+        assert_eq!(f.of_bond(b(3)).count(), 2);
+    }
+
+    #[test]
+    fn fused_shared_site_in_two_families() {
+        let f = families(&fused());
+        assert_eq!(f.of_site(s(3)).count(), 2);
+        assert_eq!(f.of_site(s(4)).count(), 2);
+    }
+
+    #[test]
+    fn of_site_unknown_is_empty() {
+        assert_eq!(families(&triangle()).of_site(s(99)).count(), 0);
+    }
+
+    #[test]
+    fn of_bond_bridge_is_empty() {
+        let tadpole = mol(&[1, 2, 3, 4], &[(1, 1, 2), (2, 2, 3), (3, 1, 3), (4, 1, 4)]);
+        assert_eq!(families(&tadpole).of_bond(b(4)).count(), 0);
+    }
+
+    #[test]
+    fn of_bond_unknown_is_empty() {
+        assert_eq!(families(&triangle()).of_bond(b(99)).count(), 0);
+    }
+
+    #[test]
+    fn spiro_same_within_ring_only() {
+        let f = families(&spiro());
+        assert!(f.same(s(1), s(2)));
+        assert!(!f.same(s(1), s(4)));
+    }
+
+    #[test]
+    fn same_unknown_is_false() {
+        assert!(!families(&triangle()).same(s(1), s(99)));
+    }
+
+    #[test]
+    fn membership_matches_free_function() {
+        let m = fused();
+        let derived = families(&m).membership();
+        let direct = super::super::membership(&m);
+
+        let mut a: Vec<SiteId> = derived.sites().collect();
+        let mut c: Vec<SiteId> = direct.sites().collect();
+        a.sort_unstable();
+        c.sort_unstable();
+        assert_eq!(a, c);
+
+        let mut a: Vec<BondId> = derived.bonds().collect();
+        let mut c: Vec<BondId> = direct.bonds().collect();
+        a.sort_unstable();
+        c.sort_unstable();
+        assert_eq!(a, c);
+    }
+
+    #[test]
+    fn fused_one_system() {
+        assert_eq!(families(&fused()).systems().count(), 1);
+    }
+
+    #[test]
+    fn spiro_one_system() {
+        assert_eq!(families(&spiro()).systems().count(), 1);
+    }
+
+    #[test]
+    fn two_triangles_two_systems() {
+        let systems: Vec<Vec<SiteId>> = families(&two_triangles()).systems().collect();
+        assert_eq!(systems.len(), 2);
+        assert_eq!(systems[0], vec![s(1), s(2), s(3)]);
+        assert_eq!(systems[1], vec![s(4), s(5), s(6)]);
+    }
+
+    #[test]
+    fn systems_partition_ring_sites() {
+        let m = fused();
+        let f = families(&m);
+        let from_systems: HashSet<SiteId> = f.systems().flatten().collect();
+        let from_membership: HashSet<SiteId> = f.membership().sites().collect();
+        assert_eq!(from_systems, from_membership);
+    }
+
+    #[test]
+    fn matches_minimum_basis_when_non_degenerate() {
+        for m in [triangle(), square(), fused(), spiro(), two_triangles()] {
+            assert_eq!(families(&m).len(), super::super::rings(&m).len());
+        }
+    }
+
+    #[test]
+    fn exceeds_minimum_basis_when_degenerate() {
+        assert!(families(&cube()).len() > super::super::rings(&cube()).len());
+    }
+
+    #[test]
+    fn cube_is_deterministic() {
+        let first: Vec<Vec<SiteId>> = families(&cube())
+            .iter()
+            .map(|f| f.sites().to_vec())
+            .collect();
+        let second: Vec<Vec<SiteId>> = families(&cube())
+            .iter()
+            .map(|f| f.sites().to_vec())
+            .collect();
+        assert_eq!(first, second);
+    }
+
+    #[test]
+    fn output_is_independent_of_input_order() {
+        let shuffled = mol(
+            &[6, 4, 2, 5, 3, 1],
+            &[
+                (7, 6, 4),
+                (3, 4, 3),
+                (1, 2, 1),
+                (5, 5, 3),
+                (2, 3, 2),
+                (6, 6, 5),
+                (4, 4, 1),
+            ],
+        );
+        let canonical: Vec<(usize, Vec<SiteId>)> = families(&fused())
+            .iter()
+            .map(|f| (f.size(), f.sites().to_vec()))
+            .collect();
+        let reordered: Vec<(usize, Vec<SiteId>)> = families(&shuffled)
+            .iter()
+            .map(|f| (f.size(), f.sites().to_vec()))
+            .collect();
+        assert_eq!(canonical, reordered);
+    }
+}
