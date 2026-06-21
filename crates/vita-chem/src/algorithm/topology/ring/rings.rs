@@ -2,6 +2,7 @@ use std::collections::{HashMap, HashSet, VecDeque};
 
 use vita_core::{HasSites, SiteId};
 
+use super::bitset::Bits;
 use super::membership::RingMembership;
 use crate::{BondId, HasBonds};
 
@@ -196,7 +197,6 @@ pub fn rings<M: HasBonds + HasSites>(mol: &M) -> Rings {
         .collect();
     rows.sort_unstable_by_key(|&(_, lo, hi)| (lo, hi));
     let m = rows.len();
-    let words = m.div_ceil(64);
 
     let mut adj: Vec<Vec<(usize, usize)>> = vec![vec![]; n];
     for (e, &(_, lo, hi)) in rows.iter().enumerate() {
@@ -207,8 +207,8 @@ pub fn rings<M: HasBonds + HasSites>(mol: &M) -> Rings {
         a.sort_unstable_by_key(|&(_, nb)| nb);
     }
 
-    let candidates = horton_candidates(n, words, &adj, &rows);
-    let basis = minimum_basis(words, candidates);
+    let candidates = horton_candidates(n, m, &adj, &rows);
+    let basis = minimum_basis(candidates);
 
     let result: Vec<Ring> = basis
         .iter()
@@ -236,11 +236,11 @@ pub fn rings<M: HasBonds + HasSites>(mol: &M) -> Rings {
 /// Fundamental cycles of every vertex's BFS tree, as edge bit vectors.
 fn horton_candidates(
     n: usize,
-    words: usize,
+    m: usize,
     adj: &[Vec<(usize, usize)>],
     rows: &[(BondId, usize, usize)],
-) -> Vec<Vec<u64>> {
-    let mut candidates: Vec<Vec<u64>> = Vec::new();
+) -> Vec<Bits> {
+    let mut candidates: Vec<Bits> = Vec::new();
 
     for root in 0..n {
         let mut dist = vec![usize::MAX; n];
@@ -268,48 +268,38 @@ fn horton_candidates(
                 continue;
             }
 
-            let mut bits = vec![0u64; words];
+            let mut bits = Bits::zeros(m);
             let mut x = lo;
             while x != root {
-                let pb = pred_bond[x];
-                bits[pb >> 6] ^= 1 << (pb & 63);
+                bits.toggle(pred_bond[x]);
                 x = pred_node[x];
             }
             let mut y = hi;
             while y != root {
-                let pb = pred_bond[y];
-                bits[pb >> 6] ^= 1 << (pb & 63);
+                bits.toggle(pred_bond[y]);
                 y = pred_node[y];
             }
-            bits[e >> 6] ^= 1 << (e & 63);
+            bits.toggle(e);
 
             candidates.push(bits);
         }
     }
 
-    candidates.sort_unstable_by(|a, b| {
-        let pa: u32 = a.iter().map(|w| w.count_ones()).sum();
-        let pb: u32 = b.iter().map(|w| w.count_ones()).sum();
-        pa.cmp(&pb).then_with(|| a.cmp(b))
-    });
+    candidates.sort_unstable_by(|a, b| a.count_ones().cmp(&b.count_ones()).then_with(|| a.cmp(b)));
     candidates.dedup();
     candidates
 }
 
 /// Greedy minimum-weight basis extraction over GF(2).
-fn minimum_basis(words: usize, candidates: Vec<Vec<u64>>) -> Vec<Vec<u64>> {
-    let mut pivots: HashMap<usize, Vec<u64>> = HashMap::new();
-    let mut basis: Vec<Vec<u64>> = Vec::new();
+fn minimum_basis(candidates: Vec<Bits>) -> Vec<Bits> {
+    let mut pivots: HashMap<usize, Bits> = HashMap::new();
+    let mut basis: Vec<Bits> = Vec::new();
 
     for cand in candidates {
         let mut residue = cand.clone();
-        while let Some(p) = lowest_set_bit(&residue) {
+        while let Some(p) = residue.lowest_set() {
             match pivots.get(&p) {
-                Some(reducer) => {
-                    for k in 0..words {
-                        residue[k] ^= reducer[k];
-                    }
-                }
+                Some(reducer) => residue.xor(reducer),
                 None => {
                     pivots.insert(p, residue);
                     basis.push(cand);
@@ -322,18 +312,10 @@ fn minimum_basis(words: usize, candidates: Vec<Vec<u64>>) -> Vec<Vec<u64>> {
     basis
 }
 
-/// Index of the lowest set bit, or `None` if all bits are clear.
-fn lowest_set_bit(bits: &[u64]) -> Option<usize> {
-    bits.iter()
-        .enumerate()
-        .find(|&(_, &w)| w != 0)
-        .map(|(k, &w)| k * 64 + w.trailing_zeros() as usize)
-}
-
 /// Walks an edge bit vector into a canonically ordered [`Ring`].
-fn trace_ring(bits: &[u64], m: usize, rows: &[(BondId, usize, usize)], sites: &[SiteId]) -> Ring {
+fn trace_ring(bits: &Bits, m: usize, rows: &[(BondId, usize, usize)], sites: &[SiteId]) -> Ring {
     let mut local: HashMap<usize, Vec<(usize, usize)>> = HashMap::new();
-    for e in (0..m).filter(|&e| (bits[e >> 6] >> (e & 63)) & 1 == 1) {
+    for e in (0..m).filter(|&e| bits.test(e)) {
         let (_, lo, hi) = rows[e];
         local.entry(lo).or_default().push((e, hi));
         local.entry(hi).or_default().push((e, lo));
