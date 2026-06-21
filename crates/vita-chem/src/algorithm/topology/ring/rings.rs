@@ -33,11 +33,11 @@ impl Ring {
 
 /// The minimum cycle basis (MCB) of a molecule.
 ///
-/// Decomposes the cycle space into the fewest independent rings — exactly
-/// `cycle_rank` of them — chosen to have the least total size. For nearly all
-/// molecules this is the chemically intended ring perception; where several
-/// equivalent bases exist (cage systems such as cubane), a canonical
-/// site-ordered tie-break makes the choice deterministic.
+/// Decomposes the cycle space into the fewest independent rings — the cycle
+/// rank, which [`count`](fn@super::count) reports — chosen to have the least
+/// total size. For nearly all molecules this is the chemically intended ring
+/// perception; where several equivalent bases exist (cage systems such as
+/// cubane), a canonical site-ordered tie-break makes the choice deterministic.
 ///
 /// Obtain via [`rings`].
 pub struct Rings {
