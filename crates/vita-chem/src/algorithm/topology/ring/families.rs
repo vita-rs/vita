@@ -121,6 +121,28 @@ impl RingFamilies {
         }
     }
 
+    /// Iterates the spiro atoms of the molecule.
+    ///
+    /// A site is a spiro atom when two rings meet at it alone, sharing that one
+    /// site and no bond.
+    pub fn spiro_sites(&self) -> impl Iterator<Item = SiteId> + '_ {
+        self.site_index
+            .iter()
+            .filter(|&(_, fams)| self.meet_at_point(fams))
+            .map(|(&s, _)| s)
+    }
+
+    /// Iterates the fusion bonds of the molecule.
+    ///
+    /// A bond is a fusion bond when two or more rings share it, so it lies in
+    /// two or more families.
+    pub fn fusion_bonds(&self) -> impl Iterator<Item = BondId> + '_ {
+        self.bond_index
+            .iter()
+            .filter(|(_, v)| v.len() >= 2)
+            .map(|(&b, _)| b)
+    }
+
     /// Derives ring membership from the families.
     ///
     /// A site or bond lies in a ring exactly when it appears in some family.
@@ -180,6 +202,19 @@ impl RingFamilies {
             .collect();
         out.sort_unstable();
         out.into_iter()
+    }
+
+    /// Returns `true` if two of the families share exactly one site.
+    fn meet_at_point(&self, fams: &[usize]) -> bool {
+        for (i, &a) in fams.iter().enumerate() {
+            for &b in &fams[i + 1..] {
+                let (a, b) = (&self.families[a].sites, &self.families[b].sites);
+                if a.iter().filter(|&&s| b.contains(&s)).count() == 1 {
+                    return true;
+                }
+            }
+        }
+        false
     }
 }
 
@@ -975,6 +1010,33 @@ mod tests {
     #[test]
     fn same_unknown_is_false() {
         assert!(!families(&triangle()).same(s(1), s(99)));
+    }
+
+    #[test]
+    fn spiro_site_is_the_shared_atom() {
+        let f = families(&spiro());
+        assert_eq!(f.spiro_sites().collect::<Vec<_>>(), vec![s(3)]);
+    }
+
+    #[test]
+    fn fused_has_no_spiro_sites() {
+        assert_eq!(families(&fused()).spiro_sites().count(), 0);
+    }
+
+    #[test]
+    fn bicyclo222_has_no_spiro_sites() {
+        assert_eq!(families(&bicyclo222()).spiro_sites().count(), 0);
+    }
+
+    #[test]
+    fn fusion_bond_is_the_shared_edge() {
+        let f = families(&fused());
+        assert_eq!(f.fusion_bonds().collect::<Vec<_>>(), vec![b(3)]);
+    }
+
+    #[test]
+    fn spiro_has_no_fusion_bonds() {
+        assert_eq!(families(&spiro()).fusion_bonds().count(), 0);
     }
 
     #[test]
