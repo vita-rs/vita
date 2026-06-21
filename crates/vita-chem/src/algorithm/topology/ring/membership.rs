@@ -7,8 +7,8 @@ use crate::{BondId, HasBonds};
 /// The ring membership of a molecule's sites and bonds.
 ///
 /// A bond is a ring bond if and only if it is not a bridge; that is, removing
-/// it would leave the molecule no less connected. A site is a ring site if and
-/// only if it is incident to at least one ring bond.
+/// it would not increase the number of connected components. A site is a ring
+/// site if and only if it is incident to at least one ring bond.
 ///
 /// Obtain via [`membership`].
 pub struct RingMembership {
@@ -46,6 +46,11 @@ impl RingMembership {
     pub fn is_acyclic(&self) -> bool {
         self.bonds.is_empty()
     }
+
+    /// Builds a membership from its ring-site and ring-bond sets.
+    pub(super) fn from_sets(sites: HashSet<SiteId>, bonds: HashSet<BondId>) -> Self {
+        RingMembership { sites, bonds }
+    }
 }
 
 /// Ring membership of every site and bond.
@@ -66,10 +71,7 @@ pub fn membership<M: HasBonds + HasSites>(mol: &M) -> RingMembership {
     let mut ring_bonds: HashSet<BondId> = HashSet::new();
 
     if n == 0 {
-        return RingMembership {
-            sites: ring_sites,
-            bonds: ring_bonds,
-        };
+        return RingMembership::from_sets(ring_sites, ring_bonds);
     }
 
     let site_pos: HashMap<SiteId, usize> = sites.iter().enumerate().map(|(i, &s)| (s, i)).collect();
@@ -140,10 +142,7 @@ pub fn membership<M: HasBonds + HasSites>(mol: &M) -> RingMembership {
         }
     }
 
-    RingMembership {
-        sites: ring_sites,
-        bonds: ring_bonds,
-    }
+    RingMembership::from_sets(ring_sites, ring_bonds)
 }
 
 #[cfg(test)]
