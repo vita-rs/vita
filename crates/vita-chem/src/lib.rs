@@ -9,8 +9,8 @@ pub use hybridization::Hybridization;
 pub use id::BondId;
 
 pub use capability::{
-    HasBondOrders, HasBonds, HasFormalCharges, HasHybridizations, HasPartialCharges,
-    HasRadicalElectrons,
+    HasAromaticity, HasBondOrders, HasBonds, HasFormalCharges, HasHybridizations,
+    HasPartialCharges, HasRadicalElectrons,
 };
 
 pub use algorithm::topology;
