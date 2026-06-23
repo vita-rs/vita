@@ -14,3 +14,4 @@ pub use capability::{
 };
 
 pub use algorithm::topology;
+pub use algorithm::valence;
