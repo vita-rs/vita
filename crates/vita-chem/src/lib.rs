@@ -13,5 +13,6 @@ pub use capability::{
     HasPartialCharges, HasRadicalElectrons,
 };
 
+pub use algorithm::aromaticity;
 pub use algorithm::topology;
 pub use algorithm::valence;
