@@ -383,3 +383,1758 @@ fn perimeter<M: HasBondOrders>(mol: &M, basis: &[&Ring], group: &[usize]) -> Opt
 
     Some(sites)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{BondId, HasAromaticity, HasBonds};
+    use vita_core::{Element, HasSites};
+
+    fn s(n: u32) -> SiteId {
+        SiteId::new(n).unwrap()
+    }
+
+    fn b(n: u32) -> BondId {
+        BondId::new(n).unwrap()
+    }
+
+    fn elem(symbol: &str) -> Element {
+        Element::from_symbol(symbol).unwrap()
+    }
+
+    struct Mol {
+        sites: Vec<SiteId>,
+        elements: Vec<Element>,
+        charges: Vec<i8>,
+        radicals: Vec<u8>,
+        bonds: Vec<BondId>,
+        endpoints: Vec<(SiteId, SiteId)>,
+        orders: Vec<BondOrder>,
+    }
+
+    impl HasSites for Mol {
+        fn sites(&self) -> impl Iterator<Item = SiteId> + '_ {
+            self.sites.iter().copied()
+        }
+    }
+
+    impl HasElements for Mol {
+        fn element(&self, site: SiteId) -> Element {
+            let i = self.sites.iter().position(|&s| s == site).unwrap();
+            self.elements[i]
+        }
+    }
+
+    impl HasFormalCharges for Mol {
+        fn formal_charge(&self, site: SiteId) -> i8 {
+            let i = self.sites.iter().position(|&s| s == site).unwrap();
+            self.charges[i]
+        }
+    }
+
+    impl HasRadicalElectrons for Mol {
+        fn radical_electron(&self, site: SiteId) -> u8 {
+            let i = self.sites.iter().position(|&s| s == site).unwrap();
+            self.radicals[i]
+        }
+    }
+
+    impl HasBonds for Mol {
+        fn bonds(&self) -> impl Iterator<Item = BondId> + '_ {
+            self.bonds.iter().copied()
+        }
+
+        fn bond_endpoints(&self, bond: BondId) -> (SiteId, SiteId) {
+            let i = self.bonds.iter().position(|&x| x == bond).unwrap();
+            self.endpoints[i]
+        }
+    }
+
+    impl HasBondOrders for Mol {
+        fn bond_order(&self, bond: BondId) -> BondOrder {
+            let i = self.bonds.iter().position(|&x| x == bond).unwrap();
+            self.orders[i]
+        }
+    }
+
+    fn empty() -> Mol {
+        Mol {
+            sites: vec![],
+            elements: vec![],
+            charges: vec![],
+            radicals: vec![],
+            bonds: vec![],
+            endpoints: vec![],
+            orders: vec![],
+        }
+    }
+
+    fn ethane() -> Mol {
+        Mol {
+            sites: vec![s(1), s(2), s(3), s(4), s(5), s(6), s(7), s(8)],
+            elements: vec![
+                elem("C"),
+                elem("C"),
+                elem("H"),
+                elem("H"),
+                elem("H"),
+                elem("H"),
+                elem("H"),
+                elem("H"),
+            ],
+            charges: vec![0, 0, 0, 0, 0, 0, 0, 0],
+            radicals: vec![0, 0, 0, 0, 0, 0, 0, 0],
+            bonds: vec![b(1), b(2), b(3), b(4), b(5), b(6), b(7)],
+            endpoints: vec![
+                (s(1), s(2)),
+                (s(1), s(3)),
+                (s(1), s(4)),
+                (s(1), s(5)),
+                (s(2), s(6)),
+                (s(2), s(7)),
+                (s(2), s(8)),
+            ],
+            orders: vec![
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+            ],
+        }
+    }
+
+    fn benzene() -> Mol {
+        Mol {
+            sites: vec![
+                s(1),
+                s(2),
+                s(3),
+                s(4),
+                s(5),
+                s(6),
+                s(7),
+                s(8),
+                s(9),
+                s(10),
+                s(11),
+                s(12),
+            ],
+            elements: vec![
+                elem("C"),
+                elem("C"),
+                elem("C"),
+                elem("C"),
+                elem("C"),
+                elem("C"),
+                elem("H"),
+                elem("H"),
+                elem("H"),
+                elem("H"),
+                elem("H"),
+                elem("H"),
+            ],
+            charges: vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            radicals: vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            bonds: vec![
+                b(1),
+                b(2),
+                b(3),
+                b(4),
+                b(5),
+                b(6),
+                b(7),
+                b(8),
+                b(9),
+                b(10),
+                b(11),
+                b(12),
+            ],
+            endpoints: vec![
+                (s(1), s(2)),
+                (s(2), s(3)),
+                (s(3), s(4)),
+                (s(4), s(5)),
+                (s(5), s(6)),
+                (s(6), s(1)),
+                (s(1), s(7)),
+                (s(2), s(8)),
+                (s(3), s(9)),
+                (s(4), s(10)),
+                (s(5), s(11)),
+                (s(6), s(12)),
+            ],
+            orders: vec![
+                BondOrder::Double,
+                BondOrder::Single,
+                BondOrder::Double,
+                BondOrder::Single,
+                BondOrder::Double,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+            ],
+        }
+    }
+
+    fn pyridine() -> Mol {
+        Mol {
+            sites: vec![
+                s(1),
+                s(2),
+                s(3),
+                s(4),
+                s(5),
+                s(6),
+                s(7),
+                s(8),
+                s(9),
+                s(10),
+                s(11),
+            ],
+            elements: vec![
+                elem("N"),
+                elem("C"),
+                elem("C"),
+                elem("C"),
+                elem("C"),
+                elem("C"),
+                elem("H"),
+                elem("H"),
+                elem("H"),
+                elem("H"),
+                elem("H"),
+            ],
+            charges: vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            radicals: vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            bonds: vec![
+                b(1),
+                b(2),
+                b(3),
+                b(4),
+                b(5),
+                b(6),
+                b(7),
+                b(8),
+                b(9),
+                b(10),
+                b(11),
+            ],
+            endpoints: vec![
+                (s(1), s(2)),
+                (s(2), s(3)),
+                (s(3), s(4)),
+                (s(4), s(5)),
+                (s(5), s(6)),
+                (s(6), s(1)),
+                (s(2), s(7)),
+                (s(3), s(8)),
+                (s(4), s(9)),
+                (s(5), s(10)),
+                (s(6), s(11)),
+            ],
+            orders: vec![
+                BondOrder::Double,
+                BondOrder::Single,
+                BondOrder::Double,
+                BondOrder::Single,
+                BondOrder::Double,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+            ],
+        }
+    }
+
+    fn pyrimidine() -> Mol {
+        Mol {
+            sites: vec![s(1), s(2), s(3), s(4), s(5), s(6), s(7), s(8), s(9), s(10)],
+            elements: vec![
+                elem("N"),
+                elem("C"),
+                elem("N"),
+                elem("C"),
+                elem("C"),
+                elem("C"),
+                elem("H"),
+                elem("H"),
+                elem("H"),
+                elem("H"),
+            ],
+            charges: vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            radicals: vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            bonds: vec![b(1), b(2), b(3), b(4), b(5), b(6), b(7), b(8), b(9), b(10)],
+            endpoints: vec![
+                (s(1), s(2)),
+                (s(2), s(3)),
+                (s(3), s(4)),
+                (s(4), s(5)),
+                (s(5), s(6)),
+                (s(6), s(1)),
+                (s(2), s(7)),
+                (s(4), s(8)),
+                (s(5), s(9)),
+                (s(6), s(10)),
+            ],
+            orders: vec![
+                BondOrder::Double,
+                BondOrder::Single,
+                BondOrder::Double,
+                BondOrder::Single,
+                BondOrder::Double,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+            ],
+        }
+    }
+
+    fn pyrrole() -> Mol {
+        Mol {
+            sites: vec![s(1), s(2), s(3), s(4), s(5), s(6), s(7), s(8), s(9), s(10)],
+            elements: vec![
+                elem("N"),
+                elem("C"),
+                elem("C"),
+                elem("C"),
+                elem("C"),
+                elem("H"),
+                elem("H"),
+                elem("H"),
+                elem("H"),
+                elem("H"),
+            ],
+            charges: vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            radicals: vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            bonds: vec![b(1), b(2), b(3), b(4), b(5), b(6), b(7), b(8), b(9), b(10)],
+            endpoints: vec![
+                (s(1), s(2)),
+                (s(2), s(3)),
+                (s(3), s(4)),
+                (s(4), s(5)),
+                (s(5), s(1)),
+                (s(1), s(6)),
+                (s(2), s(7)),
+                (s(3), s(8)),
+                (s(4), s(9)),
+                (s(5), s(10)),
+            ],
+            orders: vec![
+                BondOrder::Single,
+                BondOrder::Double,
+                BondOrder::Single,
+                BondOrder::Double,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+            ],
+        }
+    }
+
+    fn furan() -> Mol {
+        Mol {
+            sites: vec![s(1), s(2), s(3), s(4), s(5), s(6), s(7), s(8), s(9)],
+            elements: vec![
+                elem("O"),
+                elem("C"),
+                elem("C"),
+                elem("C"),
+                elem("C"),
+                elem("H"),
+                elem("H"),
+                elem("H"),
+                elem("H"),
+            ],
+            charges: vec![0, 0, 0, 0, 0, 0, 0, 0, 0],
+            radicals: vec![0, 0, 0, 0, 0, 0, 0, 0, 0],
+            bonds: vec![b(1), b(2), b(3), b(4), b(5), b(6), b(7), b(8), b(9)],
+            endpoints: vec![
+                (s(1), s(2)),
+                (s(2), s(3)),
+                (s(3), s(4)),
+                (s(4), s(5)),
+                (s(5), s(1)),
+                (s(2), s(6)),
+                (s(3), s(7)),
+                (s(4), s(8)),
+                (s(5), s(9)),
+            ],
+            orders: vec![
+                BondOrder::Single,
+                BondOrder::Double,
+                BondOrder::Single,
+                BondOrder::Double,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+            ],
+        }
+    }
+
+    fn thiophene() -> Mol {
+        Mol {
+            sites: vec![s(1), s(2), s(3), s(4), s(5), s(6), s(7), s(8), s(9)],
+            elements: vec![
+                elem("S"),
+                elem("C"),
+                elem("C"),
+                elem("C"),
+                elem("C"),
+                elem("H"),
+                elem("H"),
+                elem("H"),
+                elem("H"),
+            ],
+            charges: vec![0, 0, 0, 0, 0, 0, 0, 0, 0],
+            radicals: vec![0, 0, 0, 0, 0, 0, 0, 0, 0],
+            bonds: vec![b(1), b(2), b(3), b(4), b(5), b(6), b(7), b(8), b(9)],
+            endpoints: vec![
+                (s(1), s(2)),
+                (s(2), s(3)),
+                (s(3), s(4)),
+                (s(4), s(5)),
+                (s(5), s(1)),
+                (s(2), s(6)),
+                (s(3), s(7)),
+                (s(4), s(8)),
+                (s(5), s(9)),
+            ],
+            orders: vec![
+                BondOrder::Single,
+                BondOrder::Double,
+                BondOrder::Single,
+                BondOrder::Double,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+            ],
+        }
+    }
+
+    fn imidazole() -> Mol {
+        Mol {
+            sites: vec![s(1), s(2), s(3), s(4), s(5), s(6), s(7), s(8), s(9)],
+            elements: vec![
+                elem("N"),
+                elem("C"),
+                elem("N"),
+                elem("C"),
+                elem("C"),
+                elem("H"),
+                elem("H"),
+                elem("H"),
+                elem("H"),
+            ],
+            charges: vec![0, 0, 0, 0, 0, 0, 0, 0, 0],
+            radicals: vec![0, 0, 0, 0, 0, 0, 0, 0, 0],
+            bonds: vec![b(1), b(2), b(3), b(4), b(5), b(6), b(7), b(8), b(9)],
+            endpoints: vec![
+                (s(1), s(2)),
+                (s(2), s(3)),
+                (s(3), s(4)),
+                (s(4), s(5)),
+                (s(5), s(1)),
+                (s(1), s(6)),
+                (s(2), s(7)),
+                (s(4), s(8)),
+                (s(5), s(9)),
+            ],
+            orders: vec![
+                BondOrder::Single,
+                BondOrder::Double,
+                BondOrder::Single,
+                BondOrder::Double,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+            ],
+        }
+    }
+
+    fn cyclopentadienyl_anion() -> Mol {
+        Mol {
+            sites: vec![s(1), s(2), s(3), s(4), s(5), s(6), s(7), s(8), s(9), s(10)],
+            elements: vec![
+                elem("C"),
+                elem("C"),
+                elem("C"),
+                elem("C"),
+                elem("C"),
+                elem("H"),
+                elem("H"),
+                elem("H"),
+                elem("H"),
+                elem("H"),
+            ],
+            charges: vec![-1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            radicals: vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            bonds: vec![b(1), b(2), b(3), b(4), b(5), b(6), b(7), b(8), b(9), b(10)],
+            endpoints: vec![
+                (s(1), s(2)),
+                (s(2), s(3)),
+                (s(3), s(4)),
+                (s(4), s(5)),
+                (s(5), s(1)),
+                (s(1), s(6)),
+                (s(2), s(7)),
+                (s(3), s(8)),
+                (s(4), s(9)),
+                (s(5), s(10)),
+            ],
+            orders: vec![
+                BondOrder::Single,
+                BondOrder::Double,
+                BondOrder::Single,
+                BondOrder::Double,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+            ],
+        }
+    }
+
+    fn tropylium_cation() -> Mol {
+        Mol {
+            sites: vec![
+                s(1),
+                s(2),
+                s(3),
+                s(4),
+                s(5),
+                s(6),
+                s(7),
+                s(8),
+                s(9),
+                s(10),
+                s(11),
+                s(12),
+                s(13),
+                s(14),
+            ],
+            elements: vec![
+                elem("C"),
+                elem("C"),
+                elem("C"),
+                elem("C"),
+                elem("C"),
+                elem("C"),
+                elem("C"),
+                elem("H"),
+                elem("H"),
+                elem("H"),
+                elem("H"),
+                elem("H"),
+                elem("H"),
+                elem("H"),
+            ],
+            charges: vec![1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            radicals: vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            bonds: vec![
+                b(1),
+                b(2),
+                b(3),
+                b(4),
+                b(5),
+                b(6),
+                b(7),
+                b(8),
+                b(9),
+                b(10),
+                b(11),
+                b(12),
+                b(13),
+                b(14),
+            ],
+            endpoints: vec![
+                (s(1), s(2)),
+                (s(2), s(3)),
+                (s(3), s(4)),
+                (s(4), s(5)),
+                (s(5), s(6)),
+                (s(6), s(7)),
+                (s(7), s(1)),
+                (s(1), s(8)),
+                (s(2), s(9)),
+                (s(3), s(10)),
+                (s(4), s(11)),
+                (s(5), s(12)),
+                (s(6), s(13)),
+                (s(7), s(14)),
+            ],
+            orders: vec![
+                BondOrder::Single,
+                BondOrder::Double,
+                BondOrder::Single,
+                BondOrder::Double,
+                BondOrder::Single,
+                BondOrder::Double,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+            ],
+        }
+    }
+
+    fn tropone() -> Mol {
+        Mol {
+            sites: vec![
+                s(1),
+                s(2),
+                s(3),
+                s(4),
+                s(5),
+                s(6),
+                s(7),
+                s(8),
+                s(9),
+                s(10),
+                s(11),
+                s(12),
+                s(13),
+                s(14),
+            ],
+            elements: vec![
+                elem("C"),
+                elem("C"),
+                elem("C"),
+                elem("C"),
+                elem("C"),
+                elem("C"),
+                elem("C"),
+                elem("O"),
+                elem("H"),
+                elem("H"),
+                elem("H"),
+                elem("H"),
+                elem("H"),
+                elem("H"),
+            ],
+            charges: vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            radicals: vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            bonds: vec![
+                b(1),
+                b(2),
+                b(3),
+                b(4),
+                b(5),
+                b(6),
+                b(7),
+                b(8),
+                b(9),
+                b(10),
+                b(11),
+                b(12),
+                b(13),
+                b(14),
+            ],
+            endpoints: vec![
+                (s(1), s(2)),
+                (s(2), s(3)),
+                (s(3), s(4)),
+                (s(4), s(5)),
+                (s(5), s(6)),
+                (s(6), s(7)),
+                (s(7), s(1)),
+                (s(1), s(8)),
+                (s(2), s(9)),
+                (s(3), s(10)),
+                (s(4), s(11)),
+                (s(5), s(12)),
+                (s(6), s(13)),
+                (s(7), s(14)),
+            ],
+            orders: vec![
+                BondOrder::Single,
+                BondOrder::Double,
+                BondOrder::Single,
+                BondOrder::Double,
+                BondOrder::Single,
+                BondOrder::Double,
+                BondOrder::Single,
+                BondOrder::Double,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+            ],
+        }
+    }
+
+    fn naphthalene() -> Mol {
+        Mol {
+            sites: vec![
+                s(1),
+                s(2),
+                s(3),
+                s(4),
+                s(5),
+                s(6),
+                s(7),
+                s(8),
+                s(9),
+                s(10),
+                s(11),
+                s(12),
+                s(13),
+                s(14),
+                s(15),
+                s(16),
+                s(17),
+                s(18),
+            ],
+            elements: vec![
+                elem("C"),
+                elem("C"),
+                elem("C"),
+                elem("C"),
+                elem("C"),
+                elem("C"),
+                elem("C"),
+                elem("C"),
+                elem("C"),
+                elem("C"),
+                elem("H"),
+                elem("H"),
+                elem("H"),
+                elem("H"),
+                elem("H"),
+                elem("H"),
+                elem("H"),
+                elem("H"),
+            ],
+            charges: vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            radicals: vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            bonds: vec![
+                b(1),
+                b(2),
+                b(3),
+                b(4),
+                b(5),
+                b(6),
+                b(7),
+                b(8),
+                b(9),
+                b(10),
+                b(11),
+                b(12),
+                b(13),
+                b(14),
+                b(15),
+                b(16),
+                b(17),
+                b(18),
+                b(19),
+            ],
+            endpoints: vec![
+                (s(1), s(2)),
+                (s(2), s(3)),
+                (s(3), s(4)),
+                (s(4), s(9)),
+                (s(9), s(10)),
+                (s(10), s(1)),
+                (s(5), s(6)),
+                (s(6), s(7)),
+                (s(7), s(8)),
+                (s(8), s(9)),
+                (s(10), s(5)),
+                (s(1), s(11)),
+                (s(2), s(12)),
+                (s(3), s(13)),
+                (s(4), s(14)),
+                (s(5), s(15)),
+                (s(6), s(16)),
+                (s(7), s(17)),
+                (s(8), s(18)),
+            ],
+            orders: vec![
+                BondOrder::Double,
+                BondOrder::Single,
+                BondOrder::Double,
+                BondOrder::Single,
+                BondOrder::Double,
+                BondOrder::Single,
+                BondOrder::Double,
+                BondOrder::Single,
+                BondOrder::Double,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+            ],
+        }
+    }
+
+    fn indole() -> Mol {
+        Mol {
+            sites: vec![
+                s(1),
+                s(2),
+                s(3),
+                s(4),
+                s(5),
+                s(6),
+                s(7),
+                s(8),
+                s(9),
+                s(10),
+                s(11),
+                s(12),
+                s(13),
+                s(14),
+                s(15),
+                s(16),
+            ],
+            elements: vec![
+                elem("N"),
+                elem("C"),
+                elem("C"),
+                elem("C"),
+                elem("C"),
+                elem("C"),
+                elem("C"),
+                elem("C"),
+                elem("C"),
+                elem("H"),
+                elem("H"),
+                elem("H"),
+                elem("H"),
+                elem("H"),
+                elem("H"),
+                elem("H"),
+            ],
+            charges: vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            radicals: vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            bonds: vec![
+                b(1),
+                b(2),
+                b(3),
+                b(4),
+                b(5),
+                b(6),
+                b(7),
+                b(8),
+                b(9),
+                b(10),
+                b(11),
+                b(12),
+                b(13),
+                b(14),
+                b(15),
+                b(16),
+                b(17),
+            ],
+            endpoints: vec![
+                (s(1), s(2)),
+                (s(2), s(3)),
+                (s(3), s(4)),
+                (s(4), s(9)),
+                (s(9), s(1)),
+                (s(4), s(5)),
+                (s(5), s(6)),
+                (s(6), s(7)),
+                (s(7), s(8)),
+                (s(8), s(9)),
+                (s(1), s(10)),
+                (s(2), s(11)),
+                (s(3), s(12)),
+                (s(5), s(13)),
+                (s(6), s(14)),
+                (s(7), s(15)),
+                (s(8), s(16)),
+            ],
+            orders: vec![
+                BondOrder::Single,
+                BondOrder::Double,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Double,
+                BondOrder::Single,
+                BondOrder::Double,
+                BondOrder::Single,
+                BondOrder::Double,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+            ],
+        }
+    }
+
+    fn azulene() -> Mol {
+        Mol {
+            sites: vec![
+                s(1),
+                s(2),
+                s(3),
+                s(4),
+                s(5),
+                s(6),
+                s(7),
+                s(8),
+                s(9),
+                s(10),
+                s(11),
+                s(12),
+                s(13),
+                s(14),
+                s(15),
+                s(16),
+                s(17),
+                s(18),
+            ],
+            elements: vec![
+                elem("C"),
+                elem("C"),
+                elem("C"),
+                elem("C"),
+                elem("C"),
+                elem("C"),
+                elem("C"),
+                elem("C"),
+                elem("C"),
+                elem("C"),
+                elem("H"),
+                elem("H"),
+                elem("H"),
+                elem("H"),
+                elem("H"),
+                elem("H"),
+                elem("H"),
+                elem("H"),
+            ],
+            charges: vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            radicals: vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            bonds: vec![
+                b(1),
+                b(2),
+                b(3),
+                b(4),
+                b(5),
+                b(6),
+                b(7),
+                b(8),
+                b(9),
+                b(10),
+                b(11),
+                b(12),
+                b(13),
+                b(14),
+                b(15),
+                b(16),
+                b(17),
+                b(18),
+                b(19),
+            ],
+            endpoints: vec![
+                (s(1), s(2)),
+                (s(2), s(3)),
+                (s(3), s(4)),
+                (s(4), s(5)),
+                (s(5), s(1)),
+                (s(2), s(6)),
+                (s(6), s(7)),
+                (s(7), s(8)),
+                (s(8), s(9)),
+                (s(9), s(10)),
+                (s(10), s(1)),
+                (s(3), s(11)),
+                (s(4), s(12)),
+                (s(5), s(13)),
+                (s(6), s(14)),
+                (s(7), s(15)),
+                (s(8), s(16)),
+                (s(9), s(17)),
+                (s(10), s(18)),
+            ],
+            orders: vec![
+                BondOrder::Single,
+                BondOrder::Double,
+                BondOrder::Single,
+                BondOrder::Double,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Double,
+                BondOrder::Single,
+                BondOrder::Double,
+                BondOrder::Single,
+                BondOrder::Double,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+            ],
+        }
+    }
+
+    fn biphenyl() -> Mol {
+        Mol {
+            sites: vec![
+                s(1),
+                s(2),
+                s(3),
+                s(4),
+                s(5),
+                s(6),
+                s(7),
+                s(8),
+                s(9),
+                s(10),
+                s(11),
+                s(12),
+                s(13),
+                s(14),
+                s(15),
+                s(16),
+                s(17),
+                s(18),
+                s(19),
+                s(20),
+                s(21),
+                s(22),
+            ],
+            elements: vec![
+                elem("C"),
+                elem("C"),
+                elem("C"),
+                elem("C"),
+                elem("C"),
+                elem("C"),
+                elem("C"),
+                elem("C"),
+                elem("C"),
+                elem("C"),
+                elem("C"),
+                elem("C"),
+                elem("H"),
+                elem("H"),
+                elem("H"),
+                elem("H"),
+                elem("H"),
+                elem("H"),
+                elem("H"),
+                elem("H"),
+                elem("H"),
+                elem("H"),
+            ],
+            charges: vec![
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            ],
+            radicals: vec![
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            ],
+            bonds: vec![
+                b(1),
+                b(2),
+                b(3),
+                b(4),
+                b(5),
+                b(6),
+                b(7),
+                b(8),
+                b(9),
+                b(10),
+                b(11),
+                b(12),
+                b(13),
+                b(14),
+                b(15),
+                b(16),
+                b(17),
+                b(18),
+                b(19),
+                b(20),
+                b(21),
+                b(22),
+                b(23),
+            ],
+            endpoints: vec![
+                (s(1), s(2)),
+                (s(2), s(3)),
+                (s(3), s(4)),
+                (s(4), s(5)),
+                (s(5), s(6)),
+                (s(6), s(1)),
+                (s(7), s(8)),
+                (s(8), s(9)),
+                (s(9), s(10)),
+                (s(10), s(11)),
+                (s(11), s(12)),
+                (s(12), s(7)),
+                (s(1), s(7)),
+                (s(2), s(13)),
+                (s(3), s(14)),
+                (s(4), s(15)),
+                (s(5), s(16)),
+                (s(6), s(17)),
+                (s(8), s(18)),
+                (s(9), s(19)),
+                (s(10), s(20)),
+                (s(11), s(21)),
+                (s(12), s(22)),
+            ],
+            orders: vec![
+                BondOrder::Double,
+                BondOrder::Single,
+                BondOrder::Double,
+                BondOrder::Single,
+                BondOrder::Double,
+                BondOrder::Single,
+                BondOrder::Double,
+                BondOrder::Single,
+                BondOrder::Double,
+                BondOrder::Single,
+                BondOrder::Double,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+            ],
+        }
+    }
+
+    fn cyclohexane() -> Mol {
+        Mol {
+            sites: vec![
+                s(1),
+                s(2),
+                s(3),
+                s(4),
+                s(5),
+                s(6),
+                s(7),
+                s(8),
+                s(9),
+                s(10),
+                s(11),
+                s(12),
+                s(13),
+                s(14),
+                s(15),
+                s(16),
+                s(17),
+                s(18),
+            ],
+            elements: vec![
+                elem("C"),
+                elem("C"),
+                elem("C"),
+                elem("C"),
+                elem("C"),
+                elem("C"),
+                elem("H"),
+                elem("H"),
+                elem("H"),
+                elem("H"),
+                elem("H"),
+                elem("H"),
+                elem("H"),
+                elem("H"),
+                elem("H"),
+                elem("H"),
+                elem("H"),
+                elem("H"),
+            ],
+            charges: vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            radicals: vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            bonds: vec![
+                b(1),
+                b(2),
+                b(3),
+                b(4),
+                b(5),
+                b(6),
+                b(7),
+                b(8),
+                b(9),
+                b(10),
+                b(11),
+                b(12),
+                b(13),
+                b(14),
+                b(15),
+                b(16),
+                b(17),
+                b(18),
+            ],
+            endpoints: vec![
+                (s(1), s(2)),
+                (s(2), s(3)),
+                (s(3), s(4)),
+                (s(4), s(5)),
+                (s(5), s(6)),
+                (s(6), s(1)),
+                (s(1), s(7)),
+                (s(1), s(8)),
+                (s(2), s(9)),
+                (s(2), s(10)),
+                (s(3), s(11)),
+                (s(3), s(12)),
+                (s(4), s(13)),
+                (s(4), s(14)),
+                (s(5), s(15)),
+                (s(5), s(16)),
+                (s(6), s(17)),
+                (s(6), s(18)),
+            ],
+            orders: vec![
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+            ],
+        }
+    }
+
+    fn cyclopentadiene() -> Mol {
+        Mol {
+            sites: vec![
+                s(1),
+                s(2),
+                s(3),
+                s(4),
+                s(5),
+                s(6),
+                s(7),
+                s(8),
+                s(9),
+                s(10),
+                s(11),
+            ],
+            elements: vec![
+                elem("C"),
+                elem("C"),
+                elem("C"),
+                elem("C"),
+                elem("C"),
+                elem("H"),
+                elem("H"),
+                elem("H"),
+                elem("H"),
+                elem("H"),
+                elem("H"),
+            ],
+            charges: vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            radicals: vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            bonds: vec![
+                b(1),
+                b(2),
+                b(3),
+                b(4),
+                b(5),
+                b(6),
+                b(7),
+                b(8),
+                b(9),
+                b(10),
+                b(11),
+            ],
+            endpoints: vec![
+                (s(1), s(2)),
+                (s(2), s(3)),
+                (s(3), s(4)),
+                (s(4), s(5)),
+                (s(5), s(1)),
+                (s(1), s(6)),
+                (s(1), s(7)),
+                (s(2), s(8)),
+                (s(3), s(9)),
+                (s(4), s(10)),
+                (s(5), s(11)),
+            ],
+            orders: vec![
+                BondOrder::Single,
+                BondOrder::Double,
+                BondOrder::Single,
+                BondOrder::Double,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+            ],
+        }
+    }
+
+    fn cyclobutadiene() -> Mol {
+        Mol {
+            sites: vec![s(1), s(2), s(3), s(4), s(5), s(6), s(7), s(8)],
+            elements: vec![
+                elem("C"),
+                elem("C"),
+                elem("C"),
+                elem("C"),
+                elem("H"),
+                elem("H"),
+                elem("H"),
+                elem("H"),
+            ],
+            charges: vec![0, 0, 0, 0, 0, 0, 0, 0],
+            radicals: vec![0, 0, 0, 0, 0, 0, 0, 0],
+            bonds: vec![b(1), b(2), b(3), b(4), b(5), b(6), b(7), b(8)],
+            endpoints: vec![
+                (s(1), s(2)),
+                (s(2), s(3)),
+                (s(3), s(4)),
+                (s(4), s(1)),
+                (s(1), s(5)),
+                (s(2), s(6)),
+                (s(3), s(7)),
+                (s(4), s(8)),
+            ],
+            orders: vec![
+                BondOrder::Double,
+                BondOrder::Single,
+                BondOrder::Double,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+            ],
+        }
+    }
+
+    fn cyclooctatetraene() -> Mol {
+        Mol {
+            sites: vec![
+                s(1),
+                s(2),
+                s(3),
+                s(4),
+                s(5),
+                s(6),
+                s(7),
+                s(8),
+                s(9),
+                s(10),
+                s(11),
+                s(12),
+                s(13),
+                s(14),
+                s(15),
+                s(16),
+            ],
+            elements: vec![
+                elem("C"),
+                elem("C"),
+                elem("C"),
+                elem("C"),
+                elem("C"),
+                elem("C"),
+                elem("C"),
+                elem("C"),
+                elem("H"),
+                elem("H"),
+                elem("H"),
+                elem("H"),
+                elem("H"),
+                elem("H"),
+                elem("H"),
+                elem("H"),
+            ],
+            charges: vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            radicals: vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            bonds: vec![
+                b(1),
+                b(2),
+                b(3),
+                b(4),
+                b(5),
+                b(6),
+                b(7),
+                b(8),
+                b(9),
+                b(10),
+                b(11),
+                b(12),
+                b(13),
+                b(14),
+                b(15),
+                b(16),
+            ],
+            endpoints: vec![
+                (s(1), s(2)),
+                (s(2), s(3)),
+                (s(3), s(4)),
+                (s(4), s(5)),
+                (s(5), s(6)),
+                (s(6), s(7)),
+                (s(7), s(8)),
+                (s(8), s(1)),
+                (s(1), s(9)),
+                (s(2), s(10)),
+                (s(3), s(11)),
+                (s(4), s(12)),
+                (s(5), s(13)),
+                (s(6), s(14)),
+                (s(7), s(15)),
+                (s(8), s(16)),
+            ],
+            orders: vec![
+                BondOrder::Double,
+                BondOrder::Single,
+                BondOrder::Double,
+                BondOrder::Single,
+                BondOrder::Double,
+                BondOrder::Single,
+                BondOrder::Double,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+            ],
+        }
+    }
+
+    fn fulvene() -> Mol {
+        Mol {
+            sites: vec![
+                s(1),
+                s(2),
+                s(3),
+                s(4),
+                s(5),
+                s(6),
+                s(7),
+                s(8),
+                s(9),
+                s(10),
+                s(11),
+                s(12),
+            ],
+            elements: vec![
+                elem("C"),
+                elem("C"),
+                elem("C"),
+                elem("C"),
+                elem("C"),
+                elem("C"),
+                elem("H"),
+                elem("H"),
+                elem("H"),
+                elem("H"),
+                elem("H"),
+                elem("H"),
+            ],
+            charges: vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            radicals: vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            bonds: vec![
+                b(1),
+                b(2),
+                b(3),
+                b(4),
+                b(5),
+                b(6),
+                b(7),
+                b(8),
+                b(9),
+                b(10),
+                b(11),
+                b(12),
+            ],
+            endpoints: vec![
+                (s(1), s(2)),
+                (s(2), s(3)),
+                (s(3), s(4)),
+                (s(4), s(5)),
+                (s(5), s(1)),
+                (s(1), s(6)),
+                (s(2), s(7)),
+                (s(3), s(8)),
+                (s(4), s(9)),
+                (s(5), s(10)),
+                (s(6), s(11)),
+                (s(6), s(12)),
+            ],
+            orders: vec![
+                BondOrder::Single,
+                BondOrder::Double,
+                BondOrder::Single,
+                BondOrder::Double,
+                BondOrder::Single,
+                BondOrder::Double,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+            ],
+        }
+    }
+
+    fn aromatic(mol: &Mol) -> Vec<BondId> {
+        let mut bonds: Vec<BondId> = perceive(mol).bonds().collect();
+        bonds.sort();
+        bonds
+    }
+
+    fn ring_bonds(count: u32) -> Vec<BondId> {
+        (1..=count).map(b).collect()
+    }
+
+    #[test]
+    fn empty_molecule_is_not_aromatic() {
+        assert!(perceive(&empty()).is_empty());
+    }
+
+    #[test]
+    fn acyclic_molecule_is_not_aromatic() {
+        assert!(perceive(&ethane()).is_empty());
+    }
+
+    #[test]
+    fn benzene_is_aromatic() {
+        assert_eq!(aromatic(&benzene()), ring_bonds(6));
+    }
+
+    #[test]
+    fn pyridine_is_aromatic() {
+        assert_eq!(aromatic(&pyridine()), ring_bonds(6));
+    }
+
+    #[test]
+    fn pyrimidine_is_aromatic() {
+        assert_eq!(aromatic(&pyrimidine()), ring_bonds(6));
+    }
+
+    #[test]
+    fn pyrrole_is_aromatic() {
+        assert_eq!(aromatic(&pyrrole()), ring_bonds(5));
+    }
+
+    #[test]
+    fn furan_is_aromatic() {
+        assert_eq!(aromatic(&furan()), ring_bonds(5));
+    }
+
+    #[test]
+    fn thiophene_is_aromatic() {
+        assert_eq!(aromatic(&thiophene()), ring_bonds(5));
+    }
+
+    #[test]
+    fn imidazole_is_aromatic() {
+        assert_eq!(aromatic(&imidazole()), ring_bonds(5));
+    }
+
+    #[test]
+    fn cyclopentadienyl_anion_is_aromatic() {
+        assert_eq!(aromatic(&cyclopentadienyl_anion()), ring_bonds(5));
+    }
+
+    #[test]
+    fn tropylium_cation_is_aromatic() {
+        assert_eq!(aromatic(&tropylium_cation()), ring_bonds(7));
+    }
+
+    #[test]
+    fn tropone_is_aromatic_despite_its_exocyclic_carbonyl() {
+        assert_eq!(aromatic(&tropone()), ring_bonds(7));
+    }
+
+    #[test]
+    fn naphthalene_is_aromatic() {
+        assert_eq!(aromatic(&naphthalene()), ring_bonds(11));
+    }
+
+    #[test]
+    fn indole_is_aromatic() {
+        assert_eq!(aromatic(&indole()), ring_bonds(10));
+    }
+
+    #[test]
+    fn azulene_is_aromatic_around_its_perimeter() {
+        assert_eq!(aromatic(&azulene()), ring_bonds(11));
+    }
+
+    #[test]
+    fn biphenyl_rings_are_aromatic() {
+        assert_eq!(aromatic(&biphenyl()), ring_bonds(12));
+    }
+
+    #[test]
+    fn cyclohexane_is_not_aromatic() {
+        assert!(perceive(&cyclohexane()).is_empty());
+    }
+
+    #[test]
+    fn cyclopentadiene_is_not_aromatic() {
+        assert!(perceive(&cyclopentadiene()).is_empty());
+    }
+
+    #[test]
+    fn cyclobutadiene_is_not_aromatic() {
+        assert!(perceive(&cyclobutadiene()).is_empty());
+    }
+
+    #[test]
+    fn cyclooctatetraene_is_not_aromatic() {
+        assert!(perceive(&cyclooctatetraene()).is_empty());
+    }
+
+    #[test]
+    fn fulvene_is_not_aromatic() {
+        assert!(perceive(&fulvene()).is_empty());
+    }
+
+    #[test]
+    fn bond_is_aromatic_only_inside_the_ring() {
+        let a = perceive(&benzene());
+        assert!(a.bond(b(1)));
+        assert!(!a.bond(b(7)));
+    }
+
+    #[test]
+    fn site_is_aromatic_only_on_the_ring() {
+        let a = perceive(&benzene());
+        assert!(a.site(s(1)));
+        assert!(!a.site(s(7)));
+    }
+
+    #[test]
+    fn aromatic_sites_are_the_ring_atoms() {
+        let mut sites: Vec<SiteId> = perceive(&benzene()).sites().collect();
+        sites.sort();
+        assert_eq!(sites, (1..=6).map(s).collect::<Vec<_>>());
+    }
+
+    #[test]
+    fn biphenyl_central_bond_is_not_aromatic() {
+        let a = perceive(&biphenyl());
+        assert!(!a.bond(b(13)));
+        assert!(a.site(s(1)));
+        assert!(a.site(s(7)));
+    }
+
+    #[test]
+    fn unknown_site_is_not_aromatic() {
+        assert!(!perceive(&benzene()).site(s(99)));
+    }
+
+    #[test]
+    fn unknown_bond_is_not_aromatic() {
+        assert!(!perceive(&benzene()).bond(b(99)));
+    }
+
+    #[test]
+    fn bound_view_answers_the_aromaticity_capability() {
+        let mol = benzene();
+        let perceived = perceive(&mol);
+        let view = perceived.bind(&mol);
+        assert!(view.is_aromatic(b(1)));
+        assert!(!view.is_aromatic(b(7)));
+        assert!(view.is_aromatic_site(s(1)));
+        assert!(!view.is_aromatic_site(s(7)));
+    }
+
+    #[test]
+    fn bound_view_forwards_the_skeleton() {
+        let mol = pyridine();
+        let perceived = perceive(&mol);
+        let view = perceived.bind(&mol);
+
+        let mut view_sites: Vec<SiteId> = view.sites().collect();
+        let mut mol_sites: Vec<SiteId> = mol.sites().collect();
+        view_sites.sort();
+        mol_sites.sort();
+        assert_eq!(view_sites, mol_sites);
+        assert_eq!(view.site_count(), mol.site_count());
+        assert!(view.contains_site(s(1)));
+
+        let mut view_bonds: Vec<BondId> = view.bonds().collect();
+        let mut mol_bonds: Vec<BondId> = mol.bonds().collect();
+        view_bonds.sort();
+        mol_bonds.sort();
+        assert_eq!(view_bonds, mol_bonds);
+        assert_eq!(view.bond_count(), mol.bond_count());
+        assert!(view.contains_bond(b(1)));
+        assert_eq!(view.bond_endpoints(b(1)), mol.bond_endpoints(b(1)));
+        assert_eq!(view.bond_between(s(1), s(2)), mol.bond_between(s(1), s(2)));
+
+        assert_eq!(view.degree(s(1)), mol.degree(s(1)));
+        let mut view_incident: Vec<(BondId, SiteId)> = view.bonds_of(s(1)).collect();
+        let mut mol_incident: Vec<(BondId, SiteId)> = mol.bonds_of(s(1)).collect();
+        view_incident.sort();
+        mol_incident.sort();
+        assert_eq!(view_incident, mol_incident);
+        let mut view_neighbours: Vec<SiteId> = view.neighbors(s(1)).collect();
+        let mut mol_neighbours: Vec<SiteId> = mol.neighbors(s(1)).collect();
+        view_neighbours.sort();
+        mol_neighbours.sort();
+        assert_eq!(view_neighbours, mol_neighbours);
+    }
+}
