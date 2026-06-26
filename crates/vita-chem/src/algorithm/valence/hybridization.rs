@@ -1,7 +1,10 @@
 use vita_core::{HasElements, SiteId};
 
 use super::lone_pairs::lone_pairs;
-use crate::{HasBondOrders, HasFormalCharges, HasRadicalElectrons, Hybridization};
+use crate::capability::delegation::forward_capabilities;
+use crate::{
+    HasBondOrders, HasFormalCharges, HasHybridizations, HasRadicalElectrons, Hybridization,
+};
 
 /// Hybridization of `site` from its electron-domain count.
 ///
@@ -39,6 +42,61 @@ pub fn hybridization<M: HasBondOrders + HasElements + HasFormalCharges + HasRadi
         7 => Hybridization::Sp3d3,
         _ => Hybridization::Other,
     })
+}
+
+/// A molecule viewed together with its computed hybridizations.
+///
+/// Answers hybridization from [`hybridization`] — the catch-all
+/// [`Other`](Hybridization::Other) where it is undefined — and forwards every
+/// other core and chem capability to the molecule, so a computed result reads
+/// as the [`HasHybridizations`] capability its consumers expect, at no cost
+/// beyond the single reference it holds.
+///
+/// Obtain via [`new`](Self::new).
+pub struct WithHybridizations<'a, M> {
+    mol: &'a M,
+}
+
+impl<'a, M: HasBondOrders + HasElements + HasFormalCharges + HasRadicalElectrons>
+    WithHybridizations<'a, M>
+{
+    /// Views `mol` together with its computed hybridizations, yielding a value
+    /// that implements [`HasHybridizations`].
+    ///
+    /// The view borrows `mol` and computes each hybridization on demand, holding
+    /// no buffer; it cannot fall out of step with the molecule. Feed it to
+    /// anything that reads the [`HasHybridizations`] capability.
+    pub fn new(mol: &'a M) -> Self {
+        Self { mol }
+    }
+}
+
+forward_capabilities!(
+    WithHybridizations,
+    mol,
+    HasAccelerations,
+    HasElements,
+    HasIsotopes,
+    HasLattice,
+    HasMasses,
+    HasNetCharge,
+    HasPositions,
+    HasSites,
+    HasVelocities,
+    HasAromaticity,
+    HasBondOrders,
+    HasBonds,
+    HasFormalCharges,
+    HasPartialCharges,
+    HasRadicalElectrons,
+);
+
+impl<M: HasBondOrders + HasElements + HasFormalCharges + HasRadicalElectrons> HasHybridizations
+    for WithHybridizations<'_, M>
+{
+    fn hybridization(&self, site: SiteId) -> Hybridization {
+        hybridization(self.mol, site).unwrap_or(Hybridization::Other)
+    }
 }
 
 #[cfg(test)]
@@ -219,5 +277,55 @@ mod tests {
             hybridization(&atom("Fe", 0, 0, &[BondOrder::Single; 2]), s(1)),
             None
         );
+    }
+
+    #[test]
+    fn bound_view_answers_the_hybridization_capability() {
+        let mol = atom("C", 0, 0, &[BondOrder::Single; 4]);
+        let view = WithHybridizations::new(&mol);
+        assert_eq!(view.hybridization(s(1)), Hybridization::Sp3);
+    }
+
+    #[test]
+    fn bound_view_takes_other_where_undefined() {
+        let mol = atom("Fe", 0, 0, &[BondOrder::Single; 2]);
+        let view = WithHybridizations::new(&mol);
+        assert_eq!(view.hybridization(s(1)), Hybridization::Other);
+    }
+
+    #[test]
+    fn bound_view_forwards_the_skeleton() {
+        let mol = atom("C", 0, 0, &[BondOrder::Single; 2]);
+        let view = WithHybridizations::new(&mol);
+
+        let mut view_sites: Vec<SiteId> = view.sites().collect();
+        let mut mol_sites: Vec<SiteId> = mol.sites().collect();
+        view_sites.sort();
+        mol_sites.sort();
+        assert_eq!(view_sites, mol_sites);
+        assert_eq!(view.site_count(), mol.site_count());
+        assert!(view.contains_site(s(1)));
+
+        let mut view_bonds: Vec<BondId> = view.bonds().collect();
+        let mut mol_bonds: Vec<BondId> = mol.bonds().collect();
+        view_bonds.sort();
+        mol_bonds.sort();
+        assert_eq!(view_bonds, mol_bonds);
+        assert_eq!(view.bond_count(), mol.bond_count());
+        assert!(view.contains_bond(b(1)));
+        assert_eq!(view.bond_endpoints(b(1)), mol.bond_endpoints(b(1)));
+        assert_eq!(view.bond_between(s(1), s(2)), mol.bond_between(s(1), s(2)));
+
+        assert_eq!(view.degree(s(1)), mol.degree(s(1)));
+        let mut view_incident: Vec<(BondId, SiteId)> = view.bonds_of(s(1)).collect();
+        let mut mol_incident: Vec<(BondId, SiteId)> = mol.bonds_of(s(1)).collect();
+        view_incident.sort();
+        mol_incident.sort();
+        assert_eq!(view_incident, mol_incident);
+        let mut view_neighbours: Vec<SiteId> = view.neighbors(s(1)).collect();
+        let mut mol_neighbours: Vec<SiteId> = mol.neighbors(s(1)).collect();
+        view_neighbours.sort();
+        mol_neighbours.sort();
+        assert_eq!(view_neighbours, mol_neighbours);
     }
 }
