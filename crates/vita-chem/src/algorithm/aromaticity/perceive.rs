@@ -1,7 +1,8 @@
 use std::collections::{HashMap, HashSet};
 
-use vita_core::{HasElements, HasSites, SiteId};
+use vita_core::{HasElements, SiteId};
 
+use crate::capability::delegation::forward_capabilities;
 use crate::topology::ring::{Ring, RingMembership, rings};
 use crate::valence::lone_pairs;
 use crate::{
@@ -70,10 +71,10 @@ impl Aromaticity {
 
 /// A molecule viewed together with its perceived [`Aromaticity`].
 ///
-/// Implements [`HasAromaticity`] by forwarding the bond and site skeleton to
-/// the molecule and answering aromaticity from the perception, so a computed
-/// result reads as the capability that consumers expect. The view costs nothing
-/// beyond the two references it holds.
+/// Answers aromaticity from the perception and forwards every other core and
+/// chem capability to the molecule, so a computed result reads as the
+/// [`HasAromaticity`] capability its consumers expect — at no cost beyond the
+/// two references it holds.
 ///
 /// Obtain via [`Aromaticity::bind`].
 pub struct WithAromaticity<'a, M> {
@@ -81,53 +82,25 @@ pub struct WithAromaticity<'a, M> {
     aromaticity: &'a Aromaticity,
 }
 
-impl<M: HasBonds> HasSites for WithAromaticity<'_, M> {
-    fn sites(&self) -> impl Iterator<Item = SiteId> + '_ {
-        self.mol.sites()
-    }
-
-    fn site_count(&self) -> usize {
-        self.mol.site_count()
-    }
-
-    fn contains_site(&self, site: SiteId) -> bool {
-        self.mol.contains_site(site)
-    }
-}
-
-impl<M: HasBonds> HasBonds for WithAromaticity<'_, M> {
-    fn bonds(&self) -> impl Iterator<Item = BondId> + '_ {
-        self.mol.bonds()
-    }
-
-    fn bond_endpoints(&self, bond: BondId) -> (SiteId, SiteId) {
-        self.mol.bond_endpoints(bond)
-    }
-
-    fn bond_count(&self) -> usize {
-        self.mol.bond_count()
-    }
-
-    fn contains_bond(&self, bond: BondId) -> bool {
-        self.mol.contains_bond(bond)
-    }
-
-    fn bond_between(&self, a: SiteId, b: SiteId) -> Option<BondId> {
-        self.mol.bond_between(a, b)
-    }
-
-    fn bonds_of(&self, site: SiteId) -> impl Iterator<Item = (BondId, SiteId)> + '_ {
-        self.mol.bonds_of(site)
-    }
-
-    fn neighbors(&self, site: SiteId) -> impl Iterator<Item = SiteId> + '_ {
-        self.mol.neighbors(site)
-    }
-
-    fn degree(&self, site: SiteId) -> usize {
-        self.mol.degree(site)
-    }
-}
+forward_capabilities!(
+    WithAromaticity,
+    mol,
+    HasAccelerations,
+    HasElements,
+    HasIsotopes,
+    HasLattice,
+    HasMasses,
+    HasNetCharge,
+    HasPositions,
+    HasSites,
+    HasVelocities,
+    HasBondOrders,
+    HasBonds,
+    HasFormalCharges,
+    HasHybridizations,
+    HasPartialCharges,
+    HasRadicalElectrons,
+);
 
 impl<M: HasBonds> HasAromaticity for WithAromaticity<'_, M> {
     fn is_aromatic(&self, bond: BondId) -> bool {
