@@ -1,9 +1,9 @@
 mod electronegativity;
+mod labelling;
 mod matching;
-mod refine;
 mod valence_electrons;
 
-pub(crate) use electronegativity::electronegativity;
-pub(crate) use matching::maximum_matching;
-pub(crate) use refine::refine;
-pub(crate) use valence_electrons::valence_electrons;
+pub use electronegativity::electronegativity;
+pub use labelling::labelling;
+pub use matching::maximum_matching;
+pub use valence_electrons::valence_electrons;

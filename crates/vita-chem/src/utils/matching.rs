@@ -15,7 +15,7 @@ const NIL: usize = usize::MAX;
 /// # Complexity
 ///
 /// O(V³) time, O(V) space.
-pub(crate) fn maximum_matching(adjacency: &[Vec<usize>]) -> Vec<Option<usize>> {
+pub fn maximum_matching(adjacency: &[Vec<usize>]) -> Vec<Option<usize>> {
     let n = adjacency.len();
     let mut blossom = Blossom {
         adjacency,

@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use vita_core::{HasSites, SiteId};
 
 use crate::HasBonds;
-use crate::utils::refine;
+use crate::utils::labelling;
 
 /// The symmetry classes of a molecule.
 ///
@@ -54,24 +54,17 @@ impl Orbits {
 
 /// Symmetry classes of a molecule.
 ///
-/// Refines the sites by 1-dimensional Weisfeiler–Leman colouring until no class
-/// splits further: two sites stay together only while their neighbours' classes
-/// match. Classes are ordered by their sites, which within each class are
-/// ascending.
+/// Colour refinement groups the sites by their neighbourhoods; where symmetry
+/// leaves a class unsplit, individualisation–refinement resolves it. Classes are
+/// ordered by their sites, ascending within each.
 ///
 /// # Complexity
 ///
-/// O(V · (V + E) · log V) time.
+/// O(V · (V + E) · log V) per refinement; near-linear in practice, exponential
+/// in the worst case.
 pub fn orbits<M: HasBonds + HasSites>(mol: &M) -> Orbits {
     let sites: Vec<SiteId> = mol.sites().collect();
     let n = sites.len();
-    if n == 0 {
-        return Orbits {
-            groups: Vec::new(),
-            index: HashMap::new(),
-        };
-    }
-
     let pos: HashMap<SiteId, usize> = sites.iter().enumerate().map(|(i, &s)| (s, i)).collect();
     let mut adjacency: Vec<Vec<(usize, usize)>> = vec![Vec::new(); n];
     for bond in mol.bonds() {
@@ -80,13 +73,14 @@ pub fn orbits<M: HasBonds + HasSites>(mol: &M) -> Orbits {
         adjacency[pos[&b]].push((pos[&a], 0));
     }
 
-    let mut class = vec![0; n];
-    let count = refine(&adjacency, &mut class);
-
-    let mut groups: Vec<Vec<SiteId>> = vec![Vec::new(); count];
-    for (v, &site) in sites.iter().enumerate() {
-        groups[class[v]].push(site);
+    let seed = vec![0; n];
+    let labelled = labelling(&adjacency, &seed);
+    let classes = labelled.orbits();
+    let mut members: HashMap<usize, Vec<SiteId>> = HashMap::new();
+    for (vertex, &site) in sites.iter().enumerate() {
+        members.entry(classes[vertex]).or_default().push(site);
     }
+    let mut groups: Vec<Vec<SiteId>> = members.into_values().collect();
     for group in &mut groups {
         group.sort_unstable();
     }

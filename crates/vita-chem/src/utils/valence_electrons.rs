@@ -3,7 +3,7 @@ use vita_core::Element;
 /// Valence (outer-shell s and p) electron count of a main-group element.
 ///
 /// Returns `None` for the d- and f-block, where the count is ambiguous.
-pub(crate) fn valence_electrons(element: Element) -> Option<u8> {
+pub fn valence_electrons(element: Element) -> Option<u8> {
     Some(match element.atomic_number() {
         1 | 3 | 11 | 19 | 37 | 55 | 87 => 1,
         2 | 4 | 12 | 20 | 38 | 56 | 88 => 2,

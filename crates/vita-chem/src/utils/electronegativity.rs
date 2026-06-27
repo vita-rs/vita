@@ -4,7 +4,7 @@ use vita_core::Element;
 /// the dimensionless scale from francium (0.70) to fluorine (3.98).
 ///
 /// Returns `None` only where no single value is established.
-pub(crate) fn electronegativity(element: Element) -> Option<f64> {
+pub fn electronegativity(element: Element) -> Option<f64> {
     Some(match element.atomic_number() {
         1 => 2.20,
         3 => 0.98,
