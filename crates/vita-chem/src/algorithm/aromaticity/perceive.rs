@@ -128,8 +128,8 @@ impl<M: HasBonds> HasAromaticity for WithAromaticity<'_, M> {
 ///   electrons (the nitrogen of pyrrole, the oxygen of furan);
 /// - an electron-deficient atom donates none through its empty p orbital (the
 ///   cation of tropylium, the boron of borole);
-/// - a saturated sp³ atom, a radical centre, or one of undefined valence cannot
-///   join an aromatic system, and excludes any cycle running through it.
+/// - a saturated sp³ atom, a π radical, or one of undefined valence cannot join
+///   an aromatic system, and excludes any cycle running through it.
 ///
 /// The cycles tested are the rings of the [minimum cycle basis](rings) and, for
 /// each fused ring system, its outer perimeter — enough to recognise azulene,
@@ -977,6 +977,78 @@ mod tests {
                 BondOrder::Double,
                 BondOrder::Single,
                 BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+            ],
+        }
+    }
+
+    fn phenyl_radical() -> Mol {
+        Mol {
+            sites: vec![
+                s(1),
+                s(2),
+                s(3),
+                s(4),
+                s(5),
+                s(6),
+                s(7),
+                s(8),
+                s(9),
+                s(10),
+                s(11),
+            ],
+            elements: vec![
+                elem("C"),
+                elem("C"),
+                elem("C"),
+                elem("C"),
+                elem("C"),
+                elem("C"),
+                elem("H"),
+                elem("H"),
+                elem("H"),
+                elem("H"),
+                elem("H"),
+            ],
+            charges: vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            radicals: vec![1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            bonds: vec![
+                b(1),
+                b(2),
+                b(3),
+                b(4),
+                b(5),
+                b(6),
+                b(7),
+                b(8),
+                b(9),
+                b(10),
+                b(11),
+            ],
+            endpoints: vec![
+                (s(1), s(2)),
+                (s(2), s(3)),
+                (s(3), s(4)),
+                (s(4), s(5)),
+                (s(5), s(6)),
+                (s(6), s(1)),
+                (s(2), s(7)),
+                (s(3), s(8)),
+                (s(4), s(9)),
+                (s(5), s(10)),
+                (s(6), s(11)),
+            ],
+            orders: vec![
+                BondOrder::Double,
+                BondOrder::Single,
+                BondOrder::Double,
+                BondOrder::Single,
+                BondOrder::Double,
                 BondOrder::Single,
                 BondOrder::Single,
                 BondOrder::Single,
@@ -1843,6 +1915,93 @@ mod tests {
         }
     }
 
+    fn cycloheptatrienyl_radical() -> Mol {
+        Mol {
+            sites: vec![
+                s(1),
+                s(2),
+                s(3),
+                s(4),
+                s(5),
+                s(6),
+                s(7),
+                s(8),
+                s(9),
+                s(10),
+                s(11),
+                s(12),
+                s(13),
+                s(14),
+            ],
+            elements: vec![
+                elem("C"),
+                elem("C"),
+                elem("C"),
+                elem("C"),
+                elem("C"),
+                elem("C"),
+                elem("C"),
+                elem("H"),
+                elem("H"),
+                elem("H"),
+                elem("H"),
+                elem("H"),
+                elem("H"),
+                elem("H"),
+            ],
+            charges: vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            radicals: vec![1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            bonds: vec![
+                b(1),
+                b(2),
+                b(3),
+                b(4),
+                b(5),
+                b(6),
+                b(7),
+                b(8),
+                b(9),
+                b(10),
+                b(11),
+                b(12),
+                b(13),
+                b(14),
+            ],
+            endpoints: vec![
+                (s(1), s(2)),
+                (s(2), s(3)),
+                (s(3), s(4)),
+                (s(4), s(5)),
+                (s(5), s(6)),
+                (s(6), s(7)),
+                (s(7), s(1)),
+                (s(1), s(8)),
+                (s(2), s(9)),
+                (s(3), s(10)),
+                (s(4), s(11)),
+                (s(5), s(12)),
+                (s(6), s(13)),
+                (s(7), s(14)),
+            ],
+            orders: vec![
+                BondOrder::Single,
+                BondOrder::Double,
+                BondOrder::Single,
+                BondOrder::Double,
+                BondOrder::Single,
+                BondOrder::Double,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+            ],
+        }
+    }
+
     fn fulvene() -> Mol {
         Mol {
             sites: vec![
@@ -2083,6 +2242,11 @@ mod tests {
     }
 
     #[test]
+    fn phenyl_radical_is_aromatic() {
+        assert_eq!(aromatic(&phenyl_radical()), ring_bonds(6));
+    }
+
+    #[test]
     fn tropone_is_aromatic_despite_its_exocyclic_carbonyl() {
         assert_eq!(aromatic(&tropone()), ring_bonds(7));
     }
@@ -2125,6 +2289,11 @@ mod tests {
     #[test]
     fn cyclooctatetraene_is_not_aromatic() {
         assert!(perceive(&cyclooctatetraene()).is_empty());
+    }
+
+    #[test]
+    fn cycloheptatrienyl_radical_is_not_aromatic() {
+        assert!(perceive(&cycloheptatrienyl_radical()).is_empty());
     }
 
     #[test]
