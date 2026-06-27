@@ -140,3 +140,79 @@ impl Blossom<'_> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn matched(matching: &[Option<usize>]) -> usize {
+        matching.iter().filter(|m| m.is_some()).count()
+    }
+
+    fn is_symmetric(matching: &[Option<usize>]) -> bool {
+        matching.iter().enumerate().all(|(v, &m)| match m {
+            Some(u) => matching[u] == Some(v),
+            None => true,
+        })
+    }
+
+    #[test]
+    fn empty_graph_has_no_matching() {
+        assert_eq!(maximum_matching(&[]), Vec::<Option<usize>>::new());
+    }
+
+    #[test]
+    fn isolated_vertex_is_unmatched() {
+        assert_eq!(maximum_matching(&[vec![]]), vec![None]);
+    }
+
+    #[test]
+    fn single_edge_is_matched() {
+        assert_eq!(
+            maximum_matching(&[vec![1], vec![0]]),
+            vec![Some(1), Some(0)]
+        );
+    }
+
+    #[test]
+    fn path_matches_all_but_one() {
+        let m = maximum_matching(&[vec![1], vec![0, 2], vec![1]]);
+        assert_eq!(matched(&m), 2);
+        assert!(is_symmetric(&m));
+    }
+
+    #[test]
+    fn even_cycle_is_perfectly_matched() {
+        let m = maximum_matching(&[vec![1, 3], vec![0, 2], vec![1, 3], vec![0, 2]]);
+        assert_eq!(matched(&m), 4);
+        assert!(is_symmetric(&m));
+    }
+
+    #[test]
+    fn odd_cycle_leaves_one_unmatched() {
+        let m = maximum_matching(&[vec![1, 2], vec![0, 2], vec![0, 1]]);
+        assert_eq!(matched(&m), 2);
+        assert!(is_symmetric(&m));
+    }
+
+    #[test]
+    fn blossom_is_contracted_to_match_a_pendant() {
+        let m = maximum_matching(&[vec![1, 2, 3], vec![0, 2], vec![0, 1], vec![0]]);
+        assert_eq!(matched(&m), 4);
+        assert!(is_symmetric(&m));
+    }
+
+    #[test]
+    fn joined_triangles_are_perfectly_matched() {
+        let m = maximum_matching(&[
+            vec![1, 2],
+            vec![0, 2],
+            vec![0, 1, 3],
+            vec![2, 4, 5],
+            vec![3, 5],
+            vec![3, 4],
+        ]);
+        assert_eq!(matched(&m), 6);
+        assert!(is_symmetric(&m));
+    }
+}
