@@ -375,6 +375,23 @@ mod tests {
         }
     }
 
+    fn two_triangles() -> Mol {
+        Mol {
+            sites: (1..=6).map(s).collect(),
+            elements: vec![elem("C"); 6],
+            bonds: (1..=6).map(b).collect(),
+            endpoints: vec![
+                (s(1), s(2)),
+                (s(2), s(3)),
+                (s(3), s(1)),
+                (s(4), s(5)),
+                (s(5), s(6)),
+                (s(6), s(4)),
+            ],
+            orders: vec![BondOrder::Single; 6],
+        }
+    }
+
     fn butane() -> Mol {
         Mol {
             sites: (1..=4).map(s).collect(),
@@ -534,6 +551,11 @@ mod tests {
     #[test]
     fn topology_is_part_of_identity() {
         assert_ne!(canon(&butane()), canon(&isobutane()));
+    }
+
+    #[test]
+    fn cyclic_topology_is_part_of_identity() {
+        assert_ne!(canon(&ring6()), canon(&two_triangles()));
     }
 
     #[test]
