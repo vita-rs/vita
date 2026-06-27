@@ -1,6 +1,7 @@
-use vita_core::{Element, HasElements, SiteId};
+use vita_core::{HasElements, SiteId};
 
 use super::explicit::valence;
+use crate::utils::valence_electrons;
 use crate::{HasBondOrders, HasFormalCharges, HasRadicalElectrons};
 
 /// Number of lone (non-bonding) electron pairs on `site`.
@@ -35,28 +36,11 @@ pub fn lone_pairs<M: HasBondOrders + HasElements + HasFormalCharges + HasRadical
     Some(free as u32 / 2)
 }
 
-/// Valence (outer-shell s and p) electron count of a main-group element.
-///
-/// Returns `None` for the d- and f-block, where the count is ambiguous.
-fn valence_electrons(element: Element) -> Option<u8> {
-    Some(match element.atomic_number() {
-        1 | 3 | 11 | 19 | 37 | 55 | 87 => 1,
-        2 | 4 | 12 | 20 | 38 | 56 | 88 => 2,
-        5 | 13 | 31 | 49 | 81 | 113 => 3,
-        6 | 14 | 32 | 50 | 82 | 114 => 4,
-        7 | 15 | 33 | 51 | 83 | 115 => 5,
-        8 | 16 | 34 | 52 | 84 | 116 => 6,
-        9 | 17 | 35 | 53 | 85 | 117 => 7,
-        10 | 18 | 36 | 54 | 86 | 118 => 8,
-        _ => return None,
-    })
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::{BondId, BondOrder, HasBonds};
-    use vita_core::HasSites;
+    use vita_core::{Element, HasSites};
 
     fn s(n: u32) -> SiteId {
         SiteId::new(n).unwrap()
@@ -275,27 +259,5 @@ mod tests {
             lone_pairs(&atom("C", 0, 0, &[BondOrder::Single; 5]), s(1)),
             None
         );
-    }
-
-    #[test]
-    fn valence_electron_counts() {
-        for (symbol, expected) in [
-            ("H", Some(1)),
-            ("He", Some(2)),
-            ("Li", Some(1)),
-            ("B", Some(3)),
-            ("C", Some(4)),
-            ("N", Some(5)),
-            ("O", Some(6)),
-            ("F", Some(7)),
-            ("Ne", Some(8)),
-            ("Cl", Some(7)),
-            ("Pb", Some(4)),
-            ("Rn", Some(8)),
-            ("Fe", None),
-            ("U", None),
-        ] {
-            assert_eq!(valence_electrons(elem(symbol)), expected, "{symbol}");
-        }
     }
 }

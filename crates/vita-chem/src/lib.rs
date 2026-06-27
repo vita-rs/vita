@@ -3,6 +3,7 @@ mod bond_order;
 mod capability;
 mod hybridization;
 mod id;
+mod utils;
 
 pub use bond_order::BondOrder;
 pub use hybridization::Hybridization;
