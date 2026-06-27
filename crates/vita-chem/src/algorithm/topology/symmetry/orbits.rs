@@ -174,6 +174,47 @@ mod tests {
         }
     }
 
+    fn cubane() -> Mol {
+        Mol {
+            sites: (1..=8).map(s).collect(),
+            bonds: (1..=12).map(b).collect(),
+            endpoints: vec![
+                (s(1), s(2)),
+                (s(2), s(3)),
+                (s(3), s(4)),
+                (s(4), s(1)),
+                (s(5), s(6)),
+                (s(6), s(7)),
+                (s(7), s(8)),
+                (s(8), s(5)),
+                (s(1), s(5)),
+                (s(2), s(6)),
+                (s(3), s(7)),
+                (s(4), s(8)),
+            ],
+        }
+    }
+
+    fn naphthalene() -> Mol {
+        Mol {
+            sites: (1..=10).map(s).collect(),
+            bonds: (1..=11).map(b).collect(),
+            endpoints: vec![
+                (s(1), s(2)),
+                (s(2), s(3)),
+                (s(3), s(4)),
+                (s(4), s(5)),
+                (s(5), s(6)),
+                (s(6), s(7)),
+                (s(7), s(8)),
+                (s(8), s(9)),
+                (s(9), s(10)),
+                (s(10), s(1)),
+                (s(5), s(10)),
+            ],
+        }
+    }
+
     #[test]
     fn empty_molecule_has_no_classes() {
         let orb = orbits(&empty());
@@ -199,6 +240,16 @@ mod tests {
     #[test]
     fn branched_distinguishes_by_environment() {
         assert_eq!(orbits(&isopentane()).len(), 4);
+    }
+
+    #[test]
+    fn cage_is_one_class() {
+        assert_eq!(orbits(&cubane()).len(), 1);
+    }
+
+    #[test]
+    fn fused_rings_have_three_classes() {
+        assert_eq!(orbits(&naphthalene()).len(), 3);
     }
 
     #[test]
@@ -243,6 +294,16 @@ mod tests {
     #[test]
     fn inequivalent_methyls_are_not_same() {
         assert!(!orbits(&isopentane()).same(s(1), s(4)));
+    }
+
+    #[test]
+    fn fused_ring_carbons_class_by_environment() {
+        let orb = orbits(&naphthalene());
+        assert!(orb.same(s(5), s(10)));
+        assert!(orb.same(s(1), s(4)));
+        assert!(orb.same(s(2), s(3)));
+        assert!(!orb.same(s(1), s(2)));
+        assert!(!orb.same(s(1), s(5)));
     }
 
     #[test]
