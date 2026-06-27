@@ -104,3 +104,34 @@ pub(crate) fn electronegativity(element: Element) -> Option<f64> {
         _ => return None,
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn elem(symbol: &str) -> Element {
+        Element::from_symbol(symbol).unwrap()
+    }
+
+    #[test]
+    fn pauling_values() {
+        for (symbol, expected) in [
+            ("F", Some(3.98)),
+            ("O", Some(3.44)),
+            ("C", Some(2.55)),
+            ("H", Some(2.20)),
+            ("Cl", Some(3.16)),
+            ("Na", Some(0.93)),
+            ("Fe", Some(1.83)),
+            ("Cs", Some(0.79)),
+            ("Fr", Some(0.70)),
+            ("La", Some(1.10)),
+            ("U", Some(1.38)),
+            ("He", None),
+            ("Rn", None),
+            ("Eu", None),
+        ] {
+            assert_eq!(electronegativity(elem(symbol)), expected, "{symbol}");
+        }
+    }
+}
