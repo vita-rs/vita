@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use vita_core::{HasSites, SiteId};
 
 use crate::HasBonds;
+use crate::utils::refine;
 
 /// The symmetry classes of a molecule.
 ///
@@ -60,7 +61,7 @@ impl Orbits {
 ///
 /// # Complexity
 ///
-/// O(V · (V + E)) time.
+/// O(V · (V + E) · log V) time.
 pub fn orbits<M: HasBonds + HasSites>(mol: &M) -> Orbits {
     let sites: Vec<SiteId> = mol.sites().collect();
     let n = sites.len();
@@ -72,30 +73,15 @@ pub fn orbits<M: HasBonds + HasSites>(mol: &M) -> Orbits {
     }
 
     let pos: HashMap<SiteId, usize> = sites.iter().enumerate().map(|(i, &s)| (s, i)).collect();
-    let mut adj: Vec<Vec<usize>> = vec![Vec::new(); n];
+    let mut adjacency: Vec<Vec<(usize, usize)>> = vec![Vec::new(); n];
     for bond in mol.bonds() {
         let (a, b) = mol.bond_endpoints(bond);
-        adj[pos[&a]].push(pos[&b]);
-        adj[pos[&b]].push(pos[&a]);
+        adjacency[pos[&a]].push((pos[&b], 0));
+        adjacency[pos[&b]].push((pos[&a], 0));
     }
 
-    let mut class = vec![0usize; n];
-    let mut count = 1;
-    loop {
-        let mut ids: HashMap<(usize, Vec<usize>), usize> = HashMap::new();
-        let mut next = vec![0usize; n];
-        for v in 0..n {
-            let mut neighbours: Vec<usize> = adj[v].iter().map(|&u| class[u]).collect();
-            neighbours.sort_unstable();
-            let id = ids.len();
-            next[v] = *ids.entry((class[v], neighbours)).or_insert(id);
-        }
-        if ids.len() == count {
-            break;
-        }
-        count = ids.len();
-        class = next;
-    }
+    let mut class = vec![0; n];
+    let count = refine(&adjacency, &mut class);
 
     let mut groups: Vec<Vec<SiteId>> = vec![Vec::new(); count];
     for (v, &site) in sites.iter().enumerate() {
