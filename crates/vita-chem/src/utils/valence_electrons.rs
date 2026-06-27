@@ -16,3 +16,34 @@ pub(crate) fn valence_electrons(element: Element) -> Option<u8> {
         _ => return None,
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn elem(symbol: &str) -> Element {
+        Element::from_symbol(symbol).unwrap()
+    }
+
+    #[test]
+    fn valence_electron_counts() {
+        for (symbol, expected) in [
+            ("H", Some(1)),
+            ("He", Some(2)),
+            ("Li", Some(1)),
+            ("B", Some(3)),
+            ("C", Some(4)),
+            ("N", Some(5)),
+            ("O", Some(6)),
+            ("F", Some(7)),
+            ("Ne", Some(8)),
+            ("Cl", Some(7)),
+            ("Pb", Some(4)),
+            ("Rn", Some(8)),
+            ("Fe", None),
+            ("U", None),
+        ] {
+            assert_eq!(valence_electrons(elem(symbol)), expected, "{symbol}");
+        }
+    }
+}
