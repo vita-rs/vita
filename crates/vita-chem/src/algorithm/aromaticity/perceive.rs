@@ -4,6 +4,7 @@ use vita_core::{HasElements, SiteId};
 
 use crate::capability::delegation::forward_capabilities;
 use crate::topology::ring::{Ring, RingMembership, rings};
+use crate::utils::electronegativity;
 use crate::valence::lone_pairs;
 use crate::{
     BondId, BondOrder, HasAromaticity, HasBondOrders, HasBonds, HasFormalCharges,
@@ -119,8 +120,10 @@ impl<M: HasBonds> HasAromaticity for WithAromaticity<'_, M> {
 /// electrons to the perpendicular π system, read from its localised bonding:
 ///
 /// - an endocyclic double bond donates one electron;
-/// - an exocyclic double bond donates none — the p orbital is spent on it (the
-///   carbonyl carbon of tropone, the methylene carbon of fulvene);
+/// - an exocyclic double bond to a more electronegative atom donates none, the
+///   pair drawn off the ring to leave an empty p orbital (the carbonyl carbon
+///   of tropone); to an equal or less electronegative one it keeps the pair and
+///   excludes the cycle (the methylene carbon of heptafulvene);
 /// - an otherwise saturated atom with a lone pair donates the pair, two
 ///   electrons (the nitrogen of pyrrole, the oxygen of furan);
 /// - an electron-deficient atom donates none through its empty p orbital (the
@@ -219,14 +222,15 @@ fn huckel(sites: &[SiteId], pi: &HashMap<SiteId, Option<u32>>) -> bool {
 ///
 /// `rings` carries the ring-bond membership, used to tell an endocyclic double
 /// bond (a ring bond) from an exocyclic one (a bridge, as in the carbonyl of
-/// tropone or the methylene of fulvene).
+/// tropone or the methylene of heptafulvene).
 fn contribution<M>(mol: &M, site: SiteId, rings: &RingMembership) -> Option<u32>
 where
     M: HasBondOrders + HasElements + HasFormalCharges + HasRadicalElectrons,
 {
     let mut endocyclic = 0;
     let mut exocyclic = 0;
-    for (bond, _) in mol.bonds_of(site) {
+    let mut across = None;
+    for (bond, neighbour) in mol.bonds_of(site) {
         let pi = match mol.bond_order(bond) {
             BondOrder::Single => 0,
             BondOrder::Double => 1,
@@ -239,6 +243,7 @@ where
                 endocyclic += pi;
             } else {
                 exocyclic += pi;
+                across = Some(neighbour);
             }
         }
     }
@@ -251,8 +256,14 @@ where
     if endocyclic == 1 {
         return Some(1); // one p electron, shared around the ring
     }
-    if exocyclic == 1 {
-        return Some(0); // the p orbital is spent on the exocyclic π bond
+    if let Some(partner) = across {
+        // The exocyclic π leaves an empty p orbital perpendicular to the ring
+        // only when it is polarised toward a more electronegative atom, drawing
+        // the pair off the ring (the carbonyl carbon of tropone); an unpolarised
+        // bond keeps the pair localised within it (the methylene of heptafulvene).
+        let polarised =
+            electronegativity(mol.element(partner))? > electronegativity(mol.element(site))?;
+        return polarised.then_some(0);
     }
 
     // No π bond: the perpendicular p orbital holds a lone pair, sits empty, or
@@ -1909,6 +1920,103 @@ mod tests {
         }
     }
 
+    fn heptafulvene() -> Mol {
+        Mol {
+            sites: vec![
+                s(1),
+                s(2),
+                s(3),
+                s(4),
+                s(5),
+                s(6),
+                s(7),
+                s(8),
+                s(9),
+                s(10),
+                s(11),
+                s(12),
+                s(13),
+                s(14),
+                s(15),
+                s(16),
+            ],
+            elements: vec![
+                elem("C"),
+                elem("C"),
+                elem("C"),
+                elem("C"),
+                elem("C"),
+                elem("C"),
+                elem("C"),
+                elem("C"),
+                elem("H"),
+                elem("H"),
+                elem("H"),
+                elem("H"),
+                elem("H"),
+                elem("H"),
+                elem("H"),
+                elem("H"),
+            ],
+            charges: vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            radicals: vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            bonds: vec![
+                b(1),
+                b(2),
+                b(3),
+                b(4),
+                b(5),
+                b(6),
+                b(7),
+                b(8),
+                b(9),
+                b(10),
+                b(11),
+                b(12),
+                b(13),
+                b(14),
+                b(15),
+                b(16),
+            ],
+            endpoints: vec![
+                (s(1), s(2)),
+                (s(2), s(3)),
+                (s(3), s(4)),
+                (s(4), s(5)),
+                (s(5), s(6)),
+                (s(6), s(7)),
+                (s(7), s(1)),
+                (s(1), s(8)),
+                (s(2), s(9)),
+                (s(3), s(10)),
+                (s(4), s(11)),
+                (s(5), s(12)),
+                (s(6), s(13)),
+                (s(7), s(14)),
+                (s(8), s(15)),
+                (s(8), s(16)),
+            ],
+            orders: vec![
+                BondOrder::Single,
+                BondOrder::Double,
+                BondOrder::Single,
+                BondOrder::Double,
+                BondOrder::Single,
+                BondOrder::Double,
+                BondOrder::Single,
+                BondOrder::Double,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+                BondOrder::Single,
+            ],
+        }
+    }
+
     fn aromatic(mol: &Mol) -> Vec<BondId> {
         let mut bonds: Vec<BondId> = perceive(mol).bonds().collect();
         bonds.sort();
@@ -2022,6 +2130,11 @@ mod tests {
     #[test]
     fn fulvene_is_not_aromatic() {
         assert!(perceive(&fulvene()).is_empty());
+    }
+
+    #[test]
+    fn heptafulvene_is_not_aromatic() {
+        assert!(perceive(&heptafulvene()).is_empty());
     }
 
     #[test]
