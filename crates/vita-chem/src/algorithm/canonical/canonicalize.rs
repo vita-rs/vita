@@ -266,3 +266,300 @@ impl Search<'_> {
         certificate
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{BondOrder, HasBondOrders};
+    use std::collections::HashSet;
+    use vita_core::{Element, HasElements, HasSites};
+
+    fn s(n: u32) -> SiteId {
+        SiteId::new(n).unwrap()
+    }
+
+    fn b(n: u32) -> BondId {
+        BondId::new(n).unwrap()
+    }
+
+    fn elem(symbol: &str) -> Element {
+        Element::from_symbol(symbol).unwrap()
+    }
+
+    struct Mol {
+        sites: Vec<SiteId>,
+        elements: Vec<Element>,
+        bonds: Vec<BondId>,
+        endpoints: Vec<(SiteId, SiteId)>,
+        orders: Vec<BondOrder>,
+    }
+
+    impl HasSites for Mol {
+        fn sites(&self) -> impl Iterator<Item = SiteId> + '_ {
+            self.sites.iter().copied()
+        }
+    }
+
+    impl HasElements for Mol {
+        fn element(&self, site: SiteId) -> Element {
+            let i = self.sites.iter().position(|&x| x == site).unwrap();
+            self.elements[i]
+        }
+    }
+
+    impl HasBonds for Mol {
+        fn bonds(&self) -> impl Iterator<Item = BondId> + '_ {
+            self.bonds.iter().copied()
+        }
+
+        fn bond_endpoints(&self, bond: BondId) -> (SiteId, SiteId) {
+            let i = self.bonds.iter().position(|&x| x == bond).unwrap();
+            self.endpoints[i]
+        }
+    }
+
+    impl HasBondOrders for Mol {
+        fn bond_order(&self, bond: BondId) -> BondOrder {
+            let i = self.bonds.iter().position(|&x| x == bond).unwrap();
+            self.orders[i]
+        }
+    }
+
+    fn canon(mol: &Mol) -> Canonical<Element, u8> {
+        canonicalize(
+            mol,
+            |site| mol.element(site),
+            |bond| mol.bond_order(bond) as u8,
+        )
+    }
+
+    fn empty() -> Mol {
+        Mol {
+            sites: vec![],
+            elements: vec![],
+            bonds: vec![],
+            endpoints: vec![],
+            orders: vec![],
+        }
+    }
+
+    fn methane() -> Mol {
+        Mol {
+            sites: vec![s(1)],
+            elements: vec![elem("C")],
+            bonds: vec![],
+            endpoints: vec![],
+            orders: vec![],
+        }
+    }
+
+    fn cyanate() -> Mol {
+        Mol {
+            sites: vec![s(1), s(2), s(3)],
+            elements: vec![elem("N"), elem("C"), elem("O")],
+            bonds: vec![b(1), b(2)],
+            endpoints: vec![(s(1), s(2)), (s(2), s(3))],
+            orders: vec![BondOrder::Single, BondOrder::Single],
+        }
+    }
+
+    fn cyanate_shuffled() -> Mol {
+        Mol {
+            sites: vec![s(3), s(1), s(2)],
+            elements: vec![elem("O"), elem("N"), elem("C")],
+            bonds: vec![b(2), b(1)],
+            endpoints: vec![(s(2), s(3)), (s(1), s(2))],
+            orders: vec![BondOrder::Single, BondOrder::Single],
+        }
+    }
+
+    fn cyanate_relabelled() -> Mol {
+        Mol {
+            sites: vec![s(4), s(5), s(6)],
+            elements: vec![elem("N"), elem("C"), elem("O")],
+            bonds: vec![b(3), b(4)],
+            endpoints: vec![(s(4), s(5)), (s(5), s(6))],
+            orders: vec![BondOrder::Single, BondOrder::Single],
+        }
+    }
+
+    fn ring6() -> Mol {
+        Mol {
+            sites: (1..=6).map(s).collect(),
+            elements: vec![elem("C"); 6],
+            bonds: (1..=6).map(b).collect(),
+            endpoints: vec![
+                (s(1), s(2)),
+                (s(2), s(3)),
+                (s(3), s(4)),
+                (s(4), s(5)),
+                (s(5), s(6)),
+                (s(6), s(1)),
+            ],
+            orders: vec![BondOrder::Single; 6],
+        }
+    }
+
+    fn ring6_rotated() -> Mol {
+        Mol {
+            sites: vec![s(4), s(5), s(6), s(1), s(2), s(3)],
+            elements: vec![elem("C"); 6],
+            bonds: vec![b(4), b(5), b(6), b(1), b(2), b(3)],
+            endpoints: vec![
+                (s(4), s(5)),
+                (s(5), s(6)),
+                (s(6), s(1)),
+                (s(1), s(2)),
+                (s(2), s(3)),
+                (s(3), s(4)),
+            ],
+            orders: vec![BondOrder::Single; 6],
+        }
+    }
+
+    fn butane() -> Mol {
+        Mol {
+            sites: (1..=4).map(s).collect(),
+            elements: vec![elem("C"); 4],
+            bonds: (1..=3).map(b).collect(),
+            endpoints: vec![(s(1), s(2)), (s(2), s(3)), (s(3), s(4))],
+            orders: vec![BondOrder::Single; 3],
+        }
+    }
+
+    fn isobutane() -> Mol {
+        Mol {
+            sites: (1..=4).map(s).collect(),
+            elements: vec![elem("C"); 4],
+            bonds: (1..=3).map(b).collect(),
+            endpoints: vec![(s(1), s(2)), (s(1), s(3)), (s(1), s(4))],
+            orders: vec![BondOrder::Single; 3],
+        }
+    }
+
+    fn fragments() -> Mol {
+        Mol {
+            sites: vec![s(1), s(2), s(3)],
+            elements: vec![elem("C"), elem("C"), elem("O")],
+            bonds: vec![b(1)],
+            endpoints: vec![(s(1), s(2))],
+            orders: vec![BondOrder::Single],
+        }
+    }
+
+    #[test]
+    fn empty_molecule_is_empty() {
+        let canonical = canon(&empty());
+        assert_eq!(canonical.len(), 0);
+        assert!(canonical.is_empty());
+    }
+
+    #[test]
+    fn single_site_ranks_zero() {
+        let canonical = canon(&methane());
+        assert_eq!(canonical.len(), 1);
+        assert_eq!(canonical.rank(s(1)), Some(0));
+    }
+
+    #[test]
+    fn ranks_are_a_permutation() {
+        let canonical = canon(&cyanate());
+        let ranks: HashSet<usize> = cyanate()
+            .sites
+            .iter()
+            .map(|&x| canonical.rank(x).unwrap())
+            .collect();
+        assert_eq!(ranks, (0..3).collect());
+    }
+
+    #[test]
+    fn order_inverts_rank() {
+        let canonical = canon(&cyanate());
+        for (r, site) in canonical.order().enumerate() {
+            assert_eq!(canonical.rank(site), Some(r));
+        }
+    }
+
+    #[test]
+    fn unknown_site_has_no_rank() {
+        assert_eq!(canon(&cyanate()).rank(s(99)), None);
+    }
+
+    #[test]
+    fn asymmetric_labelling_is_independent_of_input_order() {
+        let plain = canon(&cyanate());
+        let shuffled = canon(&cyanate_shuffled());
+        for site in [s(1), s(2), s(3)] {
+            assert_eq!(plain.rank(site), shuffled.rank(site));
+        }
+    }
+
+    #[test]
+    fn least_atomic_number_ranks_first() {
+        let canonical = canon(&cyanate());
+        assert_eq!(canonical.rank(s(2)), Some(0));
+        assert_eq!(canonical.rank(s(1)), Some(1));
+        assert_eq!(canonical.rank(s(3)), Some(2));
+    }
+
+    #[test]
+    fn symmetric_ring_ranks_every_atom() {
+        let canonical = canon(&ring6());
+        let ranks: HashSet<usize> = (1..=6).map(|i| canonical.rank(s(i)).unwrap()).collect();
+        assert_eq!(ranks, (0..6).collect());
+    }
+
+    #[test]
+    fn disconnected_molecule_ranks_every_atom() {
+        let canonical = canon(&fragments());
+        let ranks: HashSet<usize> = (1..=3).map(|i| canonical.rank(s(i)).unwrap()).collect();
+        assert_eq!(ranks, (0..3).collect());
+    }
+
+    #[test]
+    fn reordered_molecule_is_equal() {
+        assert_eq!(canon(&cyanate()), canon(&cyanate_shuffled()));
+    }
+
+    #[test]
+    fn relabelled_molecule_is_equal() {
+        assert_eq!(canon(&cyanate()), canon(&cyanate_relabelled()));
+    }
+
+    #[test]
+    fn symmetric_molecule_identity_is_independent_of_input_order() {
+        assert_eq!(canon(&ring6()), canon(&ring6_rotated()));
+    }
+
+    #[test]
+    fn different_elements_differ() {
+        let mut thiocyanate = cyanate();
+        thiocyanate.elements = vec![elem("O"), elem("C"), elem("S")];
+        assert_ne!(canon(&cyanate()), canon(&thiocyanate));
+    }
+
+    #[test]
+    fn different_bond_orders_differ() {
+        let mut doubled = cyanate();
+        doubled.orders = vec![BondOrder::Double, BondOrder::Single];
+        assert_ne!(canon(&cyanate()), canon(&doubled));
+    }
+
+    #[test]
+    fn topology_is_part_of_identity() {
+        assert_ne!(canon(&butane()), canon(&isobutane()));
+    }
+
+    #[test]
+    fn equal_canonicals_hash_and_order_alike() {
+        let set: HashSet<Canonical<Element, u8>> =
+            [canon(&cyanate()), canon(&cyanate_relabelled())]
+                .into_iter()
+                .collect();
+        assert_eq!(set.len(), 1);
+        assert_eq!(
+            canon(&cyanate()).cmp(&canon(&cyanate_shuffled())),
+            Ordering::Equal
+        );
+    }
+}
