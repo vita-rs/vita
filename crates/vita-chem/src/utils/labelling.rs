@@ -348,4 +348,29 @@ mod tests {
         let orbits = orbits(&complete, &[0; 6]);
         assert!(orbits.iter().all(|&orbit| orbit == orbits[0]));
     }
+
+    #[test]
+    fn cube_is_one_orbit() {
+        let edges = [
+            (0, 1),
+            (1, 2),
+            (2, 3),
+            (3, 0),
+            (4, 5),
+            (5, 6),
+            (6, 7),
+            (7, 4),
+            (0, 4),
+            (1, 5),
+            (2, 6),
+            (3, 7),
+        ];
+        let mut cube = vec![Vec::new(); 8];
+        for &(a, b) in &edges {
+            cube[a].push((b, 0));
+            cube[b].push((a, 0));
+        }
+        let orbits = orbits(&cube, &[0; 8]);
+        assert!(orbits.iter().all(|&orbit| orbit == orbits[0]));
+    }
 }
