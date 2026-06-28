@@ -219,3 +219,246 @@ fn with(seed: &[usize], bond: usize) -> Vec<usize> {
     grown.insert(at, bond);
     grown
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{BondOrder, HasBondOrders};
+    use vita_core::{Element, HasElements, HasSites};
+
+    fn s(n: u32) -> SiteId {
+        SiteId::new(n).unwrap()
+    }
+
+    fn b(n: u32) -> BondId {
+        BondId::new(n).unwrap()
+    }
+
+    fn elem(symbol: &str) -> Element {
+        Element::from_symbol(symbol).unwrap()
+    }
+
+    struct Mol {
+        sites: Vec<SiteId>,
+        elements: Vec<Element>,
+        bonds: Vec<BondId>,
+        endpoints: Vec<(SiteId, SiteId)>,
+        orders: Vec<BondOrder>,
+    }
+
+    impl HasSites for Mol {
+        fn sites(&self) -> impl Iterator<Item = SiteId> + '_ {
+            self.sites.iter().copied()
+        }
+    }
+
+    impl HasElements for Mol {
+        fn element(&self, site: SiteId) -> Element {
+            let i = self.sites.iter().position(|&x| x == site).unwrap();
+            self.elements[i]
+        }
+    }
+
+    impl HasBonds for Mol {
+        fn bonds(&self) -> impl Iterator<Item = BondId> + '_ {
+            self.bonds.iter().copied()
+        }
+
+        fn bond_endpoints(&self, bond: BondId) -> (SiteId, SiteId) {
+            let i = self.bonds.iter().position(|&x| x == bond).unwrap();
+            self.endpoints[i]
+        }
+    }
+
+    impl HasBondOrders for Mol {
+        fn bond_order(&self, bond: BondId) -> BondOrder {
+            let i = self.bonds.iter().position(|&x| x == bond).unwrap();
+            self.orders[i]
+        }
+    }
+
+    fn common(a: &Mol, b: &Mol) -> CommonSubgraph {
+        mcs(
+            a,
+            b,
+            |x, y| a.element(x) == b.element(y),
+            |p, q| a.bond_order(p) == b.bond_order(q),
+        )
+    }
+
+    fn reversed(m: &Mol) -> Mol {
+        Mol {
+            sites: m.sites.iter().rev().copied().collect(),
+            elements: m.elements.iter().rev().copied().collect(),
+            bonds: m.bonds.iter().rev().copied().collect(),
+            endpoints: m.endpoints.iter().rev().copied().collect(),
+            orders: m.orders.iter().rev().copied().collect(),
+        }
+    }
+
+    fn empty() -> Mol {
+        Mol {
+            sites: vec![],
+            elements: vec![],
+            bonds: vec![],
+            endpoints: vec![],
+            orders: vec![],
+        }
+    }
+
+    fn ethane() -> Mol {
+        Mol {
+            sites: vec![s(1), s(2)],
+            elements: vec![elem("C"), elem("C")],
+            bonds: vec![b(1)],
+            endpoints: vec![(s(1), s(2))],
+            orders: vec![BondOrder::Single],
+        }
+    }
+
+    fn ethanol() -> Mol {
+        Mol {
+            sites: vec![s(1), s(2), s(3)],
+            elements: vec![elem("C"), elem("C"), elem("O")],
+            bonds: vec![b(1), b(2)],
+            endpoints: vec![(s(1), s(2)), (s(2), s(3))],
+            orders: vec![BondOrder::Single, BondOrder::Single],
+        }
+    }
+
+    fn ethanamine() -> Mol {
+        Mol {
+            sites: vec![s(1), s(2), s(3)],
+            elements: vec![elem("C"), elem("C"), elem("N")],
+            bonds: vec![b(1), b(2)],
+            endpoints: vec![(s(1), s(2)), (s(2), s(3))],
+            orders: vec![BondOrder::Single, BondOrder::Single],
+        }
+    }
+
+    fn propanol() -> Mol {
+        Mol {
+            sites: vec![s(1), s(2), s(3), s(4)],
+            elements: vec![elem("C"), elem("C"), elem("C"), elem("O")],
+            bonds: vec![b(1), b(2), b(3)],
+            endpoints: vec![(s(1), s(2)), (s(2), s(3)), (s(3), s(4))],
+            orders: vec![BondOrder::Single, BondOrder::Single, BondOrder::Single],
+        }
+    }
+
+    fn propene() -> Mol {
+        Mol {
+            sites: vec![s(1), s(2), s(3)],
+            elements: vec![elem("C"), elem("C"), elem("C")],
+            bonds: vec![b(1), b(2)],
+            endpoints: vec![(s(1), s(2)), (s(2), s(3))],
+            orders: vec![BondOrder::Double, BondOrder::Single],
+        }
+    }
+
+    fn propane() -> Mol {
+        Mol {
+            sites: vec![s(1), s(2), s(3)],
+            elements: vec![elem("C"), elem("C"), elem("C")],
+            bonds: vec![b(1), b(2)],
+            endpoints: vec![(s(1), s(2)), (s(2), s(3))],
+            orders: vec![BondOrder::Single, BondOrder::Single],
+        }
+    }
+
+    fn two_ethanes() -> Mol {
+        Mol {
+            sites: vec![s(1), s(2), s(3), s(4)],
+            elements: vec![elem("C"); 4],
+            bonds: vec![b(1), b(2)],
+            endpoints: vec![(s(1), s(2)), (s(3), s(4))],
+            orders: vec![BondOrder::Single, BondOrder::Single],
+        }
+    }
+
+    #[test]
+    fn empty_molecule_shares_nothing() {
+        let c = common(&empty(), &ethanol());
+        assert_eq!(c.len(), 0);
+        assert!(c.is_empty());
+    }
+
+    #[test]
+    fn identical_molecules_share_everything() {
+        let c = common(&ethanol(), &ethanol());
+        assert_eq!(c.len(), 2);
+        assert_eq!(c.sites().count(), 3);
+    }
+
+    #[test]
+    fn smaller_embeds_whole() {
+        let c = common(&ethane(), &ethanol());
+        assert_eq!(c.len(), 1);
+        assert_eq!(c.bonds().collect::<Vec<_>>(), vec![(b(1), b(1))]);
+    }
+
+    #[test]
+    fn shared_chain_is_found() {
+        let c = common(&ethanol(), &propanol());
+        assert_eq!(c.len(), 2);
+        assert_eq!(c.sites().count(), 3);
+    }
+
+    #[test]
+    fn element_constrains_the_match() {
+        let c = common(&ethanol(), &ethanamine());
+        assert_eq!(c.len(), 1);
+        assert_eq!(
+            c.sites().collect::<Vec<_>>(),
+            vec![(s(1), s(1)), (s(2), s(2))]
+        );
+    }
+
+    #[test]
+    fn bond_order_constrains_the_match() {
+        let c = common(&propene(), &propane());
+        assert_eq!(c.len(), 1);
+    }
+
+    #[test]
+    fn the_common_substructure_is_connected() {
+        let c = common(&two_ethanes(), &propane());
+        assert_eq!(c.len(), 1);
+    }
+
+    #[test]
+    fn disjoint_molecules_share_nothing() {
+        let mut methane = ethane();
+        methane.sites = vec![s(1)];
+        methane.elements = vec![elem("C")];
+        methane.bonds = vec![];
+        methane.endpoints = vec![];
+        methane.orders = vec![];
+        let mut water = ethane();
+        water.sites = vec![s(1)];
+        water.elements = vec![elem("O")];
+        water.bonds = vec![];
+        water.endpoints = vec![];
+        water.orders = vec![];
+        assert!(common(&methane, &water).is_empty());
+    }
+
+    #[test]
+    fn correspondence_is_consistent() {
+        let c = common(&ethanol(), &propanol());
+        for (x, y) in c.sites() {
+            assert_eq!(ethanol().element(x), propanol().element(y));
+        }
+        for (p, q) in c.bonds() {
+            assert_eq!(ethanol().bond_order(p), propanol().bond_order(q));
+        }
+    }
+
+    #[test]
+    fn common_substructure_is_independent_of_input_order() {
+        assert_eq!(
+            common(&ethanol(), &propanol()),
+            common(&reversed(&ethanol()), &reversed(&propanol()))
+        );
+    }
+}
