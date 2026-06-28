@@ -32,7 +32,7 @@ impl Components {
         self.groups.len() == 1
     }
 
-    /// Iterates all components, each as a slice of site identifiers.
+    /// Iterates all components, ordered by their sites.
     pub fn iter(&self) -> impl Iterator<Item = &[SiteId]> + '_ {
         self.groups.iter().map(|g| g.as_slice())
     }
@@ -59,8 +59,8 @@ impl Components {
 /// Connected components of a molecule.
 ///
 /// Returns every maximal set of mutually reachable sites. Sites with no bonds
-/// form singleton components. The order of components follows `mol.sites()`;
-/// the order of sites within each component is DFS discovery order.
+/// form singleton components. Components are ordered by their sites, ascending
+/// within each.
 ///
 /// # Complexity
 ///
@@ -91,6 +91,16 @@ pub fn components<M: HasBonds + HasSites>(mol: &M) -> Components {
 
         groups.push(group);
     }
+
+    for group in &mut groups {
+        group.sort_unstable();
+    }
+    groups.sort_unstable();
+    let index: HashMap<SiteId, usize> = groups
+        .iter()
+        .enumerate()
+        .flat_map(|(g, group)| group.iter().map(move |&s| (s, g)))
+        .collect();
 
     Components { groups, index }
 }
@@ -234,6 +244,18 @@ mod tests {
         sizes.sort();
         assert_eq!(sizes, vec![1, 2]);
         assert_eq!(cmps.iter().count(), cmps.len());
+    }
+
+    #[test]
+    fn components_are_independent_of_input_order() {
+        let shuffled = Mol {
+            sites: vec![s(3), s(2), s(1)],
+            bonds: vec![b(1)],
+            endpoints: vec![(s(2), s(1))],
+        };
+        let groups =
+            |m: &Mol| -> Vec<Vec<SiteId>> { components(m).iter().map(|c| c.to_vec()).collect() };
+        assert_eq!(groups(&two_components()), groups(&shuffled));
     }
 
     #[test]

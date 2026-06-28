@@ -9,7 +9,8 @@ use crate::{BondId, HasBonds};
 /// A bridgehead is an atom where a bridge meets a ring: an endpoint of the
 /// bonds two rings share, when they share two or more. Ortho-fused rings
 /// (sharing one bond) and spiro rings (sharing one site) have none; a bridged
-/// system such as bicyclo[2.2.2]octane has two.
+/// system such as bicyclo[2.2.2]octane has two. Bridgeheads are yielded in
+/// ascending order.
 ///
 /// # Complexity
 ///
@@ -194,6 +195,28 @@ mod tests {
         assert_eq!(
             bridgeheads(&bridged_square()).collect::<Vec<_>>(),
             vec![s(2), s(4)]
+        );
+    }
+
+    #[test]
+    fn bridgeheads_are_independent_of_input_order() {
+        let shuffled = mol(
+            &[8, 2, 5, 1, 7, 3, 6, 4],
+            &[
+                (9, 8, 2),
+                (1, 1, 3),
+                (5, 5, 6),
+                (3, 4, 2),
+                (7, 1, 7),
+                (2, 3, 4),
+                (6, 6, 2),
+                (4, 1, 5),
+                (8, 7, 8),
+            ],
+        );
+        assert_eq!(
+            bridgeheads(&shuffled).collect::<Vec<_>>(),
+            bridgeheads(&bicyclo222()).collect::<Vec<_>>()
         );
     }
 }

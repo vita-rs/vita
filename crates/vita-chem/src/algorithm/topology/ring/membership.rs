@@ -12,8 +12,8 @@ use crate::{BondId, HasBonds};
 ///
 /// Obtain via [`membership`].
 pub struct RingMembership {
-    sites: HashSet<SiteId>,
-    bonds: HashSet<BondId>,
+    sites: Vec<SiteId>,
+    bonds: Vec<BondId>,
 }
 
 impl RingMembership {
@@ -22,22 +22,22 @@ impl RingMembership {
     /// Returns `false` if `site` is absent from the molecule or lies in no
     /// ring.
     pub fn site(&self, site: SiteId) -> bool {
-        self.sites.contains(&site)
+        self.sites.binary_search(&site).is_ok()
     }
 
     /// Returns `true` if `bond` lies in at least one ring.
     ///
     /// Returns `false` if `bond` is absent from the molecule or is a bridge.
     pub fn bond(&self, bond: BondId) -> bool {
-        self.bonds.contains(&bond)
+        self.bonds.binary_search(&bond).is_ok()
     }
 
-    /// Iterates the sites that lie in at least one ring.
+    /// Iterates the ring sites, in ascending order.
     pub fn sites(&self) -> impl Iterator<Item = SiteId> + '_ {
         self.sites.iter().copied()
     }
 
-    /// Iterates the bonds that lie in at least one ring.
+    /// Iterates the ring bonds, in ascending order.
     pub fn bonds(&self) -> impl Iterator<Item = BondId> + '_ {
         self.bonds.iter().copied()
     }
@@ -49,6 +49,10 @@ impl RingMembership {
 
     /// Builds a membership from its ring-site and ring-bond sets.
     pub(super) fn from_sets(sites: HashSet<SiteId>, bonds: HashSet<BondId>) -> Self {
+        let mut sites: Vec<SiteId> = sites.into_iter().collect();
+        let mut bonds: Vec<BondId> = bonds.into_iter().collect();
+        sites.sort_unstable();
+        bonds.sort_unstable();
         RingMembership { sites, bonds }
     }
 }
@@ -306,29 +310,25 @@ mod tests {
 
     #[test]
     fn triangle_ring_sites() {
-        let mut sites: Vec<SiteId> = membership(&triangle()).sites().collect();
-        sites.sort();
+        let sites: Vec<SiteId> = membership(&triangle()).sites().collect();
         assert_eq!(sites, vec![s(1), s(2), s(3)]);
     }
 
     #[test]
     fn triangle_ring_bonds() {
-        let mut bonds: Vec<BondId> = membership(&triangle()).bonds().collect();
-        bonds.sort();
+        let bonds: Vec<BondId> = membership(&triangle()).bonds().collect();
         assert_eq!(bonds, vec![b(1), b(2), b(3)]);
     }
 
     #[test]
     fn lollipop_ring_sites() {
-        let mut sites: Vec<SiteId> = membership(&lollipop()).sites().collect();
-        sites.sort();
+        let sites: Vec<SiteId> = membership(&lollipop()).sites().collect();
         assert_eq!(sites, vec![s(1), s(2), s(3)]);
     }
 
     #[test]
     fn lollipop_ring_bonds() {
-        let mut bonds: Vec<BondId> = membership(&lollipop()).bonds().collect();
-        bonds.sort();
+        let bonds: Vec<BondId> = membership(&lollipop()).bonds().collect();
         assert_eq!(bonds, vec![b(1), b(2), b(3)]);
     }
 
@@ -368,6 +368,30 @@ mod tests {
         let m = membership(&two_triangles());
         assert_eq!(m.sites().count(), 6);
         assert_eq!(m.bonds().count(), 6);
+    }
+
+    #[test]
+    fn membership_is_independent_of_input_order() {
+        let shuffled = Mol {
+            sites: vec![s(6), s(4), s(2), s(5), s(1), s(3)],
+            bonds: vec![b(7), b(4), b(1), b(6), b(2), b(5), b(3)],
+            endpoints: vec![
+                (s(4), s(6)),
+                (s(3), s(4)),
+                (s(1), s(2)),
+                (s(5), s(6)),
+                (s(2), s(3)),
+                (s(4), s(5)),
+                (s(1), s(3)),
+            ],
+        };
+        let parts = |m: &Mol| -> (Vec<SiteId>, Vec<BondId>) {
+            (
+                membership(m).sites().collect(),
+                membership(m).bonds().collect(),
+            )
+        };
+        assert_eq!(parts(&dumbbell()), parts(&shuffled));
     }
 
     #[test]

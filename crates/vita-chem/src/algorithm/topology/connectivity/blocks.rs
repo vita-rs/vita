@@ -18,12 +18,12 @@ pub struct Block {
 }
 
 impl Block {
-    /// Sites in this block.
+    /// Sites in this block, in ascending order.
     pub fn sites(&self) -> &[SiteId] {
         &self.sites
     }
 
-    /// Bonds in this block.
+    /// Bonds in this block, in ascending order.
     pub fn bonds(&self) -> &[BondId] {
         &self.bonds
     }
@@ -64,32 +64,41 @@ impl Blocks {
         self.blocks.len() == 1
     }
 
-    /// Iterates all biconnected components.
+    /// Iterates all biconnected components, ordered by their sites.
     pub fn iter(&self) -> impl Iterator<Item = &Block> + '_ {
         self.blocks.iter()
     }
 
-    /// Iterates articulation points (cut sites) of the molecule.
+    /// Iterates the articulation points (cut sites) of the molecule, in ascending
+    /// order.
     ///
     /// A site is an articulation point if removing it would increase the number
     /// of connected components. Equivalently, it appears in two or more blocks.
     pub fn cuts(&self) -> impl Iterator<Item = SiteId> + '_ {
-        self.site_index
+        let mut cuts: Vec<SiteId> = self
+            .site_index
             .iter()
             .filter(|(_, v)| v.len() >= 2)
             .map(|(&s, _)| s)
+            .collect();
+        cuts.sort_unstable();
+        cuts.into_iter()
     }
 
-    /// Iterates bridge bonds of the molecule.
+    /// Iterates the bridge bonds of the molecule, in ascending order.
     ///
     /// A bond is a bridge if removing it would increase the number of connected
     /// components. Every bridge forms its own single-bond block
     /// (`is_ring = false`).
     pub fn bridges(&self) -> impl Iterator<Item = BondId> + '_ {
-        self.blocks
+        let mut bridges: Vec<BondId> = self
+            .blocks
             .iter()
             .filter(|b| !b.is_ring())
             .flat_map(|b| b.bonds().iter().copied())
+            .collect();
+        bridges.sort_unstable();
+        bridges.into_iter()
     }
 
     /// Returns `true` if `site` is an articulation point.
@@ -108,7 +117,7 @@ impl Blocks {
             .is_some_and(|&i| !self.blocks[i].is_ring())
     }
 
-    /// Iterates all blocks containing `site`.
+    /// Iterates all blocks containing `site`, ordered by their sites.
     ///
     /// Returns an empty iterator if `site` is absent from the molecule or is
     /// isolated (has no bonds).
@@ -134,8 +143,8 @@ impl Blocks {
 ///
 /// Decomposes the molecular graph into maximal 2-connected subgraphs using
 /// Tarjan's algorithm. Each block is either a ring or a single bridge bond.
-/// Isolated sites belong to no block. The order of blocks follows DFS
-/// discovery order.
+/// Isolated sites belong to no block. Blocks are ordered by their sites,
+/// ascending within each.
 ///
 /// # Complexity
 ///
@@ -229,8 +238,12 @@ pub fn blocks<M: HasBonds + HasSites>(mol: &M) -> Blocks {
                             }
                         }
                         let is_ring = block_bonds.len() > 1;
+                        let mut block_sites: Vec<SiteId> =
+                            block_sites.into_iter().map(|i| sites[i]).collect();
+                        block_sites.sort_unstable();
+                        block_bonds.sort_unstable();
                         result_blocks.push(Block {
-                            sites: block_sites.into_iter().map(|i| sites[i]).collect(),
+                            sites: block_sites,
                             bonds: block_bonds,
                             is_ring,
                         });
@@ -239,6 +252,8 @@ pub fn blocks<M: HasBonds + HasSites>(mol: &M) -> Blocks {
             }
         }
     }
+
+    result_blocks.sort_by(|a, b| a.sites.cmp(&b.sites));
 
     let mut site_index: HashMap<SiteId, Vec<usize>> = HashMap::new();
     let mut bond_index: HashMap<BondId, usize> = HashMap::new();
@@ -411,44 +426,64 @@ mod tests {
 
     #[test]
     fn chain_cuts() {
-        let mut cuts: Vec<SiteId> = blocks(&chain()).cuts().collect();
-        cuts.sort();
+        let cuts: Vec<SiteId> = blocks(&chain()).cuts().collect();
         assert_eq!(cuts, vec![s(2)]);
     }
 
     #[test]
     fn lollipop_cuts() {
-        let mut cuts: Vec<SiteId> = blocks(&lollipop()).cuts().collect();
-        cuts.sort();
+        let cuts: Vec<SiteId> = blocks(&lollipop()).cuts().collect();
         assert_eq!(cuts, vec![s(1)]);
     }
 
     #[test]
     fn dumbbell_cuts() {
-        let mut cuts: Vec<SiteId> = blocks(&dumbbell()).cuts().collect();
-        cuts.sort();
+        let cuts: Vec<SiteId> = blocks(&dumbbell()).cuts().collect();
         assert_eq!(cuts, vec![s(3), s(4)]);
     }
 
     #[test]
     fn chain_bridges() {
-        let mut bridges: Vec<BondId> = blocks(&chain()).bridges().collect();
-        bridges.sort();
+        let bridges: Vec<BondId> = blocks(&chain()).bridges().collect();
         assert_eq!(bridges, vec![b(1), b(2)]);
     }
 
     #[test]
     fn lollipop_bridges() {
-        let mut bridges: Vec<BondId> = blocks(&lollipop()).bridges().collect();
-        bridges.sort();
+        let bridges: Vec<BondId> = blocks(&lollipop()).bridges().collect();
         assert_eq!(bridges, vec![b(4)]);
     }
 
     #[test]
     fn dumbbell_bridges() {
-        let mut bridges: Vec<BondId> = blocks(&dumbbell()).bridges().collect();
-        bridges.sort();
+        let bridges: Vec<BondId> = blocks(&dumbbell()).bridges().collect();
         assert_eq!(bridges, vec![b(4)]);
+    }
+
+    #[test]
+    fn blocks_are_independent_of_input_order() {
+        let shuffled = Mol {
+            sites: vec![s(6), s(4), s(2), s(5), s(1), s(3)],
+            bonds: vec![b(7), b(4), b(1), b(6), b(2), b(5), b(3)],
+            endpoints: vec![
+                (s(4), s(6)),
+                (s(3), s(4)),
+                (s(1), s(2)),
+                (s(5), s(6)),
+                (s(2), s(3)),
+                (s(4), s(5)),
+                (s(1), s(3)),
+            ],
+        };
+        let shape = |m: &Mol| -> (Vec<Vec<SiteId>>, Vec<SiteId>, Vec<BondId>) {
+            let bl = blocks(m);
+            (
+                bl.iter().map(|blk| blk.sites().to_vec()).collect(),
+                bl.cuts().collect(),
+                bl.bridges().collect(),
+            )
+        };
+        assert_eq!(shape(&dumbbell()), shape(&shuffled));
     }
 
     #[test]

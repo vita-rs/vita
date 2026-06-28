@@ -28,7 +28,7 @@ impl Orbits {
         self.groups.is_empty()
     }
 
-    /// Iterates all classes, each as a slice of site identifiers.
+    /// Iterates all classes, ordered by their sites.
     pub fn iter(&self) -> impl Iterator<Item = &[SiteId]> + '_ {
         self.groups.iter().map(|g| g.as_slice())
     }

@@ -19,8 +19,8 @@ use crate::{
 ///
 /// Obtain via [`perceive`].
 pub struct Aromaticity {
-    sites: HashSet<SiteId>,
-    bonds: HashSet<BondId>,
+    sites: Vec<SiteId>,
+    bonds: Vec<BondId>,
 }
 
 impl Aromaticity {
@@ -29,7 +29,7 @@ impl Aromaticity {
     /// Returns `false` if `site` is absent from the molecule or is not
     /// aromatic.
     pub fn site(&self, site: SiteId) -> bool {
-        self.sites.contains(&site)
+        self.sites.binary_search(&site).is_ok()
     }
 
     /// Returns `true` if `bond` is aromatic.
@@ -37,15 +37,15 @@ impl Aromaticity {
     /// Returns `false` if `bond` is absent from the molecule or is not
     /// aromatic.
     pub fn bond(&self, bond: BondId) -> bool {
-        self.bonds.contains(&bond)
+        self.bonds.binary_search(&bond).is_ok()
     }
 
-    /// Iterates the sites that lie in an aromatic system.
+    /// Iterates the aromatic sites, in ascending order.
     pub fn sites(&self) -> impl Iterator<Item = SiteId> + '_ {
         self.sites.iter().copied()
     }
 
-    /// Iterates the aromatic bonds.
+    /// Iterates the aromatic bonds, in ascending order.
     pub fn bonds(&self) -> impl Iterator<Item = BondId> + '_ {
         self.bonds.iter().copied()
     }
@@ -150,8 +150,8 @@ where
     let rings = rings(mol);
     if rings.is_empty() {
         return Aromaticity {
-            sites: HashSet::new(),
-            bonds: HashSet::new(),
+            sites: Vec::new(),
+            bonds: Vec::new(),
         };
     }
 
@@ -195,10 +195,11 @@ where
         sites.insert(b);
     }
 
-    Aromaticity {
-        sites,
-        bonds: aromatic,
-    }
+    let mut sites: Vec<SiteId> = sites.into_iter().collect();
+    let mut bonds: Vec<BondId> = aromatic.into_iter().collect();
+    sites.sort_unstable();
+    bonds.sort_unstable();
+    Aromaticity { sites, bonds }
 }
 
 /// Returns whether a cycle satisfies Hückel's rule: every atom donates to the
@@ -2177,9 +2178,19 @@ mod tests {
     }
 
     fn aromatic(mol: &Mol) -> Vec<BondId> {
-        let mut bonds: Vec<BondId> = perceive(mol).bonds().collect();
-        bonds.sort();
-        bonds
+        perceive(mol).bonds().collect()
+    }
+
+    fn reversed(m: &Mol) -> Mol {
+        Mol {
+            sites: m.sites.iter().rev().copied().collect(),
+            elements: m.elements.iter().rev().copied().collect(),
+            charges: m.charges.iter().rev().copied().collect(),
+            radicals: m.radicals.iter().rev().copied().collect(),
+            bonds: m.bonds.iter().rev().copied().collect(),
+            endpoints: m.endpoints.iter().rev().copied().collect(),
+            orders: m.orders.iter().rev().copied().collect(),
+        }
     }
 
     fn ring_bonds(count: u32) -> Vec<BondId> {
@@ -2322,9 +2333,16 @@ mod tests {
 
     #[test]
     fn aromatic_sites_are_the_ring_atoms() {
-        let mut sites: Vec<SiteId> = perceive(&benzene()).sites().collect();
-        sites.sort();
+        let sites: Vec<SiteId> = perceive(&benzene()).sites().collect();
         assert_eq!(sites, (1..=6).map(s).collect::<Vec<_>>());
+    }
+
+    #[test]
+    fn perception_is_independent_of_input_order() {
+        let parts = |m: &Mol| -> (Vec<SiteId>, Vec<BondId>) {
+            (perceive(m).sites().collect(), perceive(m).bonds().collect())
+        };
+        assert_eq!(parts(&benzene()), parts(&reversed(&benzene())));
     }
 
     #[test]

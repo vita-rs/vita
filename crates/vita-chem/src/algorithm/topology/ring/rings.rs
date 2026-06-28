@@ -58,7 +58,7 @@ impl Rings {
         self.rings.is_empty()
     }
 
-    /// Iterates all rings of the basis.
+    /// Iterates all rings of the basis, ordered by size then by their sites.
     pub fn iter(&self) -> impl Iterator<Item = &Ring> + '_ {
         self.rings.iter()
     }
@@ -70,7 +70,7 @@ impl Rings {
         self.rings.iter().map(|r| r.sites.len()).min()
     }
 
-    /// Iterates all rings that contain `site`.
+    /// Iterates all rings that contain `site`, in the order of [`iter`](Rings::iter).
     ///
     /// Returns an empty iterator if `site` is absent from the molecule or lies
     /// in no ring.
@@ -83,7 +83,7 @@ impl Rings {
             .map(move |&i| &self.rings[i])
     }
 
-    /// Iterates all rings that contain `bond`.
+    /// Iterates all rings that contain `bond`, in the order of [`iter`](Rings::iter).
     ///
     /// A bond shared by fused rings appears in more than one ring. Returns an
     /// empty iterator if `bond` is absent from the molecule or is a bridge.
@@ -761,5 +761,9 @@ mod tests {
             .map(|r| r.sites().to_vec())
             .collect();
         assert_eq!(canonical, reordered);
+        assert_eq!(
+            rings(&fused()).systems().collect::<Vec<_>>(),
+            rings(&shuffled).systems().collect::<Vec<_>>()
+        );
     }
 }

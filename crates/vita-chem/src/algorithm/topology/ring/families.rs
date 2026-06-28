@@ -72,7 +72,7 @@ impl RingFamilies {
         self.families.is_empty()
     }
 
-    /// Iterates all ring families.
+    /// Iterates all ring families, ordered by size then by their sites.
     pub fn iter(&self) -> impl Iterator<Item = &RingFamily> + '_ {
         self.families.iter()
     }
@@ -84,7 +84,7 @@ impl RingFamilies {
         self.families.iter().map(|f| f.size).min()
     }
 
-    /// Iterates all families that contain `site`.
+    /// Iterates all families that contain `site`, in the order of [`iter`](RingFamilies::iter).
     ///
     /// Returns an empty iterator if `site` is absent from the molecule or lies
     /// in no ring.
@@ -97,7 +97,7 @@ impl RingFamilies {
             .map(move |&i| &self.families[i])
     }
 
-    /// Iterates all families that contain `bond`.
+    /// Iterates all families that contain `bond`, in the order of [`iter`](RingFamilies::iter).
     ///
     /// Returns an empty iterator if `bond` is absent from the molecule or is a
     /// bridge.
@@ -121,26 +121,34 @@ impl RingFamilies {
         }
     }
 
-    /// Iterates the spiro atoms of the molecule.
+    /// Iterates the spiro atoms of the molecule, in ascending order.
     ///
     /// A site is a spiro atom when two rings meet at it alone, sharing that one
     /// site and no bond.
     pub fn spiro_sites(&self) -> impl Iterator<Item = SiteId> + '_ {
-        self.site_index
+        let mut sites: Vec<SiteId> = self
+            .site_index
             .iter()
             .filter(|&(_, fams)| self.meet_at_point(fams))
             .map(|(&s, _)| s)
+            .collect();
+        sites.sort_unstable();
+        sites.into_iter()
     }
 
-    /// Iterates the fusion bonds of the molecule.
+    /// Iterates the fusion bonds of the molecule, in ascending order.
     ///
     /// A bond is a fusion bond when two or more rings share it, so it lies in
     /// two or more families.
     pub fn fusion_bonds(&self) -> impl Iterator<Item = BondId> + '_ {
-        self.bond_index
+        let mut bonds: Vec<BondId> = self
+            .bond_index
             .iter()
             .filter(|(_, v)| v.len() >= 2)
             .map(|(&b, _)| b)
+            .collect();
+        bonds.sort_unstable();
+        bonds.into_iter()
     }
 
     /// Derives ring membership from the families.
@@ -737,6 +745,14 @@ mod tests {
         }
     }
 
+    fn reversed(m: &Mol) -> Mol {
+        Mol {
+            sites: m.sites.iter().rev().copied().collect(),
+            bonds: m.bonds.iter().rev().copied().collect(),
+            endpoints: m.endpoints.iter().rev().copied().collect(),
+        }
+    }
+
     fn empty() -> Mol {
         mol(&[], &[])
     }
@@ -1133,5 +1149,20 @@ mod tests {
             .map(|f| (f.size(), f.sites().to_vec()))
             .collect();
         assert_eq!(canonical, reordered);
+
+        let derived = |m: &Mol| -> (Vec<SiteId>, Vec<BondId>, Vec<Vec<SiteId>>) {
+            let f = families(m);
+            (
+                f.spiro_sites().collect(),
+                f.fusion_bonds().collect(),
+                f.systems().collect(),
+            )
+        };
+        assert_eq!(derived(&spiro()), derived(&reversed(&spiro())));
+        assert_eq!(derived(&fused()), derived(&reversed(&fused())));
+        assert_eq!(
+            derived(&two_triangles()),
+            derived(&reversed(&two_triangles()))
+        );
     }
 }

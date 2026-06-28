@@ -14,7 +14,7 @@ use crate::{BondId, BondOrder, HasBondOrders, HasFormalCharges, HasRadicalElectr
 ///
 /// Obtain via [`kekulize`].
 pub struct Kekule {
-    orders: HashMap<BondId, BondOrder>,
+    orders: Vec<(BondId, BondOrder)>,
 }
 
 impl Kekule {
@@ -23,12 +23,16 @@ impl Kekule {
     /// Returns `None` if `bond` was not aromatic, or is absent from the
     /// molecule.
     pub fn order(&self, bond: BondId) -> Option<BondOrder> {
-        self.orders.get(&bond).copied()
+        self.orders
+            .binary_search_by_key(&bond, |&(bond, _)| bond)
+            .ok()
+            .map(|i| self.orders[i].1)
     }
 
-    /// Iterates the resolved bonds and the localised order each took.
+    /// Iterates the resolved bonds and the localised order each took, in
+    /// ascending bond order.
     pub fn orders(&self) -> impl Iterator<Item = (BondId, BondOrder)> + '_ {
-        self.orders.iter().map(|(&bond, &order)| (bond, order))
+        self.orders.iter().copied()
     }
 
     /// Returns `true` if the molecule had no aromatic bonds to resolve.
@@ -125,9 +129,7 @@ where
         .filter(|&bond| mol.bond_order(bond) == BondOrder::Aromatic)
         .collect();
     if aromatic.is_empty() {
-        return Some(Kekule {
-            orders: HashMap::new(),
-        });
+        return Some(Kekule { orders: Vec::new() });
     }
 
     // The atoms that must each take one double bond are the vertices to match;
@@ -164,22 +166,23 @@ where
     }
 
     // The matched aromatic bonds become double, every other aromatic bond single.
-    let mut orders: HashMap<BondId, BondOrder> = HashMap::new();
+    let mut orders: Vec<(BondId, BondOrder)> = Vec::with_capacity(aromatic.len());
     for &bond in &aromatic {
         let (a, b) = mol.bond_endpoints(bond);
         let double = match (index.get(&a), index.get(&b)) {
             (Some(&i), Some(&j)) => matching[i] == Some(j),
             _ => false,
         };
-        orders.insert(
+        orders.push((
             bond,
             if double {
                 BondOrder::Double
             } else {
                 BondOrder::Single
             },
-        );
+        ));
     }
+    orders.sort_unstable_by_key(|&(bond, _)| bond);
 
     Some(Kekule { orders })
 }
@@ -1412,6 +1415,18 @@ mod tests {
             .count()
     }
 
+    fn reversed(m: &Mol) -> Mol {
+        Mol {
+            sites: m.sites.iter().rev().copied().collect(),
+            elements: m.elements.iter().rev().copied().collect(),
+            charges: m.charges.iter().rev().copied().collect(),
+            radicals: m.radicals.iter().rev().copied().collect(),
+            bonds: m.bonds.iter().rev().copied().collect(),
+            endpoints: m.endpoints.iter().rev().copied().collect(),
+            orders: m.orders.iter().rev().copied().collect(),
+        }
+    }
+
     #[test]
     fn already_localised_molecule_resolves_to_empty() {
         let kekule = kekulize(&ethane()).unwrap();
@@ -1424,6 +1439,18 @@ mod tests {
         let kekule = kekulize(&mol).unwrap();
         assert_eq!(doubles(&kekule), 3);
         assert!((1..=6).all(|i| incident_ring_doubles(&mol, &kekule, s(i)) == 1));
+    }
+
+    #[test]
+    fn resolution_is_independent_of_input_order() {
+        let resolved = |m: &Mol| -> Vec<BondId> {
+            kekulize(m)
+                .unwrap()
+                .orders()
+                .map(|(bond, _)| bond)
+                .collect()
+        };
+        assert_eq!(resolved(&benzene()), resolved(&reversed(&benzene())));
     }
 
     #[test]

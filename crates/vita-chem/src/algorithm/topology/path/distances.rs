@@ -13,7 +13,6 @@ use crate::HasBonds;
 /// Obtain via [`distances`].
 pub struct DistanceMatrix {
     sites: Vec<SiteId>,
-    index: HashMap<SiteId, usize>,
     mat: Vec<usize>,
 }
 
@@ -23,7 +22,7 @@ impl DistanceMatrix {
     }
 
     fn idx(&self, s: SiteId) -> Option<usize> {
-        self.index.get(&s).copied()
+        self.sites.binary_search(&s).ok()
     }
 
     fn raw(&self, i: usize, j: usize) -> usize {
@@ -89,7 +88,7 @@ impl DistanceMatrix {
         min_ecc
     }
 
-    /// Sites whose eccentricity equals the radius.
+    /// Sites whose eccentricity equals the radius, in ascending order.
     ///
     /// Yields nothing if the molecule is disconnected.
     pub fn center(&self) -> impl Iterator<Item = SiteId> + '_ {
@@ -100,7 +99,7 @@ impl DistanceMatrix {
             .filter(move |&s| r.is_some_and(|d| self.eccentricity(s) == Some(d)))
     }
 
-    /// Sites whose eccentricity equals the diameter.
+    /// Sites whose eccentricity equals the diameter, in ascending order.
     ///
     /// Yields nothing if the molecule is disconnected.
     pub fn peripheral(&self) -> impl Iterator<Item = SiteId> + '_ {
@@ -140,7 +139,8 @@ impl DistanceMatrix {
 ///
 /// O(V(V + E)) time, O(V²) space.
 pub fn distances<M: HasBonds + HasSites>(mol: &M) -> DistanceMatrix {
-    let sites: Vec<SiteId> = mol.sites().collect();
+    let mut sites: Vec<SiteId> = mol.sites().collect();
+    sites.sort_unstable();
     let n = sites.len();
     let index: HashMap<SiteId, usize> = sites.iter().enumerate().map(|(i, &s)| (s, i)).collect();
 
@@ -167,7 +167,7 @@ pub fn distances<M: HasBonds + HasSites>(mol: &M) -> DistanceMatrix {
         }
     }
 
-    DistanceMatrix { sites, index, mat }
+    DistanceMatrix { sites, mat }
 }
 
 #[cfg(test)]
@@ -367,8 +367,7 @@ mod tests {
 
     #[test]
     fn triangle_all_sites_are_center() {
-        let mut center: Vec<SiteId> = distances(&triangle()).center().collect();
-        center.sort();
+        let center: Vec<SiteId> = distances(&triangle()).center().collect();
         assert_eq!(center, vec![s(1), s(2), s(3)]);
     }
 
@@ -379,16 +378,28 @@ mod tests {
 
     #[test]
     fn chain_peripheral() {
-        let mut peripheral: Vec<SiteId> = distances(&chain()).peripheral().collect();
-        peripheral.sort();
+        let peripheral: Vec<SiteId> = distances(&chain()).peripheral().collect();
         assert_eq!(peripheral, vec![s(1), s(3)]);
     }
 
     #[test]
     fn star_peripheral() {
-        let mut peripheral: Vec<SiteId> = distances(&star()).peripheral().collect();
-        peripheral.sort();
+        let peripheral: Vec<SiteId> = distances(&star()).peripheral().collect();
         assert_eq!(peripheral, vec![s(2), s(3), s(4)]);
+    }
+
+    #[test]
+    fn metrics_are_independent_of_input_order() {
+        let shuffled = Mol {
+            sites: vec![s(4), s(3), s(2), s(1)],
+            bonds: vec![b(3), b(2), b(1)],
+            endpoints: vec![(s(1), s(4)), (s(1), s(3)), (s(1), s(2))],
+        };
+        let metrics = |m: &Mol| -> (Vec<SiteId>, Vec<SiteId>) {
+            let d = distances(m);
+            (d.center().collect(), d.peripheral().collect())
+        };
+        assert_eq!(metrics(&star()), metrics(&shuffled));
     }
 
     #[test]

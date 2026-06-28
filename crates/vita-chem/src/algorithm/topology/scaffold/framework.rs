@@ -25,7 +25,7 @@ pub enum Role {
 ///
 /// Obtain via [`framework`].
 pub struct Framework {
-    roles: HashMap<SiteId, Role>,
+    roles: Vec<(SiteId, Role)>,
 }
 
 impl Framework {
@@ -33,34 +33,37 @@ impl Framework {
     ///
     /// Returns `None` if `site` is not present in the molecule.
     pub fn role(&self, site: SiteId) -> Option<Role> {
-        self.roles.get(&site).copied()
+        self.roles
+            .binary_search_by_key(&site, |&(site, _)| site)
+            .ok()
+            .map(|i| self.roles[i].1)
     }
 
-    /// Iterates the framework sites: the ring and linker atoms left once the
-    /// side chains are stripped.
+    /// Iterates the framework sites — the ring and linker atoms left once the
+    /// side chains are stripped — in ascending order.
     pub fn sites(&self) -> impl Iterator<Item = SiteId> + '_ {
         self.roles
             .iter()
-            .filter(|&(_, &r)| r != Role::SideChain)
-            .map(|(&s, _)| s)
+            .filter(|&&(_, r)| r != Role::SideChain)
+            .map(|&(s, _)| s)
     }
 
-    /// Iterates the linker sites: framework atoms on a path between ring systems
-    /// but in no ring.
+    /// Iterates the linker sites — framework atoms on a path between ring systems
+    /// but in no ring — in ascending order.
     pub fn linkers(&self) -> impl Iterator<Item = SiteId> + '_ {
         self.roles
             .iter()
-            .filter(|&(_, &r)| r == Role::Linker)
-            .map(|(&s, _)| s)
+            .filter(|&&(_, r)| r == Role::Linker)
+            .map(|&(s, _)| s)
     }
 
-    /// Iterates the side-chain sites: atoms on the acyclic branches stripped from
-    /// the framework.
+    /// Iterates the side-chain sites — atoms on the acyclic branches stripped
+    /// from the framework — in ascending order.
     pub fn side_chains(&self) -> impl Iterator<Item = SiteId> + '_ {
         self.roles
             .iter()
-            .filter(|&(_, &r)| r == Role::SideChain)
-            .map(|(&s, _)| s)
+            .filter(|&&(_, r)| r == Role::SideChain)
+            .map(|&(s, _)| s)
     }
 }
 
@@ -109,7 +112,7 @@ pub fn framework<M: HasBonds + HasSites>(mol: &M) -> Framework {
         }
     }
 
-    let mut roles: HashMap<SiteId, Role> = HashMap::new();
+    let mut roles: Vec<(SiteId, Role)> = Vec::new();
     for site in mol.sites() {
         let role = if peeled.contains(&site) {
             Role::SideChain
@@ -118,8 +121,9 @@ pub fn framework<M: HasBonds + HasSites>(mol: &M) -> Framework {
         } else {
             Role::Linker
         };
-        roles.insert(site, role);
+        roles.push((site, role));
     }
+    roles.sort_unstable_by_key(|&(site, _)| site);
 
     Framework { roles }
 }
@@ -222,18 +226,42 @@ mod tests {
     fn acyclic_molecule_is_all_side_chains() {
         let fw = framework(&chain());
         assert_eq!(fw.sites().count(), 0);
-        let mut side: Vec<SiteId> = fw.side_chains().collect();
-        side.sort_unstable();
+        let side: Vec<SiteId> = fw.side_chains().collect();
         assert_eq!(side, vec![s(1), s(2), s(3)]);
     }
 
     #[test]
     fn ring_is_all_framework() {
         let fw = framework(&triangle());
-        let mut sites: Vec<SiteId> = fw.sites().collect();
-        sites.sort_unstable();
+        let sites: Vec<SiteId> = fw.sites().collect();
         assert_eq!(sites, vec![s(1), s(2), s(3)]);
         assert_eq!(fw.side_chains().count(), 0);
+    }
+
+    #[test]
+    fn framework_is_independent_of_input_order() {
+        let shuffled = mol(
+            &[7, 1, 4, 2, 5, 3, 6],
+            &[
+                (8, 7, 4),
+                (1, 1, 2),
+                (5, 5, 6),
+                (2, 2, 3),
+                (6, 4, 6),
+                (3, 1, 3),
+                (7, 3, 7),
+                (4, 4, 5),
+            ],
+        );
+        let parts = |m: &Mol| -> (Vec<SiteId>, Vec<SiteId>, Vec<SiteId>) {
+            let fw = framework(m);
+            (
+                fw.sites().collect(),
+                fw.linkers().collect(),
+                fw.side_chains().collect(),
+            )
+        };
+        assert_eq!(parts(&linked_rings()), parts(&shuffled));
     }
 
     #[test]

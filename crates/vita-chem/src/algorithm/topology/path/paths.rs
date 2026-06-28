@@ -9,7 +9,7 @@ use crate::HasBonds;
 /// Uses BFS to determine the minimum distance, then collects every path of
 /// that length. Returns an empty vector when `start` and `end` lie in
 /// different connected components. Returns `vec![[start]]` when `start == end`.
-/// The order of paths in the returned vector is unspecified.
+/// The paths are returned in ascending order.
 ///
 /// # Complexity
 ///
@@ -60,6 +60,7 @@ pub fn paths<M: HasBonds>(mol: &M, start: SiteId, end: SiteId) -> Vec<Vec<SiteId
         }
     }
 
+    result.sort();
     result
 }
 
@@ -219,9 +220,21 @@ mod tests {
 
     #[test]
     fn cyclobutane_two_shortest_paths() {
-        let mut ps = paths(&cyclobutane(), s(1), s(4));
-        ps.sort();
-        assert_eq!(ps, vec![vec![s(1), s(2), s(4)], vec![s(1), s(3), s(4)],]);
+        let ps = paths(&cyclobutane(), s(1), s(4));
+        assert_eq!(ps, vec![vec![s(1), s(2), s(4)], vec![s(1), s(3), s(4)]]);
+    }
+
+    #[test]
+    fn paths_are_independent_of_input_order() {
+        let shuffled = Mol {
+            sites: vec![s(4), s(3), s(2), s(1)],
+            bonds: vec![b(4), b(3), b(2), b(1)],
+            endpoints: vec![(s(3), s(4)), (s(2), s(4)), (s(1), s(3)), (s(1), s(2))],
+        };
+        assert_eq!(
+            paths(&cyclobutane(), s(1), s(4)),
+            paths(&shuffled, s(1), s(4))
+        );
     }
 
     #[test]
