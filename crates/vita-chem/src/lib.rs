@@ -1,13 +1,9 @@
 mod algorithm;
-mod bond_order;
 mod capability;
-mod hybridization;
-mod id;
+mod primitive;
 mod utils;
 
-pub use bond_order::BondOrder;
-pub use hybridization::Hybridization;
-pub use id::BondId;
+pub use primitive::{BondId, BondOrder, Hybridization};
 
 pub use capability::{
     HasAromaticity, HasBondOrders, HasBonds, HasFormalCharges, HasHybridizations,
