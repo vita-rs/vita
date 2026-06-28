@@ -213,3 +213,103 @@ fn match_order(pattern: &[Vec<(usize, usize)>]) -> (Vec<usize>, Vec<Vec<(usize, 
         .collect();
     (order, parents)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn all(pattern: &[Vec<(usize, usize)>], target: &[Vec<(usize, usize)>]) -> Vec<Vec<usize>> {
+        embeddings(pattern, target.to_vec(), |_, _| true, |_, _| true).collect()
+    }
+
+    fn single() -> Vec<Vec<(usize, usize)>> {
+        vec![vec![]]
+    }
+
+    fn edge() -> Vec<Vec<(usize, usize)>> {
+        vec![vec![(1, 0)], vec![(0, 0)]]
+    }
+
+    fn path() -> Vec<Vec<(usize, usize)>> {
+        vec![vec![(1, 0)], vec![(0, 0), (2, 1)], vec![(1, 1)]]
+    }
+
+    fn pair() -> Vec<Vec<(usize, usize)>> {
+        vec![vec![], vec![]]
+    }
+
+    fn triangle() -> Vec<Vec<(usize, usize)>> {
+        vec![
+            vec![(1, 0), (2, 1)],
+            vec![(0, 0), (2, 2)],
+            vec![(0, 1), (1, 2)],
+        ]
+    }
+
+    #[test]
+    fn empty_pattern_matches_once() {
+        assert_eq!(all(&[], &triangle()), vec![Vec::<usize>::new()]);
+    }
+
+    #[test]
+    fn pattern_larger_than_target_does_not_match() {
+        assert!(all(&triangle(), &edge()).is_empty());
+    }
+
+    #[test]
+    fn single_vertex_matches_every_vertex() {
+        assert_eq!(all(&single(), &triangle()), vec![vec![0], vec![1], vec![2]]);
+    }
+
+    #[test]
+    fn edge_matches_in_both_directions() {
+        assert_eq!(all(&edge(), &triangle()).len(), 6);
+    }
+
+    #[test]
+    fn path_matches_every_walk() {
+        assert_eq!(all(&path(), &triangle()).len(), 6);
+    }
+
+    #[test]
+    fn disconnected_pattern_matches_distinct_vertices() {
+        let pairs = all(&pair(), &triangle());
+        assert_eq!(pairs.len(), 6);
+        assert!(pairs.iter().all(|m| m[0] != m[1]));
+    }
+
+    #[test]
+    fn vertex_colours_filter_matches() {
+        let pcolour = [0usize];
+        let tcolour = [0usize, 1, 0];
+        let found: Vec<_> = embeddings(
+            &single(),
+            triangle(),
+            |p, t| pcolour[p] == tcolour[t],
+            |_, _| true,
+        )
+        .collect();
+        assert_eq!(found, vec![vec![0], vec![2]]);
+    }
+
+    #[test]
+    fn edge_colours_filter_matches() {
+        let pcolour = [0usize];
+        let tcolour = [0usize, 1, 1];
+        let found: Vec<_> = embeddings(
+            &edge(),
+            triangle(),
+            |_, _| true,
+            |pe, te| pcolour[pe] == tcolour[te],
+        )
+        .collect();
+        assert_eq!(found, vec![vec![0, 1], vec![1, 0]]);
+    }
+
+    #[test]
+    fn the_search_is_lazy() {
+        let mut search = embeddings(&single(), triangle(), |_, _| true, |_, _| true);
+        assert_eq!(search.next(), Some(vec![0]));
+        assert_eq!(search.next(), Some(vec![1]));
+    }
+}
