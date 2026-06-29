@@ -51,3 +51,129 @@ impl<K: Ord, V> SortedMap<K, V> {
         self.entries.iter().map(|(k, v)| (k, v))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn empty() -> SortedMap<i32, char> {
+        SortedMap::from_pairs(Vec::new())
+    }
+
+    fn single() -> SortedMap<i32, char> {
+        SortedMap::from_pairs([(5, 'e')])
+    }
+
+    fn unsorted() -> SortedMap<i32, char> {
+        SortedMap::from_pairs([(3, 'c'), (1, 'a'), (2, 'b')])
+    }
+
+    fn gapped() -> SortedMap<i32, char> {
+        SortedMap::from_pairs([(1, 'a'), (5, 'e'), (3, 'c')])
+    }
+
+    #[test]
+    fn empty_map_has_no_entries() {
+        assert_eq!(empty().len(), 0);
+    }
+
+    #[test]
+    fn empty_map_is_empty() {
+        assert!(empty().is_empty());
+    }
+
+    #[test]
+    fn empty_map_get_is_none() {
+        assert_eq!(empty().get(&0), None);
+    }
+
+    #[test]
+    fn single_entry_map_has_length_one() {
+        assert_eq!(single().len(), 1);
+    }
+
+    #[test]
+    fn single_entry_map_is_not_empty() {
+        assert!(!single().is_empty());
+    }
+
+    #[test]
+    fn get_returns_value_for_present_key() {
+        assert_eq!(single().get(&5), Some(&'e'));
+    }
+
+    #[test]
+    fn contains_key_is_true_for_present_key() {
+        assert!(single().contains_key(&5));
+    }
+
+    #[test]
+    fn get_returns_none_for_absent_key() {
+        assert_eq!(single().get(&9), None);
+    }
+
+    #[test]
+    fn contains_key_is_false_for_absent_key() {
+        assert!(!single().contains_key(&9));
+    }
+
+    #[test]
+    fn get_is_none_for_key_in_a_gap() {
+        assert_eq!(gapped().get(&2), None);
+    }
+
+    #[test]
+    fn get_finds_minimum_key() {
+        assert_eq!(gapped().get(&1), Some(&'a'));
+    }
+
+    #[test]
+    fn get_finds_maximum_key() {
+        assert_eq!(gapped().get(&5), Some(&'e'));
+    }
+
+    #[test]
+    fn get_is_none_below_minimum_key() {
+        assert_eq!(gapped().get(&0), None);
+    }
+
+    #[test]
+    fn get_is_none_above_maximum_key() {
+        assert_eq!(gapped().get(&6), None);
+    }
+
+    #[test]
+    fn iter_yields_entries_in_ascending_key_order() {
+        let map = unsorted();
+        let entries: Vec<(&i32, &char)> = map.iter().collect();
+        assert_eq!(entries, vec![(&1, &'a'), (&2, &'b'), (&3, &'c')]);
+    }
+
+    #[test]
+    fn get_resolves_each_key_to_its_value() {
+        let map = unsorted();
+        assert_eq!(map.get(&1), Some(&'a'));
+        assert_eq!(map.get(&2), Some(&'b'));
+        assert_eq!(map.get(&3), Some(&'c'));
+    }
+
+    #[test]
+    fn len_counts_all_entries() {
+        assert_eq!(unsorted().len(), 3);
+        assert_eq!(gapped().len(), 3);
+    }
+
+    #[test]
+    fn lookup_is_independent_of_insertion_order() {
+        let a = SortedMap::from_pairs([(3, 'c'), (1, 'a'), (2, 'b')]);
+        let b = SortedMap::from_pairs([(2, 'b'), (3, 'c'), (1, 'a')]);
+        assert_eq!(
+            a.iter().collect::<Vec<_>>(),
+            b.iter().collect::<Vec<_>>(),
+            "iteration order differs",
+        );
+        for k in [1, 2, 3] {
+            assert_eq!(a.get(&k), b.get(&k), "lookup of {k} differs");
+        }
+    }
+}
