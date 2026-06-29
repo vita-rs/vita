@@ -1,3 +1,5 @@
+mod utils;
+
 pub mod aromaticity;
 pub mod canonical;
 pub mod isomorphism;
