@@ -54,3 +54,79 @@ pub type FxHashSet<T> = HashSet<T, BuildHasherDefault<FxHasher>>;
 
 /// A [`HashMap`] keyed by [`FxHasher`].
 pub type FxHashMap<K, V> = HashMap<K, V, BuildHasherDefault<FxHasher>>;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::hash::{Hash, Hasher};
+
+    fn hash(value: impl Hash) -> u64 {
+        let mut hasher = FxHasher::default();
+        value.hash(&mut hasher);
+        hasher.finish()
+    }
+
+    #[test]
+    fn default_set_is_empty() {
+        let set: FxHashSet<u32> = FxHashSet::default();
+        assert!(set.is_empty());
+    }
+
+    #[test]
+    fn set_reports_an_inserted_key_as_present() {
+        let mut set: FxHashSet<u32> = FxHashSet::default();
+        set.insert(7);
+        assert!(set.contains(&7));
+    }
+
+    #[test]
+    fn map_returns_the_value_for_an_inserted_key() {
+        let mut map: FxHashMap<u32, &str> = FxHashMap::default();
+        map.insert(1, "a");
+        assert_eq!(map.get(&1), Some(&"a"));
+    }
+
+    #[test]
+    fn set_reports_an_absent_key_as_missing() {
+        let mut set: FxHashSet<u32> = FxHashSet::default();
+        set.insert(7);
+        assert!(!set.contains(&8));
+    }
+
+    #[test]
+    fn map_returns_none_for_an_absent_key() {
+        let mut map: FxHashMap<u32, &str> = FxHashMap::default();
+        map.insert(1, "a");
+        assert_eq!(map.get(&2), None);
+    }
+
+    #[test]
+    fn distinct_values_hash_differently() {
+        assert_ne!(hash(5u32), hash(6u32));
+    }
+
+    #[test]
+    fn distinct_byte_strings_hash_differently() {
+        assert_ne!(hash("ab"), hash("cd"));
+    }
+
+    #[test]
+    fn reordering_a_compound_value_changes_the_hash() {
+        assert_ne!(hash((1u32, 2u32)), hash((2u32, 1u32)));
+    }
+
+    #[test]
+    fn set_holds_every_distinct_key() {
+        let mut set: FxHashSet<u32> = FxHashSet::default();
+        for key in [1, 2, 3, 100, 5000] {
+            set.insert(key);
+        }
+        assert_eq!(set.len(), 5);
+        assert!([1, 2, 3, 100, 5000].iter().all(|key| set.contains(key)));
+    }
+
+    #[test]
+    fn hashing_is_deterministic() {
+        assert_eq!(hash(0x1234_5678_u32), hash(0x1234_5678_u32));
+    }
+}
