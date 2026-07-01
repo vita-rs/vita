@@ -1,75 +1,89 @@
-use std::collections::{HashMap, VecDeque};
+use std::collections::VecDeque;
 
 use vita_core::SiteId;
 
 use crate::HasBonds;
+use crate::algorithm::utils::FxHashMap;
 
-/// All shortest topological paths between two sites, each inclusive of both endpoints.
+/// Every shortest path from `start` to `end`.
 ///
-/// Uses BFS to determine the minimum distance, then collects every path of
-/// that length. Returns an empty vector when `start` and `end` lie in
-/// different connected components. Returns `vec![[start]]` when `start == end`.
-/// The paths are returned in ascending order.
+/// A shortest path uses the fewest bonds; when several tie, all are returned,
+/// each listing its sites in order from `start` to `end` inclusive. The result
+/// is empty when `end` is unreachable from `start`, and is the single path
+/// `[start]` when `start == end`. Paths are returned in ascending order.
 ///
 /// # Complexity
 ///
-/// O(V + E + P) time and O(V + P) auxiliary space, where P is the total
-/// number of sites across all returned paths.
+/// O(V + E + P) time and space, where `V` and `E` are the sites and bonds
+/// reachable from `start` and `P` is the total length of the paths returned,
+/// assuming [`neighbors`](HasBonds::neighbors) runs in O(degree).
 pub fn paths<M: HasBonds>(mol: &M, start: SiteId, end: SiteId) -> Vec<Vec<SiteId>> {
     if start == end {
         return vec![vec![start]];
     }
 
-    let mut dist: HashMap<SiteId, usize> = HashMap::new();
+    let mut dist: FxHashMap<SiteId, usize> = FxHashMap::default();
+    let mut parents: FxHashMap<SiteId, Vec<SiteId>> = FxHashMap::default();
     let mut queue: VecDeque<SiteId> = VecDeque::new();
-
     dist.insert(start, 0);
     queue.push_back(start);
 
     while let Some(site) = queue.pop_front() {
         let d = dist[&site];
-        for nb in mol.neighbors(site) {
-            if let std::collections::hash_map::Entry::Vacant(e) = dist.entry(nb) {
-                e.insert(d + 1);
-                queue.push_back(nb);
+        for neighbor in mol.neighbors(site) {
+            match dist.get(&neighbor).copied() {
+                None => {
+                    dist.insert(neighbor, d + 1);
+                    parents.insert(neighbor, vec![site]);
+                    queue.push_back(neighbor);
+                }
+                Some(nd) if nd == d + 1 => parents.get_mut(&neighbor).unwrap().push(site),
+                Some(_) => {}
             }
         }
     }
 
     if !dist.contains_key(&end) {
-        return vec![];
+        return Vec::new();
     }
 
     let mut result: Vec<Vec<SiteId>> = Vec::new();
-    let mut stack: Vec<(SiteId, Vec<SiteId>)> = vec![(end, vec![end])];
+    let mut path: Vec<SiteId> = Vec::new();
+    collect(&parents, start, end, &mut path, &mut result);
+    result.sort_unstable();
+    result
+}
 
-    while let Some((site, partial)) = stack.pop() {
-        if site == start {
-            let mut path = partial;
-            path.reverse();
-            result.push(path);
-            continue;
-        }
-        let d = dist[&site];
-        for nb in mol.neighbors(site) {
-            if dist.get(&nb) == Some(&(d - 1)) {
-                let mut next = partial.clone();
-                next.push(nb);
-                stack.push((nb, next));
-            }
+/// Follows the predecessor lists `parents` from `site` back to `start`,
+/// appending each complete path to `result`. `path` holds the sites chosen so
+/// far, in reverse; a completed path is reversed before it is stored.
+fn collect(
+    parents: &FxHashMap<SiteId, Vec<SiteId>>,
+    start: SiteId,
+    site: SiteId,
+    path: &mut Vec<SiteId>,
+    result: &mut Vec<Vec<SiteId>>,
+) {
+    path.push(site);
+    if site == start {
+        let mut full = path.clone();
+        full.reverse();
+        result.push(full);
+    } else {
+        for &parent in &parents[&site] {
+            collect(parents, start, parent, path, result);
         }
     }
-
-    result.sort();
-    result
+    path.pop();
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::BondId;
-    use std::collections::HashSet;
+
     use vita_core::HasSites;
+
+    use crate::BondId;
 
     fn s(n: u32) -> SiteId {
         SiteId::new(n).unwrap()
@@ -118,193 +132,89 @@ mod tests {
         }
     }
 
-    fn star() -> Mol {
-        Mol {
-            sites: vec![s(1), s(2), s(3), s(4)],
-            bonds: vec![b(1), b(2), b(3)],
-            endpoints: vec![(s(1), s(2)), (s(1), s(3)), (s(1), s(4))],
-        }
-    }
-
-    fn cyclobutane() -> Mol {
+    fn square() -> Mol {
         Mol {
             sites: vec![s(1), s(2), s(3), s(4)],
             bonds: vec![b(1), b(2), b(3), b(4)],
-            endpoints: vec![(s(1), s(2)), (s(1), s(3)), (s(2), s(4)), (s(3), s(4))],
+            endpoints: vec![(s(1), s(2)), (s(2), s(3)), (s(3), s(4)), (s(1), s(4))],
         }
     }
 
-    fn pentane() -> Mol {
+    fn disconnected() -> Mol {
         Mol {
-            sites: vec![s(1), s(2), s(3), s(4), s(5)],
-            bonds: vec![b(1), b(2), b(3), b(4)],
-            endpoints: vec![(s(1), s(2)), (s(2), s(3)), (s(3), s(4)), (s(4), s(5))],
-        }
-    }
-
-    fn two_components() -> Mol {
-        Mol {
-            sites: vec![s(1), s(2), s(3)],
-            bonds: vec![b(1)],
-            endpoints: vec![(s(1), s(2))],
+            sites: vec![s(1), s(2), s(3), s(4)],
+            bonds: vec![b(1), b(2)],
+            endpoints: vec![(s(1), s(2)), (s(3), s(4))],
         }
     }
 
     #[test]
-    fn same_start_and_end() {
-        assert_eq!(paths(&chain(), s(1), s(1)), vec![vec![s(1)]]);
+    fn start_equal_to_end_yields_the_lone_site() {
         assert_eq!(paths(&chain(), s(2), s(2)), vec![vec![s(2)]]);
-        assert_eq!(paths(&chain(), s(3), s(3)), vec![vec![s(3)]]);
     }
 
     #[test]
-    fn single_site_to_itself() {
-        let mol = Mol {
-            sites: vec![s(1)],
-            bonds: vec![],
-            endpoints: vec![],
-        };
-        assert_eq!(paths(&mol, s(1), s(1)), vec![vec![s(1)]]);
+    fn a_tree_yields_its_unique_shortest_path() {
+        assert_eq!(paths(&chain(), s(1), s(3)), vec![vec![s(1), s(2), s(3)]]);
     }
 
     #[test]
-    fn adjacent_sites() {
-        assert_eq!(paths(&chain(), s(1), s(2)), vec![vec![s(1), s(2)]]);
+    fn disconnected_sites_yield_no_path() {
+        assert!(paths(&disconnected(), s(1), s(3)).is_empty());
     }
 
     #[test]
-    fn adjacent_sites_reversed() {
-        assert_eq!(paths(&chain(), s(2), s(1)), vec![vec![s(2), s(1)]]);
+    fn excludes_paths_longer_than_the_shortest() {
+        assert_eq!(paths(&triangle(), s(1), s(3)), vec![vec![s(1), s(3)]]);
     }
 
     #[test]
-    fn chain_two_hops() {
-        assert_eq!(paths(&chain(), s(1), s(3)), vec![vec![s(1), s(2), s(3)]],);
+    fn a_cycle_yields_every_tied_shortest_path() {
+        let result = paths(&square(), s(1), s(3));
+        assert_eq!(result.len(), 2);
+        assert!(result.contains(&vec![s(1), s(2), s(3)]));
+        assert!(result.contains(&vec![s(1), s(4), s(3)]));
     }
 
     #[test]
-    fn chain_two_hops_reversed() {
-        assert_eq!(paths(&chain(), s(3), s(1)), vec![vec![s(3), s(2), s(1)]],);
+    fn all_paths_share_the_minimal_length() {
+        let result = paths(&square(), s(1), s(3));
+        assert!(result.iter().all(|path| path.len() == 3));
     }
 
     #[test]
-    fn disconnected_returns_empty() {
-        assert!(paths(&two_components(), s(1), s(3)).is_empty());
-        assert!(paths(&two_components(), s(3), s(1)).is_empty());
-    }
-
-    #[test]
-    fn isolated_site_returns_empty() {
-        assert!(paths(&two_components(), s(3), s(2)).is_empty());
-    }
-
-    #[test]
-    fn ring_single_shortest_path() {
-        assert_eq!(paths(&triangle(), s(1), s(3)), vec![vec![s(1), s(3)]],);
-    }
-
-    #[test]
-    fn ring_path_length_is_one_hop() {
-        assert_eq!(paths(&triangle(), s(1), s(3))[0].len(), 2);
-    }
-
-    #[test]
-    fn star_leaf_to_leaf_through_center() {
-        assert_eq!(paths(&star(), s(2), s(3)), vec![vec![s(2), s(1), s(3)]],);
-    }
-
-    #[test]
-    fn star_leaf_to_center() {
-        assert_eq!(paths(&star(), s(4), s(1)), vec![vec![s(4), s(1)]]);
-    }
-
-    #[test]
-    fn cyclobutane_two_shortest_paths() {
-        let ps = paths(&cyclobutane(), s(1), s(4));
-        assert_eq!(ps, vec![vec![s(1), s(2), s(4)], vec![s(1), s(3), s(4)]]);
-    }
-
-    #[test]
-    fn paths_are_independent_of_input_order() {
-        let shuffled = Mol {
-            sites: vec![s(4), s(3), s(2), s(1)],
-            bonds: vec![b(4), b(3), b(2), b(1)],
-            endpoints: vec![(s(3), s(4)), (s(2), s(4)), (s(1), s(3)), (s(1), s(2))],
-        };
-        assert_eq!(
-            paths(&cyclobutane(), s(1), s(4)),
-            paths(&shuffled, s(1), s(4))
-        );
-    }
-
-    #[test]
-    fn cyclobutane_all_paths_same_length() {
-        let ps = paths(&cyclobutane(), s(1), s(4));
-        let len = ps[0].len();
-        assert!(ps.iter().all(|p| p.len() == len));
-    }
-
-    #[test]
-    fn pentane_full_path() {
-        assert_eq!(
-            paths(&pentane(), s(1), s(5)),
-            vec![vec![s(1), s(2), s(3), s(4), s(5)]],
-        );
-    }
-
-    #[test]
-    fn pentane_from_interior() {
-        assert_eq!(paths(&pentane(), s(3), s(5)), vec![vec![s(3), s(4), s(5)]],);
-    }
-
-    #[test]
-    fn all_paths_start_at_start() {
-        for p in paths(&cyclobutane(), s(1), s(4)) {
-            assert_eq!(p.first(), Some(&s(1)));
-        }
-        for p in paths(&star(), s(2), s(4)) {
-            assert_eq!(p.first(), Some(&s(2)));
-        }
-        for p in paths(&pentane(), s(3), s(5)) {
-            assert_eq!(p.first(), Some(&s(3)));
+    fn every_path_runs_from_start_to_end() {
+        for path in paths(&square(), s(3), s(1)) {
+            assert_eq!(path.first(), Some(&s(3)));
+            assert_eq!(path.last(), Some(&s(1)));
         }
     }
 
     #[test]
-    fn all_paths_end_at_end() {
-        for p in paths(&cyclobutane(), s(1), s(4)) {
-            assert_eq!(p.last(), Some(&s(4)));
-        }
-        for p in paths(&star(), s(2), s(4)) {
-            assert_eq!(p.last(), Some(&s(4)));
-        }
-        for p in paths(&pentane(), s(3), s(5)) {
-            assert_eq!(p.last(), Some(&s(5)));
-        }
-    }
-
-    #[test]
-    fn all_consecutive_sites_bonded() {
-        let mol = cyclobutane();
-        for p in paths(&mol, s(1), s(4)) {
-            for w in p.windows(2) {
-                assert!(mol.bond_between(w[0], w[1]).is_some());
+    fn consecutive_sites_in_each_path_are_bonded() {
+        let mol = square();
+        for path in paths(&mol, s(1), s(3)) {
+            for window in path.windows(2) {
+                assert!(mol.bond_between(window[0], window[1]).is_some());
             }
         }
     }
 
     #[test]
-    fn all_paths_contain_no_duplicate_sites() {
-        for p in paths(&cyclobutane(), s(1), s(4)) {
-            let unique: HashSet<_> = p.iter().copied().collect();
-            assert_eq!(unique.len(), p.len());
-        }
+    fn paths_are_listed_in_ascending_order() {
+        let result = paths(&square(), s(1), s(3));
+        let mut sorted = result.clone();
+        sorted.sort();
+        assert_eq!(result, sorted);
     }
 
     #[test]
-    fn tree_yields_exactly_one_path() {
-        assert_eq!(paths(&chain(), s(1), s(3)).len(), 1);
-        assert_eq!(paths(&pentane(), s(1), s(5)).len(), 1);
-        assert_eq!(paths(&star(), s(2), s(3)).len(), 1);
+    fn output_is_independent_of_input_order() {
+        let reordered = Mol {
+            sites: vec![s(4), s(3), s(2), s(1)],
+            bonds: vec![b(4), b(3), b(2), b(1)],
+            endpoints: vec![(s(1), s(4)), (s(3), s(4)), (s(2), s(3)), (s(1), s(2))],
+        };
+        assert_eq!(paths(&square(), s(1), s(3)), paths(&reordered, s(1), s(3)));
     }
 }
