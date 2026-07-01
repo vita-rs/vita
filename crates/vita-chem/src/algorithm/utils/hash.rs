@@ -58,6 +58,7 @@ pub type FxHashMap<K, V> = HashMap<K, V, BuildHasherDefault<FxHasher>>;
 #[cfg(test)]
 mod tests {
     use super::*;
+
     use std::hash::{Hash, Hasher};
 
     fn hash(value: impl Hash) -> u64 {
