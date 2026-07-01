@@ -75,3 +75,114 @@ impl<K: Ord, V: Ord> SortedMultimap<K, V> {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn empty() -> SortedMultimap<i32, char> {
+        SortedMultimap::from_pairs(Vec::new())
+    }
+
+    fn single() -> SortedMultimap<i32, char> {
+        SortedMultimap::from_pairs([(5, 'e')])
+    }
+
+    fn grouped() -> SortedMultimap<i32, char> {
+        SortedMultimap::from_pairs([(3, 'c'), (1, 'd'), (2, 'b'), (1, 'a')])
+    }
+
+    fn gapped() -> SortedMultimap<i32, char> {
+        SortedMultimap::from_pairs([(1, 'a'), (4, 'e')])
+    }
+
+    #[test]
+    fn empty_multimap_has_no_keys() {
+        assert_eq!(empty().len(), 0);
+    }
+
+    #[test]
+    fn empty_multimap_is_empty() {
+        assert!(empty().is_empty());
+    }
+
+    #[test]
+    fn empty_multimap_get_yields_no_values() {
+        assert!(empty().get(&0).is_empty());
+    }
+
+    #[test]
+    fn single_key_multimap_has_one_key() {
+        assert_eq!(single().len(), 1);
+    }
+
+    #[test]
+    fn single_key_multimap_is_not_empty() {
+        assert!(!single().is_empty());
+    }
+
+    #[test]
+    fn get_returns_all_of_a_keys_values_in_ascending_order() {
+        assert_eq!(grouped().get(&1), &['a', 'd']);
+    }
+
+    #[test]
+    fn contains_key_is_true_for_a_present_key() {
+        assert!(grouped().contains_key(&2));
+    }
+
+    #[test]
+    fn get_yields_no_values_for_a_key_in_a_gap() {
+        assert!(gapped().get(&2).is_empty());
+    }
+
+    #[test]
+    fn contains_key_is_false_for_an_absent_key() {
+        assert!(!gapped().contains_key(&2));
+    }
+
+    #[test]
+    fn get_finds_the_minimum_key() {
+        assert_eq!(gapped().get(&1), &['a']);
+    }
+
+    #[test]
+    fn get_finds_the_maximum_key() {
+        assert_eq!(gapped().get(&4), &['e']);
+    }
+
+    #[test]
+    fn get_yields_no_values_below_the_minimum_key() {
+        assert!(gapped().get(&0).is_empty());
+    }
+
+    #[test]
+    fn get_yields_no_values_above_the_maximum_key() {
+        assert!(gapped().get(&5).is_empty());
+    }
+
+    #[test]
+    fn iter_yields_each_key_with_its_values_in_key_order() {
+        let mm = grouped();
+        let entries: Vec<(&i32, &[char])> = mm.iter().collect();
+        assert_eq!(
+            entries,
+            vec![(&1, &['a', 'd'][..]), (&2, &['b'][..]), (&3, &['c'][..])],
+        );
+    }
+
+    #[test]
+    fn len_counts_distinct_keys_not_values() {
+        assert_eq!(grouped().len(), 3);
+    }
+
+    #[test]
+    fn lookup_is_independent_of_input_order() {
+        let a = SortedMultimap::from_pairs([(3, 'c'), (1, 'd'), (2, 'b'), (1, 'a')]);
+        let b = SortedMultimap::from_pairs([(1, 'a'), (2, 'b'), (1, 'd'), (3, 'c')]);
+        assert_eq!(a.iter().collect::<Vec<_>>(), b.iter().collect::<Vec<_>>());
+        for key in [1, 2, 3] {
+            assert_eq!(a.get(&key), b.get(&key), "values for {key} differ");
+        }
+    }
+}
