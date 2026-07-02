@@ -1,14 +1,14 @@
-use std::collections::{HashMap, HashSet};
+use vita_core::SiteId;
 
-use vita_core::{HasSites, SiteId};
-
+use crate::algorithm::utils::{AdjacencyList, FxHashMap};
 use crate::{BondId, HasBonds};
 
-/// The ring membership of a molecule's sites and bonds.
+/// Which of a molecule's sites and bonds lie in a ring.
 ///
-/// A bond is a ring bond if and only if it is not a bridge; that is, removing
-/// it would not increase the number of connected components. A site is a ring
-/// site if and only if it is incident to at least one ring bond.
+/// A bond is a ring bond exactly when it is not a bridge — when its removal
+/// would leave the number of connected components unchanged. A site is a ring
+/// site exactly when it is incident to a ring bond. The ring sites and the ring
+/// bonds are each held in ascending order.
 ///
 /// Obtain via [`membership`].
 pub struct RingMembership {
@@ -17,142 +17,154 @@ pub struct RingMembership {
 }
 
 impl RingMembership {
-    /// Returns `true` if `site` lies in at least one ring.
+    /// Returns `true` if `site` lies in a ring.
     ///
-    /// Returns `false` if `site` is absent from the molecule or lies in no
-    /// ring.
-    pub fn site(&self, site: SiteId) -> bool {
+    /// Returns `false` if `site` is absent from the molecule or lies in no ring.
+    pub fn contains_site(&self, site: SiteId) -> bool {
         self.sites.binary_search(&site).is_ok()
     }
 
-    /// Returns `true` if `bond` lies in at least one ring.
+    /// Returns `true` if `bond` lies in a ring.
     ///
     /// Returns `false` if `bond` is absent from the molecule or is a bridge.
-    pub fn bond(&self, bond: BondId) -> bool {
+    pub fn contains_bond(&self, bond: BondId) -> bool {
         self.bonds.binary_search(&bond).is_ok()
     }
 
-    /// Iterates the ring sites, in ascending order.
-    pub fn sites(&self) -> impl Iterator<Item = SiteId> + '_ {
-        self.sites.iter().copied()
+    /// The ring sites, in ascending order.
+    pub fn sites(&self) -> &[SiteId] {
+        &self.sites
     }
 
-    /// Iterates the ring bonds, in ascending order.
-    pub fn bonds(&self) -> impl Iterator<Item = BondId> + '_ {
-        self.bonds.iter().copied()
+    /// The ring bonds, in ascending order.
+    pub fn bonds(&self) -> &[BondId] {
+        &self.bonds
     }
 
-    /// Returns `true` if the molecule contains no rings.
+    /// Returns `true` if the molecule has no rings.
     pub fn is_acyclic(&self) -> bool {
         self.bonds.is_empty()
     }
 
-    /// Builds a membership from its ring-site and ring-bond sets.
-    pub(super) fn from_sets(sites: HashSet<SiteId>, bonds: HashSet<BondId>) -> Self {
+    /// Builds a membership from its ring sites and ring bonds.
+    pub(super) fn from_sets(
+        sites: impl IntoIterator<Item = SiteId>,
+        bonds: impl IntoIterator<Item = BondId>,
+    ) -> Self {
         let mut sites: Vec<SiteId> = sites.into_iter().collect();
         let mut bonds: Vec<BondId> = bonds.into_iter().collect();
         sites.sort_unstable();
+        sites.dedup();
         bonds.sort_unstable();
+        bonds.dedup();
         RingMembership { sites, bonds }
     }
 }
 
-/// Ring membership of every site and bond.
+/// The ring membership of a molecule's sites and bonds.
 ///
 /// A bond is a ring bond exactly when it is not a bridge; a site is a ring site
-/// exactly when it is incident to a ring bond. Computed with a single iterative
-/// depth-first traversal using Tarjan's low-link bridge test, so no stack space
-/// is consumed in proportion to traversal depth.
+/// exactly when it is incident to a ring bond. Bridges are found by Tarjan's
+/// low-link test over an explicit stack, so recursion depth never bounds the
+/// traversal.
 ///
 /// # Complexity
 ///
 /// O(V + E) time and space.
-pub fn membership<M: HasBonds + HasSites>(mol: &M) -> RingMembership {
+pub fn membership<M: HasBonds>(mol: &M) -> RingMembership {
     let sites: Vec<SiteId> = mol.sites().collect();
+    let bonds: Vec<BondId> = mol.bonds().collect();
     let n = sites.len();
+    let m = bonds.len();
 
-    let mut ring_sites: HashSet<SiteId> = HashSet::new();
-    let mut ring_bonds: HashSet<BondId> = HashSet::new();
+    let index: FxHashMap<SiteId, usize> = sites.iter().enumerate().map(|(i, &s)| (s, i)).collect();
+    let adjacency = AdjacencyList::build(
+        n,
+        bonds.iter().enumerate().map(|(e, &bond)| {
+            let (a, b) = mol.bond_endpoints(bond);
+            (e, index[&a], index[&b])
+        }),
+    );
 
-    if n == 0 {
-        return RingMembership::from_sets(ring_sites, ring_bonds);
+    let is_bridge = bridges(n, m, &adjacency);
+
+    let mut ring_bonds: Vec<BondId> = (0..m)
+        .filter(|&e| !is_bridge[e])
+        .map(|e| bonds[e])
+        .collect();
+    ring_bonds.sort_unstable();
+
+    let mut ring_sites: Vec<SiteId> = (0..n)
+        .filter(|&u| adjacency.neighbors(u).iter().any(|&(e, _)| !is_bridge[e]))
+        .map(|u| sites[u])
+        .collect();
+    ring_sites.sort_unstable();
+
+    RingMembership {
+        sites: ring_sites,
+        bonds: ring_bonds,
     }
+}
 
-    let site_pos: HashMap<SiteId, usize> = sites.iter().enumerate().map(|(i, &s)| (s, i)).collect();
-
-    let mut adj: Vec<Vec<(BondId, usize)>> = vec![vec![]; n];
-    for bond in mol.bonds() {
-        let (a, b) = mol.bond_endpoints(bond);
-        let ai = site_pos[&a];
-        let bi = site_pos[&b];
-        adj[ai].push((bond, bi));
-        adj[bi].push((bond, ai));
-    }
-
+/// Flags each edge that is a bridge: an edge on no cycle, whose removal would
+/// disconnect its component.
+///
+/// Runs Tarjan's low-link test over an explicit stack, so recursion depth never
+/// bounds the traversal. The flag at index `e` refers to the edge whose
+/// identifier is `e` in `adjacency`.
+fn bridges(n: usize, m: usize, adjacency: &AdjacencyList) -> Vec<bool> {
     let mut disc = vec![usize::MAX; n];
     let mut low = vec![0usize; n];
-    let mut timer = 0usize;
-
-    let mut dfs_stack: Vec<(usize, Option<BondId>, usize)> = Vec::new();
+    let mut is_bridge = vec![false; m];
+    let mut timer = 0;
+    let mut stack: Vec<(usize, usize, usize)> = Vec::new();
 
     for start in 0..n {
         if disc[start] != usize::MAX {
             continue;
         }
-
         disc[start] = timer;
         low[start] = timer;
         timer += 1;
-        dfs_stack.push((start, None, 0));
+        stack.push((start, usize::MAX, 0));
 
-        while !dfs_stack.is_empty() {
-            let (u, parent_bond, adj_pos) = *dfs_stack.last().unwrap();
-
-            if adj_pos < adj[u].len() {
-                let (bond, v) = adj[u][adj_pos];
-                dfs_stack.last_mut().unwrap().2 += 1;
-
-                if Some(bond) == parent_bond {
+        while let Some(&(u, parent_edge, cursor)) = stack.last() {
+            if cursor < adjacency.neighbors(u).len() {
+                stack.last_mut().unwrap().2 += 1;
+                let (edge, v) = adjacency.neighbors(u)[cursor];
+                if edge == parent_edge {
                     continue;
                 }
-
                 if disc[v] == usize::MAX {
                     disc[v] = timer;
                     low[v] = timer;
                     timer += 1;
-                    dfs_stack.push((v, Some(bond), 0));
-                } else if disc[v] < disc[u] {
-                    if disc[v] < low[u] {
-                        low[u] = disc[v];
-                    }
-                    ring_bonds.insert(bond);
-                    ring_sites.insert(sites[u]);
-                    ring_sites.insert(sites[v]);
+                    stack.push((v, edge, 0));
+                } else {
+                    low[u] = low[u].min(disc[v]);
                 }
             } else {
-                dfs_stack.pop();
-
-                if let Some(&(pu, _, _)) = dfs_stack.last() {
-                    if low[u] < low[pu] {
-                        low[pu] = low[u];
-                    }
-                    if low[u] <= disc[pu] {
-                        ring_bonds.insert(parent_bond.unwrap());
-                        ring_sites.insert(sites[u]);
-                        ring_sites.insert(sites[pu]);
+                stack.pop();
+                if let Some(&(parent, _, _)) = stack.last() {
+                    low[parent] = low[parent].min(low[u]);
+                    if low[u] > disc[parent] {
+                        is_bridge[parent_edge] = true;
                     }
                 }
             }
         }
     }
 
-    RingMembership::from_sets(ring_sites, ring_bonds)
+    is_bridge
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
     use vita_core::HasSites;
+
+    use crate::BondId;
 
     fn s(n: u32) -> SiteId {
         SiteId::new(n).unwrap()
@@ -267,107 +279,74 @@ mod tests {
     }
 
     #[test]
-    fn chain_is_acyclic() {
-        assert!(membership(&chain()).is_acyclic());
+    fn every_bond_of_a_cycle_is_a_ring_bond() {
+        let m = membership(&triangle());
+        assert!([b(1), b(2), b(3)].iter().all(|&bond| m.contains_bond(bond)));
     }
 
     #[test]
-    fn triangle_is_not_acyclic() {
+    fn every_site_of_a_cycle_is_a_ring_site() {
+        let m = membership(&triangle());
+        assert!([s(1), s(2), s(3)].iter().all(|&site| m.contains_site(site)));
+    }
+
+    #[test]
+    fn a_molecule_with_a_cycle_is_not_acyclic() {
         assert!(!membership(&triangle()).is_acyclic());
     }
 
     #[test]
-    fn chain_site_not_in_ring() {
-        let m = membership(&chain());
-        assert!(!m.site(s(1)));
-        assert!(!m.site(s(2)));
-        assert!(!m.site(s(3)));
+    fn a_tree_is_acyclic() {
+        assert!(membership(&chain()).is_acyclic());
     }
 
     #[test]
-    fn chain_bond_not_in_ring() {
-        let m = membership(&chain());
-        assert!(!m.bond(b(1)));
-        assert!(!m.bond(b(2)));
+    fn a_bridge_is_not_a_ring_bond() {
+        assert!(!membership(&lollipop()).contains_bond(b(4)));
     }
 
     #[test]
-    fn chain_has_no_ring_sites() {
-        assert_eq!(membership(&chain()).sites().count(), 0);
+    fn a_site_incident_only_to_bridges_is_not_a_ring_site() {
+        assert!(!membership(&lollipop()).contains_site(s(4)));
     }
 
     #[test]
-    fn triangle_every_site_in_ring() {
-        let m = membership(&triangle());
-        assert!([s(1), s(2), s(3)].iter().all(|&site| m.site(site)));
+    fn an_unknown_site_is_not_a_ring_site() {
+        assert!(!membership(&triangle()).contains_site(s(99)));
     }
 
     #[test]
-    fn triangle_every_bond_in_ring() {
-        let m = membership(&triangle());
-        assert!([b(1), b(2), b(3)].iter().all(|&bond| m.bond(bond)));
+    fn an_unknown_bond_is_not_a_ring_bond() {
+        assert!(!membership(&triangle()).contains_bond(b(99)));
     }
 
     #[test]
-    fn triangle_ring_sites() {
-        let sites: Vec<SiteId> = membership(&triangle()).sites().collect();
-        assert_eq!(sites, vec![s(1), s(2), s(3)]);
+    fn a_site_shared_by_a_ring_and_a_bridge_is_a_ring_site() {
+        assert!(membership(&dumbbell()).contains_site(s(3)));
     }
 
     #[test]
-    fn triangle_ring_bonds() {
-        let bonds: Vec<BondId> = membership(&triangle()).bonds().collect();
-        assert_eq!(bonds, vec![b(1), b(2), b(3)]);
+    fn a_bridge_joining_two_rings_is_not_a_ring_bond() {
+        assert!(!membership(&dumbbell()).contains_bond(b(4)));
     }
 
     #[test]
-    fn lollipop_ring_sites() {
-        let sites: Vec<SiteId> = membership(&lollipop()).sites().collect();
-        assert_eq!(sites, vec![s(1), s(2), s(3)]);
-    }
-
-    #[test]
-    fn lollipop_ring_bonds() {
-        let bonds: Vec<BondId> = membership(&lollipop()).bonds().collect();
-        assert_eq!(bonds, vec![b(1), b(2), b(3)]);
-    }
-
-    #[test]
-    fn lollipop_tail_site_not_in_ring() {
-        assert!(!membership(&lollipop()).site(s(4)));
-    }
-
-    #[test]
-    fn lollipop_tail_bond_not_in_ring() {
-        assert!(!membership(&lollipop()).bond(b(4)));
-    }
-
-    #[test]
-    fn dumbbell_all_sites_in_ring() {
+    fn ring_sites_are_listed_in_ascending_order() {
         let m = membership(&dumbbell());
-        assert!(
-            [s(1), s(2), s(3), s(4), s(5), s(6)]
-                .iter()
-                .all(|&site| m.site(site))
-        );
+        assert_eq!(m.sites(), &[s(1), s(2), s(3), s(4), s(5), s(6)]);
     }
 
     #[test]
-    fn dumbbell_bridge_not_in_ring() {
+    fn ring_bonds_exclude_the_bridge_and_are_listed_in_ascending_order() {
         let m = membership(&dumbbell());
-        assert!(!m.bond(b(4)));
-        assert!(
-            [b(1), b(2), b(3), b(5), b(6), b(7)]
-                .iter()
-                .all(|&bond| m.bond(bond))
-        );
+        assert_eq!(m.bonds(), &[b(1), b(2), b(3), b(5), b(6), b(7)]);
     }
 
     #[test]
-    fn two_triangles_all_in_ring() {
+    fn disjoint_cycles_are_each_perceived() {
         let m = membership(&two_triangles());
-        assert_eq!(m.sites().count(), 6);
-        assert_eq!(m.bonds().count(), 6);
+        assert_eq!(m.sites().len(), 6);
+        assert_eq!(m.bonds().len(), 6);
     }
 
     #[test]
@@ -385,22 +364,10 @@ mod tests {
                 (s(1), s(3)),
             ],
         };
-        let parts = |m: &Mol| -> (Vec<SiteId>, Vec<BondId>) {
-            (
-                membership(m).sites().collect(),
-                membership(m).bonds().collect(),
-            )
+        let parts = |mol: &Mol| {
+            let m = membership(mol);
+            (m.sites().to_vec(), m.bonds().to_vec())
         };
         assert_eq!(parts(&dumbbell()), parts(&shuffled));
-    }
-
-    #[test]
-    fn unknown_site_not_in_ring() {
-        assert!(!membership(&triangle()).site(s(99)));
-    }
-
-    #[test]
-    fn unknown_bond_not_in_ring() {
-        assert!(!membership(&triangle()).bond(b(99)));
     }
 }
