@@ -1,30 +1,42 @@
-use vita_core::HasSites;
+use vita_core::SiteId;
 
 use crate::HasBonds;
-use crate::topology::connectivity::components;
+use crate::algorithm::utils::{DisjointSet, FxHashMap};
 
-/// Number of independent rings in a molecule.
+/// The number of independent rings in a molecule — its cycle rank.
 ///
-/// Equals the cycle rank of the molecular graph, μ = E − V + C, where C is the
-/// number of connected components. This is the size of any minimum cycle basis
-/// — the value [`Rings::len`](super::Rings::len) reports — but is obtained
-/// without enumerating the rings. Acyclic and empty molecules have zero.
+/// The cycle rank μ = E − V + C, for `E` bonds, `V` sites, and `C` connected
+/// components, is the size of any minimum cycle basis
+/// ([`Rings::len`](super::Rings::len)), obtained here without enumerating the
+/// rings. Equivalently, it counts the bonds that close a cycle — those left
+/// over once a spanning forest is drawn. An acyclic molecule, the empty one
+/// included, has rank zero.
 ///
 /// # Complexity
 ///
-/// O(V + E) time.
-pub fn count<M: HasBonds + HasSites>(mol: &M) -> usize {
-    let v = mol.sites().count();
-    let e = mol.bonds().count();
-    let c = components(mol).len();
-    e + c - v
+/// O(V + E) time and O(V) space, over the molecule's `V` sites and `E` bonds.
+pub fn count<M: HasBonds>(mol: &M) -> usize {
+    let index: FxHashMap<SiteId, usize> =
+        mol.sites().enumerate().map(|(i, site)| (site, i)).collect();
+    let mut forest = DisjointSet::new(index.len());
+    let mut rank = 0;
+    for bond in mol.bonds() {
+        let (a, b) = mol.bond_endpoints(bond);
+        if !forest.union(index[&a], index[&b]) {
+            rank += 1;
+        }
+    }
+    rank
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    use vita_core::HasSites;
+
     use crate::BondId;
-    use vita_core::SiteId;
+    use crate::topology::connectivity::components;
 
     fn s(n: u32) -> SiteId {
         SiteId::new(n).unwrap()
@@ -81,11 +93,27 @@ mod tests {
         }
     }
 
+    fn forest() -> Mol {
+        Mol {
+            sites: vec![s(1), s(2), s(3), s(4), s(5), s(6)],
+            bonds: vec![b(1), b(2), b(3), b(4)],
+            endpoints: vec![(s(1), s(2)), (s(2), s(3)), (s(4), s(5)), (s(5), s(6))],
+        }
+    }
+
     fn triangle() -> Mol {
         Mol {
             sites: vec![s(1), s(2), s(3)],
             bonds: vec![b(1), b(2), b(3)],
             endpoints: vec![(s(1), s(2)), (s(2), s(3)), (s(1), s(3))],
+        }
+    }
+
+    fn square() -> Mol {
+        Mol {
+            sites: vec![s(1), s(2), s(3), s(4)],
+            bonds: vec![b(1), b(2), b(3), b(4)],
+            endpoints: vec![(s(1), s(2)), (s(2), s(3)), (s(3), s(4)), (s(1), s(4))],
         }
     }
 
@@ -128,45 +156,132 @@ mod tests {
         }
     }
 
+    fn cyclic_and_acyclic() -> Mol {
+        Mol {
+            sites: vec![s(1), s(2), s(3), s(4), s(5), s(6)],
+            bonds: vec![b(1), b(2), b(3), b(4), b(5)],
+            endpoints: vec![
+                (s(1), s(2)),
+                (s(2), s(3)),
+                (s(1), s(3)),
+                (s(4), s(5)),
+                (s(5), s(6)),
+            ],
+        }
+    }
+
+    fn k4() -> Mol {
+        Mol {
+            sites: vec![s(1), s(2), s(3), s(4)],
+            bonds: vec![b(1), b(2), b(3), b(4), b(5), b(6)],
+            endpoints: vec![
+                (s(1), s(2)),
+                (s(1), s(3)),
+                (s(1), s(4)),
+                (s(2), s(3)),
+                (s(2), s(4)),
+                (s(3), s(4)),
+            ],
+        }
+    }
+
+    fn cube() -> Mol {
+        Mol {
+            sites: (1..=8).map(s).collect(),
+            bonds: (1..=12).map(b).collect(),
+            endpoints: vec![
+                (s(1), s(2)),
+                (s(2), s(3)),
+                (s(3), s(4)),
+                (s(1), s(4)),
+                (s(5), s(6)),
+                (s(6), s(7)),
+                (s(7), s(8)),
+                (s(5), s(8)),
+                (s(1), s(5)),
+                (s(2), s(6)),
+                (s(3), s(7)),
+                (s(4), s(8)),
+            ],
+        }
+    }
+
     #[test]
-    fn empty_molecule_has_no_rings() {
+    fn empty_molecule_has_rank_zero() {
         assert_eq!(count(&empty()), 0);
     }
 
     #[test]
-    fn single_site_has_no_rings() {
+    fn single_site_has_rank_zero() {
         assert_eq!(count(&single()), 0);
     }
 
     #[test]
-    fn chain_has_no_rings() {
+    fn a_single_cycle_has_rank_one() {
+        assert_eq!(count(&triangle()), 1);
+        assert_eq!(count(&square()), 1);
+    }
+
+    #[test]
+    fn a_tree_has_rank_zero() {
         assert_eq!(count(&chain()), 0);
     }
 
     #[test]
-    fn triangle_has_one_ring() {
-        assert_eq!(count(&triangle()), 1);
+    fn a_forest_has_rank_zero() {
+        assert_eq!(count(&forest()), 0);
     }
 
     #[test]
-    fn tadpole_has_one_ring() {
+    fn a_cycle_with_an_acyclic_tail_has_rank_one() {
         assert_eq!(count(&tadpole()), 1);
     }
 
     #[test]
-    fn fused_has_two_rings() {
+    fn fused_rings_have_rank_two() {
         assert_eq!(count(&fused()), 2);
     }
 
     #[test]
-    fn two_triangles_has_two_rings() {
+    fn two_disjoint_cycles_have_rank_two() {
         assert_eq!(count(&two_triangles()), 2);
     }
 
     #[test]
-    fn count_equals_rings_len() {
-        for mol in [triangle(), tadpole(), fused(), two_triangles()] {
-            assert_eq!(count(&mol), super::super::rings(&mol).len());
-        }
+    fn a_cyclic_and_an_acyclic_component_sum_their_ranks() {
+        assert_eq!(count(&cyclic_and_acyclic()), 1);
+    }
+
+    #[test]
+    fn counts_all_independent_cycles_of_a_polycyclic_graph() {
+        assert_eq!(count(&k4()), 3);
+        assert_eq!(count(&cube()), 5);
+    }
+
+    #[test]
+    fn rank_equals_edges_minus_sites_plus_components() {
+        let mol = cyclic_and_acyclic();
+        let e = mol.bonds().count();
+        let v = mol.sites().count();
+        let c = components(&mol).len();
+        assert_eq!(count(&mol), e + c - v);
+    }
+
+    #[test]
+    fn count_is_independent_of_input_order() {
+        let shuffled = Mol {
+            sites: vec![s(6), s(5), s(4), s(3), s(2), s(1)],
+            bonds: vec![b(7), b(6), b(5), b(4), b(3), b(2), b(1)],
+            endpoints: vec![
+                (s(4), s(6)),
+                (s(5), s(6)),
+                (s(3), s(5)),
+                (s(1), s(4)),
+                (s(3), s(4)),
+                (s(2), s(3)),
+                (s(1), s(2)),
+            ],
+        };
+        assert_eq!(count(&fused()), count(&shuffled));
     }
 }
