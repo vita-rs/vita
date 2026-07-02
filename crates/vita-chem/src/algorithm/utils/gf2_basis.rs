@@ -75,3 +75,138 @@ impl Gf2Basis {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn vector(dimension: usize, bits: &[usize]) -> BitSet {
+        let mut v = BitSet::zeros(dimension);
+        for &bit in bits {
+            v.set(bit);
+        }
+        v
+    }
+
+    #[test]
+    fn empty_basis_has_rank_zero() {
+        assert_eq!(Gf2Basis::new(4).len(), 0);
+    }
+
+    #[test]
+    fn empty_basis_is_empty() {
+        assert!(Gf2Basis::new(4).is_empty());
+    }
+
+    #[test]
+    fn reducing_against_an_empty_basis_returns_the_vector() {
+        let v = vector(4, &[1, 3]);
+        assert_eq!(Gf2Basis::new(4).reduce(&v), v);
+    }
+
+    #[test]
+    fn the_zero_vector_is_never_independent() {
+        let mut b = Gf2Basis::new(4);
+        assert!(!b.insert(vector(4, &[])));
+        assert_eq!(b.len(), 0);
+    }
+
+    #[test]
+    fn inserting_an_independent_vector_returns_true() {
+        let mut b = Gf2Basis::new(4);
+        assert!(b.insert(vector(4, &[0])));
+    }
+
+    #[test]
+    fn inserting_an_independent_vector_increases_the_rank() {
+        let mut b = Gf2Basis::new(4);
+        b.insert(vector(4, &[0]));
+        assert_eq!(b.len(), 1);
+    }
+
+    #[test]
+    fn an_inserted_vector_lies_in_the_span() {
+        let mut b = Gf2Basis::new(4);
+        let v = vector(4, &[0, 2]);
+        b.insert(v.clone());
+        assert!(b.reduce(&v).is_zero());
+    }
+
+    #[test]
+    fn inserting_a_dependent_vector_returns_false() {
+        let mut b = Gf2Basis::new(4);
+        b.insert(vector(4, &[0]));
+        assert!(!b.insert(vector(4, &[0])));
+    }
+
+    #[test]
+    fn inserting_a_dependent_vector_leaves_the_rank_unchanged() {
+        let mut b = Gf2Basis::new(4);
+        b.insert(vector(4, &[0]));
+        b.insert(vector(4, &[0]));
+        assert_eq!(b.len(), 1);
+    }
+
+    #[test]
+    fn a_vector_outside_the_span_reduces_to_nonzero() {
+        let mut b = Gf2Basis::new(4);
+        b.insert(vector(4, &[0]));
+        assert!(!b.reduce(&vector(4, &[1])).is_zero());
+    }
+
+    #[test]
+    fn a_linear_combination_of_basis_vectors_reduces_to_zero() {
+        let mut b = Gf2Basis::new(4);
+        b.insert(vector(4, &[0]));
+        b.insert(vector(4, &[1]));
+        assert!(b.reduce(&vector(4, &[0, 1])).is_zero());
+    }
+
+    #[test]
+    fn reduce_yields_a_canonical_coset_representative() {
+        let mut b = Gf2Basis::new(4);
+        b.insert(vector(4, &[0, 2]));
+        let combined = b.reduce(&vector(4, &[0, 1, 2]));
+        assert_eq!(combined, b.reduce(&vector(4, &[1])));
+        assert_eq!(combined, vector(4, &[1]));
+    }
+
+    #[test]
+    fn rank_counts_only_the_independent_insertions() {
+        let mut b = Gf2Basis::new(4);
+        b.insert(vector(4, &[0]));
+        b.insert(vector(4, &[1]));
+        b.insert(vector(4, &[0, 1]));
+        b.insert(vector(4, &[2]));
+        assert_eq!(b.len(), 3);
+    }
+
+    #[test]
+    fn a_full_rank_basis_contains_every_vector() {
+        let mut b = Gf2Basis::new(2);
+        b.insert(vector(2, &[0]));
+        b.insert(vector(2, &[1]));
+        for bits in [vec![0], vec![1], vec![0, 1]] {
+            assert!(b.reduce(&vector(2, &bits)).is_zero());
+        }
+    }
+
+    #[test]
+    fn the_span_is_independent_of_insertion_order() {
+        let vectors = [vector(4, &[0, 1]), vector(4, &[1, 2]), vector(4, &[0, 2])];
+        let mut forward = Gf2Basis::new(4);
+        for v in &vectors {
+            forward.insert(v.clone());
+        }
+        let mut reversed = Gf2Basis::new(4);
+        for v in vectors.iter().rev() {
+            reversed.insert(v.clone());
+        }
+        assert_eq!(forward.len(), reversed.len());
+        let probe = vector(4, &[0, 1]);
+        assert_eq!(
+            forward.reduce(&probe).is_zero(),
+            reversed.reduce(&probe).is_zero(),
+        );
+    }
+}
