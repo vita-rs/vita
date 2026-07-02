@@ -249,3 +249,208 @@ fn union(parent: &mut [usize], a: usize, b: usize) {
         parent[a.max(b)] = a.min(b);
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn graph(n: usize, edges: &[(usize, usize)]) -> Vec<Vec<(usize, usize)>> {
+        let mut adjacency = vec![Vec::new(); n];
+        for &(a, b) in edges {
+            adjacency[a].push((b, 0));
+            adjacency[b].push((a, 0));
+        }
+        adjacency
+    }
+
+    fn path() -> Vec<Vec<(usize, usize)>> {
+        graph(3, &[(0, 1), (1, 2)])
+    }
+
+    fn star() -> Vec<Vec<(usize, usize)>> {
+        graph(4, &[(0, 1), (0, 2), (0, 3)])
+    }
+
+    fn triangle() -> Vec<Vec<(usize, usize)>> {
+        graph(3, &[(0, 1), (1, 2), (0, 2)])
+    }
+
+    fn two_triangles() -> Vec<Vec<(usize, usize)>> {
+        graph(6, &[(0, 1), (1, 2), (0, 2), (3, 4), (4, 5), (3, 5)])
+    }
+
+    fn cube() -> Vec<Vec<(usize, usize)>> {
+        graph(
+            8,
+            &[
+                (0, 1),
+                (1, 2),
+                (2, 3),
+                (3, 0),
+                (4, 5),
+                (5, 6),
+                (6, 7),
+                (7, 4),
+                (0, 4),
+                (1, 5),
+                (2, 6),
+                (3, 7),
+            ],
+        )
+    }
+
+    fn frucht() -> Vec<Vec<(usize, usize)>> {
+        graph(
+            12,
+            &[
+                (0, 1),
+                (1, 2),
+                (2, 3),
+                (3, 4),
+                (4, 5),
+                (5, 6),
+                (6, 7),
+                (7, 8),
+                (8, 9),
+                (9, 10),
+                (10, 11),
+                (11, 0),
+                (0, 7),
+                (1, 11),
+                (2, 10),
+                (3, 5),
+                (4, 9),
+                (6, 8),
+            ],
+        )
+    }
+
+    fn ranks(adjacency: &[Vec<(usize, usize)>], seed: &[usize]) -> Vec<usize> {
+        labeling(adjacency, seed).ranks().to_vec()
+    }
+
+    fn orbits(adjacency: &[Vec<(usize, usize)>], seed: &[usize]) -> Vec<usize> {
+        labeling(adjacency, seed).orbits().to_vec()
+    }
+
+    #[test]
+    fn empty_graph_has_an_empty_labeling() {
+        assert!(ranks(&[], &[]).is_empty());
+        assert!(orbits(&[], &[]).is_empty());
+    }
+
+    #[test]
+    fn single_vertex_ranks_zero_in_its_own_orbit() {
+        assert_eq!(ranks(&[vec![]], &[0]), [0]);
+        assert_eq!(orbits(&[vec![]], &[0]), [0]);
+    }
+
+    #[test]
+    fn ranks_are_a_permutation_of_the_vertices() {
+        let mut ranks = ranks(&path(), &[0; 3]);
+        ranks.sort_unstable();
+        assert_eq!(ranks, [0, 1, 2]);
+    }
+
+    #[test]
+    fn symmetric_vertices_share_an_orbit() {
+        let orbits = orbits(&path(), &[0; 3]);
+        assert_eq!(orbits[0], orbits[2]);
+    }
+
+    #[test]
+    fn an_orbit_is_named_by_its_least_member() {
+        let orbits = orbits(&path(), &[0; 3]);
+        assert_eq!(orbits[0], 0);
+        assert_eq!(orbits[1], 1);
+    }
+
+    #[test]
+    fn an_asymmetric_vertex_lies_in_its_own_orbit() {
+        let orbits = orbits(&path(), &[0; 3]);
+        assert_ne!(orbits[1], orbits[0]);
+    }
+
+    #[test]
+    fn a_seed_color_splits_a_shared_orbit() {
+        let orbits = orbits(&star(), &[0, 0, 0, 1]);
+        assert_eq!(orbits[1], orbits[2]);
+        assert_ne!(orbits[1], orbits[3]);
+    }
+
+    #[test]
+    fn an_edge_color_splits_a_shared_orbit() {
+        let adjacency = vec![
+            vec![(1, 0), (2, 0), (3, 1)],
+            vec![(0, 0)],
+            vec![(0, 0)],
+            vec![(0, 1)],
+        ];
+        let orbits = orbits(&adjacency, &[0; 4]);
+        assert_eq!(orbits[1], orbits[2]);
+        assert_ne!(orbits[1], orbits[3]);
+    }
+
+    #[test]
+    fn a_cycle_is_a_single_orbit() {
+        let orbits = orbits(&triangle(), &[0; 3]);
+        assert!(orbits.iter().all(|&orbit| orbit == orbits[0]));
+    }
+
+    #[test]
+    fn the_cube_is_a_single_orbit() {
+        let orbits = orbits(&cube(), &[0; 8]);
+        assert!(orbits.iter().all(|&orbit| orbit == orbits[0]));
+    }
+
+    #[test]
+    fn a_regular_graph_still_ranks_to_a_permutation() {
+        let mut ranks = ranks(&cube(), &[0; 8]);
+        ranks.sort_unstable();
+        assert_eq!(ranks, [0, 1, 2, 3, 4, 5, 6, 7]);
+    }
+
+    #[test]
+    fn disconnected_components_can_share_an_orbit() {
+        let orbits = orbits(&two_triangles(), &[0; 6]);
+        assert!(orbits.iter().all(|&orbit| orbit == orbits[0]));
+    }
+
+    #[test]
+    fn a_rigid_graph_has_singleton_orbits() {
+        assert_eq!(orbits(&path(), &[0, 1, 2]), [0, 1, 2]);
+    }
+
+    #[test]
+    fn a_regular_but_asymmetric_graph_has_singleton_orbits() {
+        assert_eq!(orbits(&frucht(), &[0; 12]), (0..12).collect::<Vec<_>>());
+    }
+
+    #[test]
+    fn a_seed_fixes_the_canonical_ranking() {
+        assert_eq!(ranks(&path(), &[1, 0, 2]), [1, 0, 2]);
+    }
+
+    #[test]
+    fn the_labeling_is_independent_of_vertex_order() {
+        let edges = [(0, 1), (1, 2), (2, 3), (3, 0), (0, 2)];
+        let perm = [2, 0, 3, 1];
+        let build = |relabel: [usize; 4]| {
+            let mut adjacency = vec![Vec::new(); 4];
+            for &(a, b) in &edges {
+                adjacency[relabel[a]].push((relabel[b], 0));
+                adjacency[relabel[b]].push((relabel[a], 0));
+            }
+            labeling(&adjacency, &[0; 4])
+        };
+        let plain = build([0, 1, 2, 3]);
+        let shuffled = build(perm);
+        for vertex in 0..4 {
+            assert_eq!(plain.ranks()[vertex], shuffled.ranks()[perm[vertex]]);
+            assert_eq!(
+                plain.orbits()[vertex] == plain.orbits()[0],
+                shuffled.orbits()[perm[vertex]] == shuffled.orbits()[perm[0]],
+            );
+        }
+    }
+}
