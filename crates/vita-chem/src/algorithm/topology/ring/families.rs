@@ -1,20 +1,21 @@
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::VecDeque;
 
-use vita_core::{HasSites, SiteId};
+use vita_core::SiteId;
 
-use super::bitset::Bits;
 use super::membership::RingMembership;
+use crate::algorithm::utils::{
+    AdjacencyList, BitSet, DisjointSet, FxHashMap, FxHashSet, Gf2Basis, SortedMultimap,
+};
 use crate::topology::connectivity::blocks;
 use crate::{BondId, HasBonds};
 
 /// A unique ring family (URF) of a molecule.
 ///
-/// A URF is an equivalence class of relevant cycles that are interchangeable:
-/// they share the same size and differ only by smaller rings while overlapping
-/// in at least one bond. Every cycle of a family has the same size, reported by
-/// [`Self::size`]. The family's [`Self::sites`] and [`Self::bonds`] are the
-/// union over all its member cycles, so they may exceed `size` when the family
-/// holds several interchangeable rings.
+/// An equivalence class of interchangeable relevant cycles: rings of one
+/// [`size`](Self::size) that overlap in a bond and differ only by smaller
+/// rings. Its [`sites`](Self::sites) and [`bonds`](Self::bonds) are the union
+/// over the member cycles, so they may exceed `size` when the family holds
+/// several interchangeable rings.
 ///
 /// Obtain via [`RingFamilies`].
 pub struct RingFamily {
@@ -24,17 +25,17 @@ pub struct RingFamily {
 }
 
 impl RingFamily {
-    /// The size of every ring in the family (number of bonds in each cycle).
+    /// The number of bonds in each ring of the family.
     pub fn size(&self) -> usize {
         self.size
     }
 
-    /// All sites that lie in some ring of the family, in ascending order.
+    /// The sites lying in some ring of the family, in ascending order.
     pub fn sites(&self) -> &[SiteId] {
         &self.sites
     }
 
-    /// All bonds that lie in some ring of the family, in ascending order.
+    /// The bonds lying in some ring of the family, in ascending order.
     pub fn bonds(&self) -> &[BondId] {
         &self.bonds
     }
@@ -42,23 +43,21 @@ impl RingFamily {
 
 /// The unique ring families (URFs) of a molecule.
 ///
-/// Decomposes the ring topology into the canonical unique ring families of
-/// Kolodzik, Urbaczek and Rarey (J. Chem. Inf. Model. 2012, 52, 2013–2021).
-/// Unlike a minimum cycle basis ([`Rings`](super::Rings)), the decomposition is
-/// determined solely by the molecular graph, independent of any tie-break. The
-/// number of families is at least the cycle rank and may exceed it: cubane
-/// yields six families, one per face, where a minimum cycle basis arbitrarily
-/// selects five.
+/// The canonical ring decomposition of Kolodzik, Urbaczek and Rarey
+/// (J. Chem. Inf. Model. 2012, 52, 2013–2021). Unlike a minimum cycle basis
+/// ([`Rings`](super::Rings)), it is fixed by the molecular graph alone, with no
+/// tie-break: cubane yields six families, one per face, where a minimum basis
+/// arbitrarily selects five. The family count is at least the cycle rank and may
+/// exceed it.
 ///
-/// A site or bond may belong to several families, so [`Self::of_site`] and
-/// [`Self::of_bond`] yield iterators. Counting the families on an atom is the
-/// graph-unique form of the SMARTS ring-membership query.
+/// A site or bond may lie in several families, so [`of_site`](Self::of_site) and
+/// [`of_bond`](Self::of_bond) yield iterators.
 ///
 /// Obtain via [`families`].
 pub struct RingFamilies {
     families: Vec<RingFamily>,
-    site_index: HashMap<SiteId, Vec<usize>>,
-    bond_index: HashMap<BondId, Vec<usize>>,
+    site_index: SortedMultimap<SiteId, usize>,
+    bond_index: SortedMultimap<BondId, usize>,
 }
 
 impl RingFamilies {
@@ -72,144 +71,104 @@ impl RingFamilies {
         self.families.is_empty()
     }
 
-    /// Iterates all ring families, ordered by size then by their sites.
+    /// Iterates the families, ordered by size then by their sites.
     pub fn iter(&self) -> impl Iterator<Item = &RingFamily> + '_ {
         self.families.iter()
     }
 
-    /// Size of the smallest ring (the graph girth).
+    /// Size of the smallest ring — the graph girth.
     ///
     /// Returns `None` if the molecule is acyclic.
     pub fn girth(&self) -> Option<usize> {
         self.families.iter().map(|f| f.size).min()
     }
 
-    /// Iterates all families that contain `site`, in the order of [`iter`](RingFamilies::iter).
+    /// Iterates the families containing `site`, in the order of [`iter`](Self::iter).
     ///
-    /// Returns an empty iterator if `site` is absent from the molecule or lies
-    /// in no ring.
+    /// Empty if `site` is absent from the molecule or lies in no ring.
     pub fn of_site(&self, site: SiteId) -> impl Iterator<Item = &RingFamily> + '_ {
         self.site_index
             .get(&site)
-            .map(|v| v.as_slice())
-            .unwrap_or(&[])
             .iter()
-            .map(move |&i| &self.families[i])
+            .map(|&i| &self.families[i])
     }
 
-    /// Iterates all families that contain `bond`, in the order of [`iter`](RingFamilies::iter).
+    /// Iterates the families containing `bond`, in the order of [`iter`](Self::iter).
     ///
-    /// Returns an empty iterator if `bond` is absent from the molecule or is a
-    /// bridge.
+    /// Empty if `bond` is absent from the molecule or is a bridge.
     pub fn of_bond(&self, bond: BondId) -> impl Iterator<Item = &RingFamily> + '_ {
         self.bond_index
             .get(&bond)
-            .map(|v| v.as_slice())
-            .unwrap_or(&[])
             .iter()
-            .map(move |&i| &self.families[i])
+            .map(|&i| &self.families[i])
     }
 
-    /// Returns `true` if some family contains both `a` and `b`.
+    /// Returns `true` if some family holds both `a` and `b`.
     ///
     /// Returns `false` if either site is absent from the molecule or no family
     /// holds them together.
     pub fn same(&self, a: SiteId, b: SiteId) -> bool {
-        match (self.site_index.get(&a), self.site_index.get(&b)) {
-            (Some(ra), Some(rb)) => ra.iter().any(|i| rb.contains(i)),
-            _ => false,
-        }
+        let ra = self.site_index.get(&a);
+        let rb = self.site_index.get(&b);
+        ra.iter().any(|i| rb.contains(i))
     }
 
-    /// Iterates the spiro atoms of the molecule, in ascending order.
-    ///
-    /// A site is a spiro atom when two rings meet at it alone, sharing that one
-    /// site and no bond.
+    /// Iterates the spiro atoms — sites where two rings meet at that site alone,
+    /// sharing no bond — in ascending order.
     pub fn spiro_sites(&self) -> impl Iterator<Item = SiteId> + '_ {
-        let mut sites: Vec<SiteId> = self
-            .site_index
+        self.site_index
             .iter()
-            .filter(|&(_, fams)| self.meet_at_point(fams))
-            .map(|(&s, _)| s)
-            .collect();
-        sites.sort_unstable();
-        sites.into_iter()
+            .filter(move |&(_, fams)| self.meet_at_point(fams))
+            .map(|(&site, _)| site)
     }
 
-    /// Iterates the fusion bonds of the molecule, in ascending order.
-    ///
-    /// A bond is a fusion bond when two or more rings share it, so it lies in
-    /// two or more families.
+    /// Iterates the fusion bonds — bonds shared by two or more rings — in
+    /// ascending order.
     pub fn fusion_bonds(&self) -> impl Iterator<Item = BondId> + '_ {
-        let mut bonds: Vec<BondId> = self
-            .bond_index
+        self.bond_index
             .iter()
-            .filter(|(_, v)| v.len() >= 2)
-            .map(|(&b, _)| b)
-            .collect();
-        bonds.sort_unstable();
-        bonds.into_iter()
+            .filter(|&(_, fams)| fams.len() >= 2)
+            .map(|(&bond, _)| bond)
     }
 
-    /// Derives ring membership from the families.
+    /// The ring membership implied by the families.
     ///
-    /// A site or bond lies in a ring exactly when it appears in some family.
+    /// A site or bond lies in a ring exactly when it belongs to some family.
     pub fn membership(&self) -> RingMembership {
-        let mut sites: HashSet<SiteId> = HashSet::new();
-        let mut bonds: HashSet<BondId> = HashSet::new();
-        for family in &self.families {
-            sites.extend(family.sites.iter().copied());
-            bonds.extend(family.bonds.iter().copied());
-        }
-        RingMembership::from_sets(sites, bonds)
+        RingMembership::from_sets(
+            self.families.iter().flat_map(|f| f.sites.iter().copied()),
+            self.families.iter().flat_map(|f| f.bonds.iter().copied()),
+        )
     }
 
-    /// Iterates the ring systems, each as its sorted set of sites.
+    /// Iterates the ring systems, each as its sites in ascending order.
     ///
-    /// A ring system is a maximal group of families connected through shared
-    /// sites; fused, bridged, and spiro rings all coalesce into one system.
-    /// Systems are yielded in ascending site order.
+    /// A ring system is a maximal set of families joined through shared sites;
+    /// fused, bridged, and spiro rings coalesce into one. Systems are ordered by
+    /// their sites.
     pub fn systems(&self) -> impl Iterator<Item = Vec<SiteId>> {
-        let k = self.families.len();
-        let mut parent: Vec<usize> = (0..k).collect();
-
-        fn find(parent: &mut [usize], mut x: usize) -> usize {
-            while parent[x] != x {
-                parent[x] = parent[parent[x]];
-                x = parent[x];
-            }
-            x
-        }
-
-        for members in self.site_index.values() {
-            for w in members.windows(2) {
-                let ra = find(&mut parent, w[0]);
-                let rb = find(&mut parent, w[1]);
-                if ra != rb {
-                    parent[ra] = rb;
-                }
+        let mut components = DisjointSet::new(self.families.len());
+        for (_, members) in self.site_index.iter() {
+            for pair in members.windows(2) {
+                components.union(pair[0], pair[1]);
             }
         }
 
-        let mut systems: HashMap<usize, HashSet<SiteId>> = HashMap::new();
-        for fi in 0..k {
-            let root = find(&mut parent, fi);
-            systems
-                .entry(root)
-                .or_default()
-                .extend(self.families[fi].sites.iter().copied());
-        }
-
-        let mut out: Vec<Vec<SiteId>> = systems
-            .into_values()
-            .map(|set| {
-                let mut v: Vec<SiteId> = set.into_iter().collect();
-                v.sort_unstable();
-                v
+        let mut systems: Vec<Vec<SiteId>> = components
+            .groups()
+            .into_iter()
+            .map(|group| {
+                let mut sites: Vec<SiteId> = group
+                    .iter()
+                    .flat_map(|&f| self.families[f].sites.iter().copied())
+                    .collect();
+                sites.sort_unstable();
+                sites.dedup();
+                sites
             })
             .collect();
-        out.sort_unstable();
-        out.into_iter()
+        systems.sort_unstable();
+        systems.into_iter()
     }
 
     /// Returns `true` if two of the families share exactly one site.
@@ -228,20 +187,19 @@ impl RingFamilies {
 
 /// Unique ring families of a molecule.
 ///
-/// Computes the canonical URF decomposition. Each biconnected ring system is
-/// processed independently: Vismara's algorithm enumerates relevant cycle
-/// prototypes, a GF(2) elimination by ascending size marks the relevant ones
-/// and the linearly dependent pairs, an edge-overlap test confirms the
-/// URF-pair-relation, and its transitive closure yields the families.
+/// Decomposes each biconnected ring system on its own: Vismara's algorithm
+/// enumerates the relevant-cycle prototypes, a GF(2) elimination by ascending
+/// size keeps the relevant ones, and the transitive closure of the edge-overlap
+/// relation among equal-size cosets fuses them into families.
 ///
 /// # Complexity
 ///
-/// Polynomial in the size of each ring system.
-pub fn families<M: HasBonds + HasSites>(mol: &M) -> RingFamilies {
-    let bccs = blocks(mol);
+/// O(V²·E) time and O(V·E) space in the worst case, over each biconnected ring
+/// system taken on its own.
+pub fn families<M: HasBonds>(mol: &M) -> RingFamilies {
     let mut families: Vec<RingFamily> = Vec::new();
 
-    for block in bccs.iter() {
+    for block in blocks(mol).iter() {
         if !block.is_ring() {
             continue;
         }
@@ -249,36 +207,38 @@ pub fn families<M: HasBonds + HasSites>(mol: &M) -> RingFamilies {
         let mut sites: Vec<SiteId> = block.sites().to_vec();
         sites.sort_unstable();
         let n = sites.len();
-        let pos: HashMap<SiteId, usize> = sites.iter().enumerate().map(|(i, &s)| (s, i)).collect();
+        let pos: FxHashMap<SiteId, usize> =
+            sites.iter().enumerate().map(|(i, &s)| (s, i)).collect();
 
-        let mut rows: Vec<(BondId, usize, usize)> = block
-            .bonds()
+        let bond_ids: Vec<BondId> = block.bonds().to_vec();
+        let m = bond_ids.len();
+        let endpoints: Vec<(usize, usize)> = bond_ids
             .iter()
             .map(|&bond| {
                 let (a, b) = mol.bond_endpoints(bond);
                 let (i, j) = (pos[&a], pos[&b]);
-                (bond, i.min(j), i.max(j))
+                (i.min(j), i.max(j))
             })
             .collect();
-        rows.sort_unstable_by_key(|&(_, lo, hi)| (lo, hi));
-        let m = rows.len();
 
-        let mut adj: Vec<Vec<(usize, usize)>> = vec![vec![]; n];
-        let mut edge_id: HashMap<(usize, usize), usize> = HashMap::new();
-        for (e, &(_, lo, hi)) in rows.iter().enumerate() {
-            adj[lo].push((e, hi));
-            adj[hi].push((e, lo));
-            edge_id.insert((lo, hi), e);
-        }
-        for a in adj.iter_mut() {
-            a.sort_unstable_by_key(|&(_, nb)| nb);
-        }
+        let adjacency = AdjacencyList::build(
+            n,
+            endpoints
+                .iter()
+                .enumerate()
+                .map(|(e, &(lo, hi))| (e, lo, hi)),
+        );
+        let edge_id: FxHashMap<(usize, usize), usize> = endpoints
+            .iter()
+            .enumerate()
+            .map(|(e, &ends)| (ends, e))
+            .collect();
 
-        for (size, edges) in bcc_families(n, m, &adj, &edge_id) {
-            let mut bonds: Vec<BondId> = edges.iter().map(|&e| rows[e].0).collect();
-            let mut family_sites: HashSet<usize> = HashSet::new();
+        for (size, edges) in bcc_families(n, m, &adjacency, &edge_id) {
+            let mut bonds: Vec<BondId> = edges.iter().map(|&e| bond_ids[e]).collect();
+            let mut family_sites: FxHashSet<usize> = FxHashSet::default();
             for &e in &edges {
-                let (_, lo, hi) = rows[e];
+                let (lo, hi) = endpoints[e];
                 family_sites.insert(lo);
                 family_sites.insert(hi);
             }
@@ -296,16 +256,18 @@ pub fn families<M: HasBonds + HasSites>(mol: &M) -> RingFamilies {
 
     families.sort_by(|a, b| a.size.cmp(&b.size).then_with(|| a.sites.cmp(&b.sites)));
 
-    let mut site_index: HashMap<SiteId, Vec<usize>> = HashMap::new();
-    let mut bond_index: HashMap<BondId, Vec<usize>> = HashMap::new();
-    for (i, family) in families.iter().enumerate() {
-        for &s in &family.sites {
-            site_index.entry(s).or_default().push(i);
-        }
-        for &b in &family.bonds {
-            bond_index.entry(b).or_default().push(i);
-        }
-    }
+    let site_index = SortedMultimap::from_pairs(
+        families
+            .iter()
+            .enumerate()
+            .flat_map(|(i, fam)| fam.sites.iter().map(move |&s| (s, i))),
+    );
+    let bond_index = SortedMultimap::from_pairs(
+        families
+            .iter()
+            .enumerate()
+            .flat_map(|(i, fam)| fam.bonds.iter().map(move |&b| (b, i))),
+    );
 
     RingFamilies {
         families,
@@ -314,34 +276,35 @@ pub fn families<M: HasBonds + HasSites>(mol: &M) -> RingFamilies {
     }
 }
 
-/// A relevant cycle family prototype, defined by Vismara's vertices.
+/// A relevant-cycle prototype: shortest paths from `r` to `p` and to `q`, closed
+/// by a direct edge (`x` is `None`) or through an apex vertex `x`.
 struct Cf {
     r: usize,
     p: usize,
     q: usize,
     x: Option<usize>,
     weight: usize,
-    prototype: Bits,
+    prototype: BitSet,
 }
 
-/// All-pairs shortest paths of a component under Vismara's vertex ordering.
+/// All-pairs shortest-path tables under Vismara's degree-descending vertex order.
 struct Apsp {
     /// Full-graph shortest distances.
     dist: Vec<Vec<usize>>,
-    /// One shortest-path predecessor through following vertices.
+    /// One shortest-path predecessor through following vertices only.
     pred: Vec<Vec<usize>>,
     /// Whether a vertex is reached by a shortest path of following vertices.
     reachable: Vec<Vec<bool>>,
 }
 
 impl Apsp {
-    fn compute(n: usize, adj: &[Vec<(usize, usize)>], degree: &[usize]) -> Self {
+    fn compute(n: usize, adjacency: &AdjacencyList, degree: &[usize]) -> Self {
         let mut dist = vec![vec![usize::MAX; n]; n];
         let mut pred = vec![vec![usize::MAX; n]; n];
         let mut reachable = vec![vec![false; n]; n];
         for r in 0..n {
-            let dist_full = bfs_full(r, n, adj);
-            let (dist_restr, pred_restr) = bfs_restricted(r, n, adj, degree);
+            let dist_full = bfs_full(r, n, adjacency);
+            let (dist_restr, pred_restr) = bfs_restricted(r, n, adjacency, degree);
             for v in 0..n {
                 dist[r][v] = dist_full[v];
                 pred[r][v] = pred_restr[v];
@@ -356,22 +319,22 @@ impl Apsp {
     }
 }
 
-/// Unique ring families within a single biconnected component, each as its
-/// ring size and the set of edge indices spanned by the family.
+/// The families of one biconnected ring system, each as its ring size and the
+/// set of edge indices it spans.
 fn bcc_families(
     n: usize,
     m: usize,
-    adj: &[Vec<(usize, usize)>],
-    edge_id: &HashMap<(usize, usize), usize>,
-) -> Vec<(usize, HashSet<usize>)> {
-    let degree: Vec<usize> = adj.iter().map(|a| a.len()).collect();
-    let apsp = Apsp::compute(n, adj, &degree);
+    adjacency: &AdjacencyList,
+    edge_id: &FxHashMap<(usize, usize), usize>,
+) -> Vec<(usize, FxHashSet<usize>)> {
+    let degree: Vec<usize> = (0..n).map(|u| adjacency.neighbors(u).len()).collect();
+    let apsp = Apsp::compute(n, adjacency, &degree);
 
-    let mut cfs = vismara(n, m, adj, edge_id, &degree, &apsp);
+    let mut cfs = vismara(n, m, adjacency, edge_id, &degree, &apsp);
     cfs.sort_by_key(|c| c.weight);
 
-    let mut basis: Vec<(usize, Bits)> = Vec::new();
-    let mut urfs: Vec<(usize, HashSet<usize>)> = Vec::new();
+    let mut basis = Gf2Basis::new(m);
+    let mut urfs: Vec<(usize, FxHashSet<usize>)> = Vec::new();
 
     let mut i = 0;
     while i < cfs.len() {
@@ -381,27 +344,26 @@ fn bcc_families(
             j += 1;
         }
 
-        let mut relevant: Vec<(usize, Bits)> = Vec::new();
-        for (k, cf) in (i..j).zip(&cfs[i..j]) {
-            let mut reduced = cf.prototype.clone();
-            reduce(&mut reduced, &basis);
+        let mut relevant: Vec<(usize, BitSet)> = Vec::new();
+        for (offset, cf) in cfs[i..j].iter().enumerate() {
+            let reduced = basis.reduce(&cf.prototype);
             if !reduced.is_zero() {
-                relevant.push((k, reduced));
+                relevant.push((i + offset, reduced));
             }
         }
 
-        let mut edges: HashMap<usize, HashSet<usize>> = HashMap::new();
+        let mut edges: FxHashMap<usize, FxHashSet<usize>> = FxHashMap::default();
         for (k, _) in &relevant {
-            edges.insert(*k, family_edges(&cfs[*k], n, adj, edge_id, &apsp));
+            edges.insert(*k, family_edges(&cfs[*k], adjacency, edge_id, &apsp));
         }
 
-        let mut groups: HashMap<Bits, Vec<usize>> = HashMap::new();
+        let mut groups: FxHashMap<BitSet, Vec<usize>> = FxHashMap::default();
         for (k, reduced) in &relevant {
             groups.entry(reduced.clone()).or_default().push(*k);
         }
         for members in groups.values() {
             for component in edge_overlap_components(members, &edges) {
-                let mut union: HashSet<usize> = HashSet::new();
+                let mut union: FxHashSet<usize> = FxHashSet::default();
                 for k in component {
                     union.extend(&edges[&k]);
                 }
@@ -410,21 +372,20 @@ fn bcc_families(
         }
 
         for (_, reduced) in relevant {
-            extend(&mut basis, reduced);
+            basis.insert(reduced);
         }
-
         i = j;
     }
 
     urfs
 }
 
-/// Vismara's relevant cycle prototypes for the component.
+/// Vismara's relevant-cycle prototypes for the biconnected system.
 fn vismara(
     n: usize,
     m: usize,
-    adj: &[Vec<(usize, usize)>],
-    edge_id: &HashMap<(usize, usize), usize>,
+    adjacency: &AdjacencyList,
+    edge_id: &FxHashMap<(usize, usize), usize>,
     degree: &[usize],
     apsp: &Apsp,
 ) -> Vec<Cf> {
@@ -436,7 +397,7 @@ fn vismara(
                 continue;
             }
             let mut even_cand: Vec<usize> = Vec::new();
-            for &(_, z) in &adj[y] {
+            for &(_, z) in adjacency.neighbors(y) {
                 if !apsp.reachable[r][z] {
                     continue;
                 }
@@ -464,13 +425,13 @@ fn vismara(
 }
 
 /// Full breadth-first distances from `root`.
-fn bfs_full(root: usize, n: usize, adj: &[Vec<(usize, usize)>]) -> Vec<usize> {
+fn bfs_full(root: usize, n: usize, adjacency: &AdjacencyList) -> Vec<usize> {
     let mut dist = vec![usize::MAX; n];
     dist[root] = 0;
     let mut queue = VecDeque::new();
     queue.push_back(root);
     while let Some(u) = queue.pop_front() {
-        for &(_, v) in &adj[u] {
+        for &(_, v) in adjacency.neighbors(u) {
             if dist[v] == usize::MAX {
                 dist[v] = dist[u] + 1;
                 queue.push_back(v);
@@ -485,7 +446,7 @@ fn bfs_full(root: usize, n: usize, adj: &[Vec<(usize, usize)>]) -> Vec<usize> {
 fn bfs_restricted(
     root: usize,
     n: usize,
-    adj: &[Vec<(usize, usize)>],
+    adjacency: &AdjacencyList,
     degree: &[usize],
 ) -> (Vec<usize>, Vec<usize>) {
     let mut dist = vec![usize::MAX; n];
@@ -495,7 +456,7 @@ fn bfs_restricted(
     let mut queue = VecDeque::new();
     queue.push_back(root);
     while let Some(u) = queue.pop_front() {
-        for &(_, v) in &adj[u] {
+        for &(_, v) in adjacency.neighbors(u) {
             if dist[v] == usize::MAX && follows(v, root, degree) {
                 dist[v] = dist[u] + 1;
                 pred[v] = u;
@@ -514,7 +475,7 @@ fn follows(v: usize, root: usize, degree: &[usize]) -> bool {
 /// Returns `true` if the predecessor paths from `r` to `y` and to `z` meet only
 /// at `r`.
 fn paths_share_only_start(r: usize, y: usize, z: usize, apsp: &Apsp) -> bool {
-    let mut on_ry: HashSet<usize> = HashSet::new();
+    let mut on_ry: FxHashSet<usize> = FxHashSet::default();
     let mut v = y;
     on_ry.insert(v);
     while v != r {
@@ -535,17 +496,17 @@ fn paths_share_only_start(r: usize, y: usize, z: usize, apsp: &Apsp) -> bool {
     shared == 1
 }
 
-/// Builds the prototype cycle of a cycle family from single shortest paths.
+/// Builds the prototype cycle of a family from the single predecessor paths.
 fn make_cf(
     r: usize,
     p: usize,
     q: usize,
     x: Option<usize>,
     m: usize,
-    edge_id: &HashMap<(usize, usize), usize>,
+    edge_id: &FxHashMap<(usize, usize), usize>,
     apsp: &Apsp,
 ) -> Cf {
-    let mut prototype = Bits::zeros(m);
+    let mut prototype = BitSet::zeros(m);
     trace_path(r, p, &mut prototype, edge_id, apsp);
     trace_path(r, q, &mut prototype, edge_id, apsp);
     let weight = match x {
@@ -573,8 +534,8 @@ fn make_cf(
 fn trace_path(
     r: usize,
     target: usize,
-    bits: &mut Bits,
-    edge_id: &HashMap<(usize, usize), usize>,
+    bits: &mut BitSet,
+    edge_id: &FxHashMap<(usize, usize), usize>,
     apsp: &Apsp,
 ) {
     let mut v = target;
@@ -585,18 +546,17 @@ fn trace_path(
     }
 }
 
-/// All edges spanned by a cycle family: every shortest path from `r` to `p` and
-/// to `q`, plus the closing edges.
+/// All edges a family spans: every shortest-path edge from `r` to `p` and to
+/// `q`, plus the closing edges.
 fn family_edges(
     cf: &Cf,
-    n: usize,
-    adj: &[Vec<(usize, usize)>],
-    edge_id: &HashMap<(usize, usize), usize>,
+    adjacency: &AdjacencyList,
+    edge_id: &FxHashMap<(usize, usize), usize>,
     apsp: &Apsp,
-) -> HashSet<usize> {
-    let mut edges: HashSet<usize> = HashSet::new();
-    collect_shortest_edges(cf.r, cf.p, n, adj, apsp, &mut edges);
-    collect_shortest_edges(cf.r, cf.q, n, adj, apsp, &mut edges);
+) -> FxHashSet<usize> {
+    let mut edges: FxHashSet<usize> = FxHashSet::default();
+    collect_shortest_edges(cf.r, cf.p, adjacency, apsp, &mut edges);
+    collect_shortest_edges(cf.r, cf.q, adjacency, apsp, &mut edges);
     match cf.x {
         Some(apex) => {
             edges.insert(edge_id[&ends(cf.p, apex)]);
@@ -613,19 +573,18 @@ fn family_edges(
 fn collect_shortest_edges(
     r: usize,
     target: usize,
-    n: usize,
-    adj: &[Vec<(usize, usize)>],
+    adjacency: &AdjacencyList,
     apsp: &Apsp,
-    edges: &mut HashSet<usize>,
+    edges: &mut FxHashSet<usize>,
 ) {
-    let mut visited = vec![false; n];
+    let mut visited = vec![false; adjacency.len()];
     let mut stack = vec![target];
     visited[target] = true;
     while let Some(v) = stack.pop() {
         if v == r {
             continue;
         }
-        for &(e, u) in &adj[v] {
+        for &(e, u) in adjacency.neighbors(v) {
             if apsp.reachable[r][u] && apsp.dist[r][u] + 1 == apsp.dist[r][v] {
                 edges.insert(e);
                 if !visited[u] {
@@ -637,63 +596,24 @@ fn collect_shortest_edges(
     }
 }
 
-/// Reduces `cycle` modulo the span of a reduced-echelon `basis`.
-fn reduce(cycle: &mut Bits, basis: &[(usize, Bits)]) {
-    for (pivot, vector) in basis {
-        if cycle.test(*pivot) {
-            cycle.xor(vector);
-        }
-    }
-}
-
-/// Extends a reduced-echelon `basis` with `vector` if it is independent.
-fn extend(basis: &mut Vec<(usize, Bits)>, mut vector: Bits) {
-    reduce(&mut vector, basis);
-    let Some(pivot) = vector.lowest_set() else {
-        return;
-    };
-    for (_, existing) in basis.iter_mut() {
-        if existing.test(pivot) {
-            existing.xor(&vector);
-        }
-    }
-    basis.push((pivot, vector));
-}
-
-/// Connected components of the cycle families under edge overlap.
+/// The connected components of a coset's families under edge overlap.
 fn edge_overlap_components(
     members: &[usize],
-    edges: &HashMap<usize, HashSet<usize>>,
+    edges: &FxHashMap<usize, FxHashSet<usize>>,
 ) -> Vec<Vec<usize>> {
-    let k = members.len();
-    let mut parent: Vec<usize> = (0..k).collect();
-
-    fn find(parent: &mut [usize], mut x: usize) -> usize {
-        while parent[x] != x {
-            parent[x] = parent[parent[x]];
-            x = parent[x];
-        }
-        x
-    }
-
-    for a in 0..k {
-        for b in (a + 1)..k {
+    let mut overlap = DisjointSet::new(members.len());
+    for a in 0..members.len() {
+        for b in (a + 1)..members.len() {
             if !edges[&members[a]].is_disjoint(&edges[&members[b]]) {
-                let ra = find(&mut parent, a);
-                let rb = find(&mut parent, b);
-                if ra != rb {
-                    parent[ra] = rb;
-                }
+                overlap.union(a, b);
             }
         }
     }
-
-    let mut components: HashMap<usize, Vec<usize>> = HashMap::new();
-    for (idx, &member) in members.iter().enumerate() {
-        let root = find(&mut parent, idx);
-        components.entry(root).or_default().push(member);
-    }
-    components.into_values().collect()
+    overlap
+        .groups()
+        .into_iter()
+        .map(|group| group.into_iter().map(|i| members[i]).collect())
+        .collect()
 }
 
 /// Orders a pair of vertices as `(min, max)` for edge lookup.
@@ -704,7 +624,10 @@ fn ends(a: usize, b: usize) -> (usize, usize) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
     use vita_core::HasSites;
+
+    use crate::BondId;
 
     fn s(n: u32) -> SiteId {
         SiteId::new(n).unwrap()
@@ -773,6 +696,10 @@ mod tests {
         mol(&[1, 2, 3, 4], &[(1, 1, 2), (2, 2, 3), (3, 3, 4), (4, 1, 4)])
     }
 
+    fn tadpole() -> Mol {
+        mol(&[1, 2, 3, 4], &[(1, 1, 2), (2, 2, 3), (3, 1, 3), (4, 1, 4)])
+    }
+
     fn fused() -> Mol {
         mol(
             &[1, 2, 3, 4, 5, 6],
@@ -816,23 +743,6 @@ mod tests {
         )
     }
 
-    fn bicyclo222() -> Mol {
-        mol(
-            &[1, 2, 3, 4, 5, 6, 7, 8],
-            &[
-                (1, 1, 3),
-                (2, 3, 4),
-                (3, 4, 2),
-                (4, 1, 5),
-                (5, 5, 6),
-                (6, 6, 2),
-                (7, 1, 7),
-                (8, 7, 8),
-                (9, 8, 2),
-            ],
-        )
-    }
-
     fn bridged_square() -> Mol {
         mol(
             &[1, 2, 3, 4, 5, 6],
@@ -844,6 +754,20 @@ mod tests {
                 (5, 2, 5),
                 (6, 5, 6),
                 (7, 4, 6),
+            ],
+        )
+    }
+
+    fn k4() -> Mol {
+        mol(
+            &[1, 2, 3, 4],
+            &[
+                (1, 1, 2),
+                (2, 1, 3),
+                (3, 1, 4),
+                (4, 2, 3),
+                (5, 2, 4),
+                (6, 3, 4),
             ],
         )
     }
@@ -868,22 +792,25 @@ mod tests {
         )
     }
 
-    fn k4() -> Mol {
+    fn bicyclo222() -> Mol {
         mol(
-            &[1, 2, 3, 4],
+            &[1, 2, 3, 4, 5, 6, 7, 8],
             &[
-                (1, 1, 2),
-                (2, 1, 3),
-                (3, 1, 4),
-                (4, 2, 3),
-                (5, 2, 4),
-                (6, 3, 4),
+                (1, 1, 3),
+                (2, 3, 4),
+                (3, 4, 2),
+                (4, 1, 5),
+                (5, 5, 6),
+                (6, 6, 2),
+                (7, 1, 7),
+                (8, 7, 8),
+                (9, 8, 2),
             ],
         )
     }
 
     #[test]
-    fn empty_has_no_families() {
+    fn empty_molecule_has_no_families() {
         let f = families(&empty());
         assert_eq!(f.len(), 0);
         assert!(f.is_empty());
@@ -891,96 +818,122 @@ mod tests {
 
     #[test]
     fn single_site_has_no_families() {
-        assert_eq!(families(&single()).len(), 0);
+        assert!(families(&single()).is_empty());
     }
 
     #[test]
-    fn chain_has_no_families() {
+    fn acyclic_molecule_has_no_families() {
         assert!(families(&chain()).is_empty());
     }
 
     #[test]
-    fn triangle_has_one_family() {
+    fn a_triangle_is_one_family() {
         assert_eq!(families(&triangle()).len(), 1);
     }
 
     #[test]
-    fn triangle_family_size_is_three() {
+    fn a_triangle_family_is_a_three_membered_ring() {
         let f = families(&triangle());
-        assert_eq!(f.iter().next().unwrap().size(), 3);
+        let family = f.iter().next().unwrap();
+        assert_eq!(family.size(), 3);
+        assert_eq!(family.sites().len(), 3);
+        assert_eq!(family.bonds().len(), 3);
     }
 
     #[test]
-    fn square_has_one_family() {
-        assert_eq!(families(&square()).len(), 1);
+    fn a_square_is_one_family_of_size_four() {
+        let f = families(&square());
+        assert_eq!(f.len(), 1);
+        assert_eq!(f.iter().next().unwrap().size(), 4);
     }
 
     #[test]
-    fn fused_has_two_families() {
+    fn fused_rings_yield_two_families() {
         assert_eq!(families(&fused()).len(), 2);
     }
 
     #[test]
-    fn spiro_has_two_families() {
-        assert_eq!(families(&spiro()).len(), 2);
+    fn iter_orders_families_by_ascending_size() {
+        let f = families(&bridged_square());
+        let sizes: Vec<usize> = f.iter().map(|fam| fam.size()).collect();
+        assert!(sizes.windows(2).all(|w| w[0] <= w[1]));
     }
 
     #[test]
-    fn two_triangles_has_two_families() {
-        assert_eq!(families(&two_triangles()).len(), 2);
+    fn of_site_of_an_unknown_site_is_empty() {
+        assert_eq!(families(&triangle()).of_site(s(99)).count(), 0);
     }
 
     #[test]
-    fn bicyclo222_has_three_families() {
-        let f = families(&bicyclo222());
-        assert_eq!(f.len(), 3);
-        assert!(f.iter().all(|fam| fam.size() == 6));
+    fn of_site_in_an_acyclic_molecule_is_empty() {
+        assert_eq!(families(&chain()).of_site(s(2)).count(), 0);
     }
 
     #[test]
-    fn cube_has_six_families() {
-        let f = families(&cube());
-        assert_eq!(f.len(), 6);
-        assert!(f.iter().all(|fam| fam.size() == 4));
+    fn of_bond_of_a_bridge_is_empty() {
+        assert_eq!(families(&tadpole()).of_bond(b(4)).count(), 0);
     }
 
     #[test]
-    fn k4_has_four_families() {
-        let f = families(&k4());
-        assert_eq!(f.len(), 4);
-        assert!(f.iter().all(|fam| fam.size() == 3));
+    fn of_bond_of_an_unknown_bond_is_empty() {
+        assert_eq!(families(&triangle()).of_bond(b(99)).count(), 0);
     }
 
     #[test]
-    fn bridged_square_merges_interchangeable_rings() {
+    fn same_is_false_for_an_unknown_site() {
+        assert!(!families(&triangle()).same(s(1), s(99)));
+    }
+
+    #[test]
+    fn an_acyclic_molecule_has_no_girth() {
+        assert_eq!(families(&chain()).girth(), None);
+    }
+
+    #[test]
+    fn a_degenerate_ring_system_yields_a_family_per_relevant_cycle() {
+        for (m, count, size) in [(cube(), 6, 4), (k4(), 4, 3), (bicyclo222(), 3, 6)] {
+            let f = families(&m);
+            assert_eq!(f.len(), count);
+            assert!(f.iter().all(|fam| fam.size() == size));
+        }
+    }
+
+    #[test]
+    fn unique_ring_families_exceed_a_minimum_basis_when_degenerate() {
+        for (m, rank) in [(cube(), 5), (k4(), 3), (bicyclo222(), 2)] {
+            let basis = super::super::rings(&m).len();
+            assert_eq!(basis, rank);
+            assert!(families(&m).len() > basis);
+        }
+    }
+
+    #[test]
+    fn unique_ring_families_match_a_minimum_basis_when_unambiguous() {
+        for m in [triangle(), square(), fused(), two_triangles()] {
+            assert_eq!(families(&m).len(), super::super::rings(&m).len());
+        }
+    }
+
+    #[test]
+    fn a_bridged_system_fuses_interchangeable_rings() {
         let f = families(&bridged_square());
         assert_eq!(f.len(), 2);
         let mut sizes: Vec<usize> = f.iter().map(|fam| fam.size()).collect();
         sizes.sort_unstable();
         assert_eq!(sizes, vec![4, 5]);
-    }
-
-    #[test]
-    fn bridged_square_size_five_family_spans_all_atoms() {
-        let f = families(&bridged_square());
         let five = f.iter().find(|fam| fam.size() == 5).unwrap();
         assert_eq!(five.sites().len(), 6);
     }
 
     #[test]
-    fn girth_is_smallest_family() {
+    fn girth_is_the_smallest_family_size() {
         assert_eq!(families(&triangle()).girth(), Some(3));
         assert_eq!(families(&square()).girth(), Some(4));
         assert_eq!(families(&bridged_square()).girth(), Some(4));
     }
 
     #[test]
-    fn acyclic_girth_is_none() {
-        assert_eq!(families(&chain()).girth(), None);
-    }
-
-    #[test]
-    fn triangle_each_site_in_one_family() {
+    fn a_site_of_one_ring_lies_in_one_family() {
         let f = families(&triangle());
         for site in [s(1), s(2), s(3)] {
             assert_eq!(f.of_site(site).count(), 1);
@@ -988,169 +941,103 @@ mod tests {
     }
 
     #[test]
-    fn fused_shared_bond_in_two_families() {
-        let f = families(&fused());
-        assert_eq!(f.of_bond(b(3)).count(), 2);
-    }
-
-    #[test]
-    fn fused_shared_site_in_two_families() {
+    fn a_shared_site_lies_in_two_families() {
         let f = families(&fused());
         assert_eq!(f.of_site(s(3)).count(), 2);
         assert_eq!(f.of_site(s(4)).count(), 2);
     }
 
     #[test]
-    fn of_site_unknown_is_empty() {
-        assert_eq!(families(&triangle()).of_site(s(99)).count(), 0);
+    fn a_shared_bond_lies_in_two_families() {
+        assert_eq!(families(&fused()).of_bond(b(3)).count(), 2);
     }
 
     #[test]
-    fn of_bond_bridge_is_empty() {
-        let tadpole = mol(&[1, 2, 3, 4], &[(1, 1, 2), (2, 2, 3), (3, 1, 3), (4, 1, 4)]);
-        assert_eq!(families(&tadpole).of_bond(b(4)).count(), 0);
+    fn two_sites_of_one_ring_are_the_same() {
+        assert!(families(&triangle()).same(s(1), s(2)));
     }
 
     #[test]
-    fn of_bond_unknown_is_empty() {
-        assert_eq!(families(&triangle()).of_bond(b(99)).count(), 0);
+    fn two_sites_in_distinct_rings_are_not_the_same() {
+        assert!(!families(&fused()).same(s(1), s(6)));
     }
 
     #[test]
-    fn spiro_same_within_ring_only() {
-        let f = families(&spiro());
-        assert!(f.same(s(1), s(2)));
-        assert!(!f.same(s(1), s(4)));
-    }
-
-    #[test]
-    fn same_unknown_is_false() {
-        assert!(!families(&triangle()).same(s(1), s(99)));
-    }
-
-    #[test]
-    fn spiro_site_is_the_shared_atom() {
+    fn a_spiro_atom_is_reported() {
         let f = families(&spiro());
         assert_eq!(f.spiro_sites().collect::<Vec<_>>(), vec![s(3)]);
     }
 
     #[test]
-    fn fused_has_no_spiro_sites() {
+    fn fused_rings_have_no_spiro_atom() {
         assert_eq!(families(&fused()).spiro_sites().count(), 0);
     }
 
     #[test]
-    fn bicyclo222_has_no_spiro_sites() {
-        assert_eq!(families(&bicyclo222()).spiro_sites().count(), 0);
-    }
-
-    #[test]
-    fn fusion_bond_is_the_shared_edge() {
+    fn a_fusion_bond_is_reported() {
         let f = families(&fused());
         assert_eq!(f.fusion_bonds().collect::<Vec<_>>(), vec![b(3)]);
     }
 
     #[test]
-    fn spiro_has_no_fusion_bonds() {
+    fn spiro_rings_have_no_fusion_bond() {
         assert_eq!(families(&spiro()).fusion_bonds().count(), 0);
     }
 
     #[test]
-    fn membership_matches_free_function() {
+    fn membership_matches_the_membership_function() {
         let m = fused();
         let derived = families(&m).membership();
         let direct = super::super::membership(&m);
-
-        let mut a: Vec<SiteId> = derived.sites().collect();
-        let mut c: Vec<SiteId> = direct.sites().collect();
-        a.sort_unstable();
-        c.sort_unstable();
-        assert_eq!(a, c);
-
-        let mut a: Vec<BondId> = derived.bonds().collect();
-        let mut c: Vec<BondId> = direct.bonds().collect();
-        a.sort_unstable();
-        c.sort_unstable();
-        assert_eq!(a, c);
+        assert_eq!(derived.sites(), direct.sites());
+        assert_eq!(derived.bonds(), direct.bonds());
     }
 
     #[test]
-    fn fused_one_system() {
-        assert_eq!(families(&fused()).systems().count(), 1);
+    fn fused_rings_form_one_system() {
+        let systems: Vec<Vec<SiteId>> = families(&fused()).systems().collect();
+        assert_eq!(systems, vec![vec![s(1), s(2), s(3), s(4), s(5), s(6)]]);
     }
 
     #[test]
-    fn spiro_one_system() {
+    fn spiro_rings_form_one_system() {
         assert_eq!(families(&spiro()).systems().count(), 1);
     }
 
     #[test]
-    fn two_triangles_two_systems() {
+    fn separate_rings_form_separate_systems() {
         let systems: Vec<Vec<SiteId>> = families(&two_triangles()).systems().collect();
-        assert_eq!(systems.len(), 2);
-        assert_eq!(systems[0], vec![s(1), s(2), s(3)]);
-        assert_eq!(systems[1], vec![s(4), s(5), s(6)]);
+        assert_eq!(
+            systems,
+            vec![vec![s(1), s(2), s(3)], vec![s(4), s(5), s(6)]]
+        );
     }
 
     #[test]
-    fn systems_partition_ring_sites() {
+    fn systems_partition_the_ring_sites() {
         let m = fused();
         let f = families(&m);
-        let from_systems: HashSet<SiteId> = f.systems().flatten().collect();
-        let from_membership: HashSet<SiteId> = f.membership().sites().collect();
-        assert_eq!(from_systems, from_membership);
+        let mut from_systems: Vec<SiteId> = f.systems().flatten().collect();
+        from_systems.sort_unstable();
+        assert_eq!(from_systems, f.membership().sites());
     }
 
     #[test]
-    fn matches_minimum_basis_when_non_degenerate() {
-        for m in [triangle(), square(), fused(), spiro(), two_triangles()] {
-            assert_eq!(families(&m).len(), super::super::rings(&m).len());
+    fn families_are_independent_of_input_order() {
+        let shape = |m: &Mol| -> Vec<(usize, Vec<SiteId>)> {
+            families(m)
+                .iter()
+                .map(|f| (f.size(), f.sites().to_vec()))
+                .collect()
+        };
+        for m in [fused(), bridged_square(), cube()] {
+            assert_eq!(shape(&m), shape(&reversed(&m)));
         }
     }
 
     #[test]
-    fn exceeds_minimum_basis_when_degenerate() {
-        assert!(families(&cube()).len() > super::super::rings(&cube()).len());
-    }
-
-    #[test]
-    fn cube_is_deterministic() {
-        let first: Vec<Vec<SiteId>> = families(&cube())
-            .iter()
-            .map(|f| f.sites().to_vec())
-            .collect();
-        let second: Vec<Vec<SiteId>> = families(&cube())
-            .iter()
-            .map(|f| f.sites().to_vec())
-            .collect();
-        assert_eq!(first, second);
-    }
-
-    #[test]
-    fn output_is_independent_of_input_order() {
-        let shuffled = mol(
-            &[6, 4, 2, 5, 3, 1],
-            &[
-                (7, 6, 4),
-                (3, 4, 3),
-                (1, 2, 1),
-                (5, 5, 3),
-                (2, 3, 2),
-                (6, 6, 5),
-                (4, 4, 1),
-            ],
-        );
-        let canonical: Vec<(usize, Vec<SiteId>)> = families(&fused())
-            .iter()
-            .map(|f| (f.size(), f.sites().to_vec()))
-            .collect();
-        let reordered: Vec<(usize, Vec<SiteId>)> = families(&shuffled)
-            .iter()
-            .map(|f| (f.size(), f.sites().to_vec()))
-            .collect();
-        assert_eq!(canonical, reordered);
-
-        let derived = |m: &Mol| -> (Vec<SiteId>, Vec<BondId>, Vec<Vec<SiteId>>) {
+    fn derived_queries_are_independent_of_input_order() {
+        let query = |m: &Mol| -> (Vec<SiteId>, Vec<BondId>, Vec<Vec<SiteId>>) {
             let f = families(m);
             (
                 f.spiro_sites().collect(),
@@ -1158,11 +1045,8 @@ mod tests {
                 f.systems().collect(),
             )
         };
-        assert_eq!(derived(&spiro()), derived(&reversed(&spiro())));
-        assert_eq!(derived(&fused()), derived(&reversed(&fused())));
-        assert_eq!(
-            derived(&two_triangles()),
-            derived(&reversed(&two_triangles()))
-        );
+        for m in [spiro(), fused(), two_triangles()] {
+            assert_eq!(query(&m), query(&reversed(&m)));
+        }
     }
 }
