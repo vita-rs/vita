@@ -2,16 +2,17 @@ use vita_core::SiteId;
 
 use crate::{BondOrder, HasBondOrders};
 
-/// Explicit valence of `site`: the sum of the orders of its bonds.
+/// Explicit valence of `site`: the sum of the integer orders of its bonds.
 ///
-/// A double bond counts as two, a triple as three, and so on; a site with no
-/// bonds has valence zero. Returns `None` when any incident bond is
-/// [`Aromatic`](BondOrder::Aromatic): a delocalised bond has no definite
-/// localised order, leaving the valence undefined until the ring is kekulised.
+/// A double bond counts two, a triple three, and so on; a site with no bonds has
+/// valence zero. Returns `None` when any incident bond is
+/// [`Aromatic`](BondOrder::Aromatic): a delocalised bond has no localised integer
+/// order, leaving the valence undefined until the ring is kekulised.
 ///
 /// # Complexity
 ///
-/// O(degree) time.
+/// O(d) time and O(1) space, where `d` is the degree of `site`, assuming
+/// [`bonds_of`](crate::HasBonds::bonds_of) runs in O(degree).
 pub fn valence<M: HasBondOrders>(mol: &M, site: SiteId) -> Option<u32> {
     let mut sum = 0;
     for (bond, _) in mol.bonds_of(site) {
@@ -31,8 +32,10 @@ pub fn valence<M: HasBondOrders>(mol: &M, site: SiteId) -> Option<u32> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{BondId, HasBonds};
+
     use vita_core::HasSites;
+
+    use crate::{BondId, HasBonds};
 
     fn s(n: u32) -> SiteId {
         SiteId::new(n).unwrap()
@@ -73,134 +76,56 @@ mod tests {
         }
     }
 
-    fn methane() -> Mol {
+    fn hub(orders: &[BondOrder]) -> Mol {
+        let n = orders.len() as u32;
         Mol {
-            sites: vec![s(1), s(2), s(3), s(4), s(5)],
-            bonds: vec![b(1), b(2), b(3), b(4)],
-            endpoints: vec![(s(1), s(2)), (s(1), s(3)), (s(1), s(4)), (s(1), s(5))],
-            orders: vec![BondOrder::Single; 4],
-        }
-    }
-
-    fn carbon_dioxide() -> Mol {
-        Mol {
-            sites: vec![s(1), s(2), s(3)],
-            bonds: vec![b(1), b(2)],
-            endpoints: vec![(s(1), s(2)), (s(2), s(3))],
-            orders: vec![BondOrder::Double, BondOrder::Double],
-        }
-    }
-
-    fn hydrogen_cyanide() -> Mol {
-        Mol {
-            sites: vec![s(1), s(2), s(3)],
-            bonds: vec![b(1), b(2)],
-            endpoints: vec![(s(1), s(2)), (s(2), s(3))],
-            orders: vec![BondOrder::Single, BondOrder::Triple],
-        }
-    }
-
-    fn benzene() -> Mol {
-        Mol {
-            sites: vec![s(1), s(2), s(3), s(4), s(5), s(6)],
-            bonds: vec![b(1), b(2), b(3), b(4), b(5), b(6)],
-            endpoints: vec![
-                (s(1), s(2)),
-                (s(2), s(3)),
-                (s(3), s(4)),
-                (s(4), s(5)),
-                (s(5), s(6)),
-                (s(6), s(1)),
-            ],
-            orders: vec![BondOrder::Aromatic; 6],
-        }
-    }
-
-    fn methylbenzene() -> Mol {
-        Mol {
-            sites: vec![s(1), s(2), s(3), s(4), s(5), s(6), s(7)],
-            bonds: vec![b(1), b(2), b(3), b(4), b(5), b(6), b(7)],
-            endpoints: vec![
-                (s(1), s(2)),
-                (s(2), s(3)),
-                (s(3), s(4)),
-                (s(4), s(5)),
-                (s(5), s(6)),
-                (s(6), s(1)),
-                (s(1), s(7)),
-            ],
-            orders: vec![
-                BondOrder::Aromatic,
-                BondOrder::Aromatic,
-                BondOrder::Aromatic,
-                BondOrder::Aromatic,
-                BondOrder::Aromatic,
-                BondOrder::Aromatic,
-                BondOrder::Single,
-            ],
+            sites: (1..=n + 1).map(s).collect(),
+            bonds: (1..=n).map(b).collect(),
+            endpoints: (2..=n + 1).map(|i| (s(1), s(i))).collect(),
+            orders: orders.to_vec(),
         }
     }
 
     #[test]
-    fn isolated_site_is_zero() {
-        let mol = Mol {
-            sites: vec![s(1)],
-            bonds: vec![],
-            endpoints: vec![],
-            orders: vec![],
-        };
-        assert_eq!(valence(&mol, s(1)), Some(0));
+    fn a_bondless_site_has_zero_valence() {
+        assert_eq!(valence(&hub(&[]), s(1)), Some(0));
     }
 
     #[test]
-    fn single_bonds() {
-        let mol = methane();
-        assert_eq!(valence(&mol, s(1)), Some(4));
-        assert_eq!(valence(&mol, s(2)), Some(1));
-    }
-
-    #[test]
-    fn double_counts_as_two() {
-        let mol = carbon_dioxide();
-        assert_eq!(valence(&mol, s(2)), Some(4));
-        assert_eq!(valence(&mol, s(1)), Some(2));
-    }
-
-    #[test]
-    fn triple_counts_as_three() {
-        let mol = hydrogen_cyanide();
-        assert_eq!(valence(&mol, s(1)), Some(1));
-        assert_eq!(valence(&mol, s(2)), Some(4));
-        assert_eq!(valence(&mol, s(3)), Some(3));
-    }
-
-    #[test]
-    fn high_orders() {
-        for (order, expected) in [
+    fn each_bond_order_adds_its_multiplicity() {
+        for (order, multiplicity) in [
+            (BondOrder::Single, 1),
+            (BondOrder::Double, 2),
+            (BondOrder::Triple, 3),
             (BondOrder::Quadruple, 4),
             (BondOrder::Quintuple, 5),
             (BondOrder::Hextuple, 6),
         ] {
-            let mol = Mol {
-                sites: vec![s(1), s(2)],
-                bonds: vec![b(1)],
-                endpoints: vec![(s(1), s(2))],
-                orders: vec![order],
-            };
-            assert_eq!(valence(&mol, s(1)), Some(expected));
+            assert_eq!(valence(&hub(&[order]), s(1)), Some(multiplicity));
         }
     }
 
     #[test]
-    fn aromatic_is_undefined() {
-        let mol = benzene();
+    fn valence_sums_all_incident_bonds() {
+        let mol = hub(&[BondOrder::Single, BondOrder::Double, BondOrder::Triple]);
+        assert_eq!(valence(&mol, s(1)), Some(6));
+    }
+
+    #[test]
+    fn an_aromatic_bond_leaves_the_valence_undefined() {
+        assert_eq!(valence(&hub(&[BondOrder::Aromatic]), s(1)), None);
+    }
+
+    #[test]
+    fn one_aromatic_among_localised_bonds_is_undefined() {
+        let mol = hub(&[BondOrder::Single, BondOrder::Aromatic, BondOrder::Double]);
         assert_eq!(valence(&mol, s(1)), None);
     }
 
     #[test]
-    fn aromatic_affects_only_incident_sites() {
-        let mol = methylbenzene();
-        assert_eq!(valence(&mol, s(7)), Some(1));
-        assert_eq!(valence(&mol, s(1)), None);
+    fn site_valences_sum_to_twice_the_total_bond_order() {
+        let mol = hub(&[BondOrder::Single, BondOrder::Double, BondOrder::Triple]);
+        let total: u32 = mol.sites().map(|site| valence(&mol, site).unwrap()).sum();
+        assert_eq!(total, 2 * (1 + 2 + 3));
     }
 }

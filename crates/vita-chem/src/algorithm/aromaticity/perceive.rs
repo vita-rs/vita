@@ -2,9 +2,9 @@ use std::collections::{HashMap, HashSet};
 
 use vita_core::{HasElements, SiteId};
 
+use crate::algorithm::utils::electronegativity;
 use crate::capability::delegation::forward_capabilities;
 use crate::topology::ring::{Ring, RingMembership, rings};
-use crate::utils::electronegativity;
 use crate::valence::lone_pairs;
 use crate::{
     BondId, BondOrder, HasAromaticity, HasBondOrders, HasBonds, HasFormalCharges,
@@ -159,7 +159,8 @@ where
     let membership = rings.membership();
     let pi: HashMap<SiteId, Option<u32>> = membership
         .sites()
-        .map(|site| (site, contribution(mol, site, &membership)))
+        .iter()
+        .map(|&site| (site, contribution(mol, site, &membership)))
         .collect();
 
     let basis: Vec<&Ring> = rings.iter().collect();
@@ -240,7 +241,7 @@ where
             _ => return None,
         };
         if pi > 0 {
-            if rings.bond(bond) {
+            if rings.contains_bond(bond) {
                 endocyclic += pi;
             } else {
                 exocyclic += pi;

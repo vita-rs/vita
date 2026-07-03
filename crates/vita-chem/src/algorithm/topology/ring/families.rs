@@ -2,7 +2,7 @@ use std::collections::VecDeque;
 
 use vita_core::SiteId;
 
-use super::membership::RingMembership;
+use super::RingMembership;
 use crate::algorithm::utils::{
     AdjacencyList, BitSet, DisjointSet, FxHashMap, FxHashSet, Gf2Basis, SortedMultimap,
 };
@@ -628,6 +628,7 @@ mod tests {
     use vita_core::HasSites;
 
     use crate::BondId;
+    use crate::topology::ring::{membership, rings};
 
     fn s(n: u32) -> SiteId {
         SiteId::new(n).unwrap()
@@ -901,7 +902,7 @@ mod tests {
     #[test]
     fn unique_ring_families_exceed_a_minimum_basis_when_degenerate() {
         for (m, rank) in [(cube(), 5), (k4(), 3), (bicyclo222(), 2)] {
-            let basis = super::super::rings(&m).len();
+            let basis = rings(&m).len();
             assert_eq!(basis, rank);
             assert!(families(&m).len() > basis);
         }
@@ -910,7 +911,7 @@ mod tests {
     #[test]
     fn unique_ring_families_match_a_minimum_basis_when_unambiguous() {
         for m in [triangle(), square(), fused(), two_triangles()] {
-            assert_eq!(families(&m).len(), super::super::rings(&m).len());
+            assert_eq!(families(&m).len(), rings(&m).len());
         }
     }
 
@@ -988,7 +989,7 @@ mod tests {
     fn membership_matches_the_membership_function() {
         let m = fused();
         let derived = families(&m).membership();
-        let direct = super::super::membership(&m);
+        let direct = membership(&m);
         assert_eq!(derived.sites(), direct.sites());
         assert_eq!(derived.bonds(), direct.bonds());
     }

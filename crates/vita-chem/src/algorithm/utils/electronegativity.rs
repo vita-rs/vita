@@ -1,7 +1,7 @@
 use vita_core::Element;
 
-/// Pauling electronegativity of an element — its pull on bonding electrons, on
-/// the dimensionless scale from francium (0.70) to fluorine (3.98).
+/// Pauling electronegativity of `element`: its pull on shared bonding electrons,
+/// on the dimensionless scale from francium (0.70) to fluorine (3.98).
 ///
 /// Returns `None` only where no single value is established.
 pub fn electronegativity(element: Element) -> Option<f64> {
@@ -114,24 +114,39 @@ mod tests {
     }
 
     #[test]
-    fn pauling_values() {
-        for (symbol, expected) in [
-            ("F", Some(3.98)),
-            ("O", Some(3.44)),
-            ("C", Some(2.55)),
-            ("H", Some(2.20)),
-            ("Cl", Some(3.16)),
-            ("Na", Some(0.93)),
-            ("Fe", Some(1.83)),
-            ("Cs", Some(0.79)),
-            ("Fr", Some(0.70)),
-            ("La", Some(1.10)),
-            ("U", Some(1.38)),
-            ("He", None),
-            ("Rn", None),
-            ("Eu", None),
-        ] {
-            assert_eq!(electronegativity(elem(symbol)), expected, "{symbol}");
+    fn returns_the_pauling_value() {
+        assert_eq!(electronegativity(elem("F")), Some(3.98));
+        assert_eq!(electronegativity(elem("Fr")), Some(0.70));
+        assert_eq!(electronegativity(elem("H")), Some(2.20));
+        assert_eq!(electronegativity(elem("C")), Some(2.55));
+        assert_eq!(electronegativity(elem("O")), Some(3.44));
+        assert_eq!(electronegativity(elem("Cl")), Some(3.16));
+        assert_eq!(electronegativity(elem("Na")), Some(0.93));
+        assert_eq!(electronegativity(elem("Fe")), Some(1.83));
+        assert_eq!(electronegativity(elem("Kr")), Some(3.00));
+        assert_eq!(electronegativity(elem("La")), Some(1.10));
+        assert_eq!(electronegativity(elem("U")), Some(1.38));
+    }
+
+    #[test]
+    fn has_no_value_for_elements_without_an_established_number() {
+        assert_eq!(electronegativity(elem("He")), None);
+        assert_eq!(electronegativity(elem("Ar")), None);
+        assert_eq!(electronegativity(elem("Rn")), None);
+        assert_eq!(electronegativity(elem("Pm")), None);
+        assert_eq!(electronegativity(elem("Eu")), None);
+        assert_eq!(electronegativity(elem("Lr")), None);
+    }
+
+    #[test]
+    fn every_value_lies_within_the_pauling_scale() {
+        for z in 1..=118 {
+            if let Some(value) = electronegativity(Element::new(z).unwrap()) {
+                assert!(
+                    (0.70..=3.98).contains(&value),
+                    "Z {z} has value {value} outside the scale",
+                );
+            }
         }
     }
 }

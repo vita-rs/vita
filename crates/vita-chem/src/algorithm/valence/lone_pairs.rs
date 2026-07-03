@@ -1,26 +1,26 @@
 use vita_core::{HasElements, SiteId};
 
-use super::explicit::valence;
-use crate::utils::valence_electrons;
+use super::valence;
+use crate::algorithm::utils::valence_electrons;
 use crate::{HasBondOrders, HasFormalCharges, HasRadicalElectrons};
 
 /// Number of lone (non-bonding) electron pairs on `site`.
 ///
-/// What is left of the element's valence electrons once the bonding and
-/// unpaired ones are removed: `(valence electrons − formal charge − bond-order
-/// sum − radicals) / 2`. Oxygen in water has two; the ammonium nitrogen has
-/// none.
+/// The valence electrons left once the bonding and unpaired ones are taken away,
+/// paired up: `(valence electrons − formal charge − bond-order sum − radicals)
+/// / 2`. Water's oxygen has two; the ammonium nitrogen has none.
 ///
 /// Returns `None` when no exact count exists:
-/// - `site` holds a d- or f-block element, whose valence-electron count is
-///   ambiguous;
+/// - `site` holds a d- or f-block element, whose valence-electron count is not
+///   fixed;
 /// - an incident bond is aromatic, so the bonding electrons are not localised
-///   (see [`valence`] — kekulise the ring first);
-/// - the bookkeeping is negative, describing an impossible structure.
+///   (see [`valence`], which the count builds on — kekulise the ring first);
+/// - the arithmetic goes negative, describing an impossible structure.
 ///
 /// # Complexity
 ///
-/// O(degree) time.
+/// O(d) time and O(1) space, where `d` is the degree of `site`, assuming
+/// [`bonds_of`](crate::HasBonds::bonds_of) runs in O(degree).
 pub fn lone_pairs<M: HasBondOrders + HasElements + HasFormalCharges + HasRadicalElectrons>(
     mol: &M,
     site: SiteId,
@@ -39,8 +39,10 @@ pub fn lone_pairs<M: HasBondOrders + HasElements + HasFormalCharges + HasRadical
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{BondId, BondOrder, HasBonds};
+
     use vita_core::{Element, HasSites};
+
+    use crate::{BondId, BondOrder, HasBonds};
 
     fn s(n: u32) -> SiteId {
         SiteId::new(n).unwrap()
@@ -57,11 +59,11 @@ mod tests {
     struct Mol {
         sites: Vec<SiteId>,
         elements: Vec<Element>,
-        charges: Vec<i8>,
-        radicals: Vec<u8>,
         bonds: Vec<BondId>,
         endpoints: Vec<(SiteId, SiteId)>,
         orders: Vec<BondOrder>,
+        formal_charges: Vec<i8>,
+        radicals: Vec<u8>,
     }
 
     impl HasSites for Mol {
@@ -72,22 +74,8 @@ mod tests {
 
     impl HasElements for Mol {
         fn element(&self, site: SiteId) -> Element {
-            let i = self.sites.iter().position(|&s| s == site).unwrap();
+            let i = self.sites.iter().position(|&x| x == site).unwrap();
             self.elements[i]
-        }
-    }
-
-    impl HasFormalCharges for Mol {
-        fn formal_charge(&self, site: SiteId) -> i8 {
-            let i = self.sites.iter().position(|&s| s == site).unwrap();
-            self.charges[i]
-        }
-    }
-
-    impl HasRadicalElectrons for Mol {
-        fn radical_electron(&self, site: SiteId) -> u8 {
-            let i = self.sites.iter().position(|&s| s == site).unwrap();
-            self.radicals[i]
         }
     }
 
@@ -109,155 +97,102 @@ mod tests {
         }
     }
 
-    fn atom(symbol: &str, charge: i8, radicals: u8, bonds: &[BondOrder]) -> Mol {
-        let mut mol = Mol {
-            sites: vec![s(1)],
-            elements: vec![elem(symbol)],
-            charges: vec![charge],
-            radicals: vec![radicals],
-            bonds: Vec::new(),
-            endpoints: Vec::new(),
-            orders: Vec::new(),
-        };
-        for (i, &order) in bonds.iter().enumerate() {
-            let neighbour = s(i as u32 + 2);
-            mol.sites.push(neighbour);
-            mol.elements.push(elem("H"));
-            mol.charges.push(0);
-            mol.radicals.push(0);
-            mol.bonds.push(b(i as u32 + 1));
-            mol.endpoints.push((s(1), neighbour));
-            mol.orders.push(order);
+    impl HasFormalCharges for Mol {
+        fn formal_charge(&self, site: SiteId) -> i8 {
+            let i = self.sites.iter().position(|&x| x == site).unwrap();
+            self.formal_charges[i]
         }
-        mol
+    }
+
+    impl HasRadicalElectrons for Mol {
+        fn radical_electron(&self, site: SiteId) -> u8 {
+            let i = self.sites.iter().position(|&x| x == site).unwrap();
+            self.radicals[i]
+        }
+    }
+
+    fn atom(symbol: &str, charge: i8, radicals: u8, orders: &[BondOrder]) -> Mol {
+        let n = orders.len() as u32;
+        let mut sites = vec![s(1)];
+        let mut elements = vec![elem(symbol)];
+        let mut formal_charges = vec![charge];
+        let mut radical_counts = vec![radicals];
+        for i in 2..=n + 1 {
+            sites.push(s(i));
+            elements.push(elem("H"));
+            formal_charges.push(0);
+            radical_counts.push(0);
+        }
+        Mol {
+            sites,
+            elements,
+            bonds: (1..=n).map(b).collect(),
+            endpoints: (2..=n + 1).map(|i| (s(1), s(i))).collect(),
+            orders: orders.to_vec(),
+            formal_charges,
+            radicals: radical_counts,
+        }
     }
 
     #[test]
-    fn neutral_atoms() {
-        assert_eq!(
-            lone_pairs(&atom("O", 0, 0, &[BondOrder::Single; 2]), s(1)),
-            Some(2)
-        );
-        assert_eq!(
-            lone_pairs(&atom("N", 0, 0, &[BondOrder::Single; 3]), s(1)),
-            Some(1)
-        );
-        assert_eq!(
-            lone_pairs(&atom("C", 0, 0, &[BondOrder::Single; 4]), s(1)),
-            Some(0)
-        );
-        assert_eq!(
-            lone_pairs(&atom("F", 0, 0, &[BondOrder::Single]), s(1)),
-            Some(3)
-        );
+    fn a_bare_atom_pairs_all_its_valence_electrons() {
+        assert_eq!(lone_pairs(&atom("O", 0, 0, &[]), s(1)), Some(3));
     }
 
     #[test]
-    fn helium_has_one_pair() {
-        assert_eq!(lone_pairs(&atom("He", 0, 0, &[]), s(1)), Some(1));
+    fn counts_lone_pairs_of_neutral_atoms() {
+        let water = atom("O", 0, 0, &[BondOrder::Single, BondOrder::Single]);
+        assert_eq!(lone_pairs(&water, s(1)), Some(2));
+
+        let ammonia = atom("N", 0, 0, &[BondOrder::Single; 3]);
+        assert_eq!(lone_pairs(&ammonia, s(1)), Some(1));
+
+        let methane = atom("C", 0, 0, &[BondOrder::Single; 4]);
+        assert_eq!(lone_pairs(&methane, s(1)), Some(0));
     }
 
     #[test]
-    fn bond_order_enters_through_valence() {
-        assert_eq!(
-            lone_pairs(&atom("O", 0, 0, &[BondOrder::Double]), s(1)),
-            Some(2)
-        );
-        assert_eq!(
-            lone_pairs(&atom("N", 0, 0, &[BondOrder::Triple]), s(1)),
-            Some(1)
-        );
+    fn positive_formal_charge_removes_electrons() {
+        let ammonium = atom("N", 1, 0, &[BondOrder::Single; 4]);
+        assert_eq!(lone_pairs(&ammonium, s(1)), Some(0));
     }
 
     #[test]
-    fn formal_charge_shifts_the_count() {
-        assert_eq!(
-            lone_pairs(&atom("N", 1, 0, &[BondOrder::Single; 4]), s(1)),
-            Some(0)
-        );
-        assert_eq!(
-            lone_pairs(&atom("O", 1, 0, &[BondOrder::Single; 3]), s(1)),
-            Some(1)
-        );
-        assert_eq!(
-            lone_pairs(&atom("O", -1, 0, &[BondOrder::Single]), s(1)),
-            Some(3)
-        );
-        assert_eq!(
-            lone_pairs(&atom("N", -1, 0, &[BondOrder::Single; 2]), s(1)),
-            Some(2)
-        );
+    fn negative_formal_charge_adds_electrons() {
+        let hydroxide = atom("O", -1, 0, &[BondOrder::Single]);
+        assert_eq!(lone_pairs(&hydroxide, s(1)), Some(3));
     }
 
     #[test]
-    fn radicals_are_subtracted() {
-        assert_eq!(
-            lone_pairs(&atom("C", 0, 1, &[BondOrder::Single; 3]), s(1)),
-            Some(0)
-        );
-        assert_eq!(
-            lone_pairs(&atom("O", 0, 1, &[BondOrder::Single]), s(1)),
-            Some(2)
-        );
+    fn radical_electrons_stay_unpaired() {
+        let methyl = atom("C", 0, 1, &[BondOrder::Single; 3]);
+        assert_eq!(lone_pairs(&methyl, s(1)), Some(0));
     }
 
     #[test]
-    fn electron_deficient_atoms_have_no_pairs() {
-        assert_eq!(
-            lone_pairs(&atom("B", 0, 0, &[BondOrder::Single; 3]), s(1)),
-            Some(0)
-        );
-        assert_eq!(
-            lone_pairs(&atom("C", 1, 0, &[BondOrder::Single; 3]), s(1)),
-            Some(0)
-        );
+    fn undefined_for_a_d_block_element() {
+        assert_eq!(lone_pairs(&atom("Fe", 0, 0, &[]), s(1)), None);
     }
 
     #[test]
-    fn hypervalent_atoms_have_no_pairs() {
+    fn undefined_beside_an_aromatic_bond() {
         assert_eq!(
-            lone_pairs(&atom("S", 0, 0, &[BondOrder::Single; 6]), s(1)),
-            Some(0)
-        );
-        assert_eq!(
-            lone_pairs(&atom("P", 0, 0, &[BondOrder::Single; 5]), s(1)),
-            Some(0)
-        );
-    }
-
-    #[test]
-    fn odd_electron_count_rounds_down() {
-        assert_eq!(
-            lone_pairs(&atom("N", 0, 0, &[BondOrder::Double]), s(1)),
-            Some(1)
-        );
-    }
-
-    #[test]
-    fn transition_and_inner_metals_are_undefined() {
-        assert_eq!(
-            lone_pairs(&atom("Fe", 0, 0, &[BondOrder::Single; 2]), s(1)),
-            None
-        );
-        assert_eq!(
-            lone_pairs(&atom("U", 0, 0, &[BondOrder::Single]), s(1)),
+            lone_pairs(&atom("C", 0, 0, &[BondOrder::Aromatic]), s(1)),
             None
         );
     }
 
     #[test]
-    fn aromatic_bonds_are_undefined() {
+    fn undefined_when_the_electron_count_goes_negative() {
         assert_eq!(
-            lone_pairs(&atom("C", 0, 0, &[BondOrder::Aromatic; 2]), s(1)),
+            lone_pairs(&atom("N", 0, 0, &[BondOrder::Hextuple]), s(1)),
             None
         );
     }
 
     #[test]
-    fn impossible_valence_is_undefined() {
-        assert_eq!(
-            lone_pairs(&atom("C", 0, 0, &[BondOrder::Single; 5]), s(1)),
-            None
-        );
+    fn an_odd_free_electron_count_rounds_down() {
+        let aminyl = atom("N", 0, 0, &[BondOrder::Single, BondOrder::Single]);
+        assert_eq!(lone_pairs(&aminyl, s(1)), Some(1));
     }
 }

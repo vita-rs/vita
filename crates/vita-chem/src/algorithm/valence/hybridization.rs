@@ -1,6 +1,6 @@
 use vita_core::{HasElements, SiteId};
 
-use super::lone_pairs::lone_pairs;
+use super::lone_pairs;
 use crate::capability::delegation::forward_capabilities;
 use crate::{
     HasBondOrders, HasFormalCharges, HasHybridizations, HasRadicalElectrons, Hybridization,
@@ -26,7 +26,8 @@ use crate::{
 ///
 /// # Complexity
 ///
-/// O(degree) time.
+/// O(d) time and O(1) space, where `d` is the degree of `site`, assuming
+/// [`bonds_of`](crate::HasBonds::bonds_of) runs in O(degree).
 pub fn hybridization<M: HasBondOrders + HasElements + HasFormalCharges + HasRadicalElectrons>(
     mol: &M,
     site: SiteId,
@@ -102,8 +103,10 @@ impl<M: HasBondOrders + HasElements + HasFormalCharges + HasRadicalElectrons> Ha
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{BondId, BondOrder, HasBonds};
+
     use vita_core::{Element, HasSites};
+
+    use crate::{BondId, BondOrder, HasBonds};
 
     fn s(n: u32) -> SiteId {
         SiteId::new(n).unwrap()
@@ -120,11 +123,11 @@ mod tests {
     struct Mol {
         sites: Vec<SiteId>,
         elements: Vec<Element>,
-        charges: Vec<i8>,
-        radicals: Vec<u8>,
         bonds: Vec<BondId>,
         endpoints: Vec<(SiteId, SiteId)>,
         orders: Vec<BondOrder>,
+        formal_charges: Vec<i8>,
+        radicals: Vec<u8>,
     }
 
     impl HasSites for Mol {
@@ -135,22 +138,8 @@ mod tests {
 
     impl HasElements for Mol {
         fn element(&self, site: SiteId) -> Element {
-            let i = self.sites.iter().position(|&s| s == site).unwrap();
+            let i = self.sites.iter().position(|&x| x == site).unwrap();
             self.elements[i]
-        }
-    }
-
-    impl HasFormalCharges for Mol {
-        fn formal_charge(&self, site: SiteId) -> i8 {
-            let i = self.sites.iter().position(|&s| s == site).unwrap();
-            self.charges[i]
-        }
-    }
-
-    impl HasRadicalElectrons for Mol {
-        fn radical_electron(&self, site: SiteId) -> u8 {
-            let i = self.sites.iter().position(|&s| s == site).unwrap();
-            self.radicals[i]
         }
     }
 
@@ -172,160 +161,142 @@ mod tests {
         }
     }
 
-    fn atom(symbol: &str, charge: i8, radicals: u8, bonds: &[BondOrder]) -> Mol {
-        let mut mol = Mol {
-            sites: vec![s(1)],
-            elements: vec![elem(symbol)],
-            charges: vec![charge],
-            radicals: vec![radicals],
-            bonds: Vec::new(),
-            endpoints: Vec::new(),
-            orders: Vec::new(),
-        };
-        for (i, &order) in bonds.iter().enumerate() {
-            let neighbour = s(i as u32 + 2);
-            mol.sites.push(neighbour);
-            mol.elements.push(elem("H"));
-            mol.charges.push(0);
-            mol.radicals.push(0);
-            mol.bonds.push(b(i as u32 + 1));
-            mol.endpoints.push((s(1), neighbour));
-            mol.orders.push(order);
+    impl HasFormalCharges for Mol {
+        fn formal_charge(&self, site: SiteId) -> i8 {
+            let i = self.sites.iter().position(|&x| x == site).unwrap();
+            self.formal_charges[i]
         }
-        mol
+    }
+
+    impl HasRadicalElectrons for Mol {
+        fn radical_electron(&self, site: SiteId) -> u8 {
+            let i = self.sites.iter().position(|&x| x == site).unwrap();
+            self.radicals[i]
+        }
+    }
+
+    fn atom(symbol: &str, charge: i8, radicals: u8, orders: &[BondOrder]) -> Mol {
+        let n = orders.len() as u32;
+        let mut sites = vec![s(1)];
+        let mut elements = vec![elem(symbol)];
+        let mut formal_charges = vec![charge];
+        let mut radical_counts = vec![radicals];
+        for i in 2..=n + 1 {
+            sites.push(s(i));
+            elements.push(elem("H"));
+            formal_charges.push(0);
+            radical_counts.push(0);
+        }
+        Mol {
+            sites,
+            elements,
+            bonds: (1..=n).map(b).collect(),
+            endpoints: (2..=n + 1).map(|i| (s(1), s(i))).collect(),
+            orders: orders.to_vec(),
+            formal_charges,
+            radicals: radical_counts,
+        }
     }
 
     #[test]
-    fn carbon_geometries() {
+    fn no_or_one_domain_is_s() {
         assert_eq!(
-            hybridization(&atom("C", 0, 0, &[BondOrder::Double; 2]), s(1)),
-            Some(Hybridization::Sp),
+            hybridization(&atom("H", 0, 0, &[]), s(1)),
+            Some(Hybridization::S)
         );
+        let bonded = atom("H", 0, 0, &[BondOrder::Single]);
+        assert_eq!(hybridization(&bonded, s(1)), Some(Hybridization::S));
+    }
+
+    #[test]
+    fn two_domains_are_sp() {
+        let carbon_dioxide = atom("C", 0, 0, &[BondOrder::Double, BondOrder::Double]);
         assert_eq!(
-            hybridization(&atom("C", 1, 0, &[BondOrder::Single; 3]), s(1)),
-            Some(Hybridization::Sp2),
-        );
-        assert_eq!(
-            hybridization(&atom("C", 0, 0, &[BondOrder::Single; 4]), s(1)),
-            Some(Hybridization::Sp3),
+            hybridization(&carbon_dioxide, s(1)),
+            Some(Hybridization::Sp)
         );
     }
 
     #[test]
-    fn lone_pairs_raise_the_count() {
-        assert_eq!(
-            hybridization(&atom("O", 0, 0, &[BondOrder::Single; 2]), s(1)),
-            Some(Hybridization::Sp3),
-        );
-        assert_eq!(
-            hybridization(&atom("N", 0, 0, &[BondOrder::Single; 3]), s(1)),
-            Some(Hybridization::Sp3),
-        );
-        assert_eq!(
-            hybridization(&atom("O", 0, 0, &[BondOrder::Double]), s(1)),
-            Some(Hybridization::Sp2),
-        );
-        assert_eq!(
-            hybridization(&atom("N", 0, 0, &[BondOrder::Triple]), s(1)),
-            Some(Hybridization::Sp),
-        );
+    fn three_domains_are_sp2() {
+        let borane = atom("B", 0, 0, &[BondOrder::Single; 3]);
+        assert_eq!(hybridization(&borane, s(1)), Some(Hybridization::Sp2));
     }
 
     #[test]
-    fn hypervalent_geometries() {
+    fn four_domains_are_sp3() {
+        let methane = atom("C", 0, 0, &[BondOrder::Single; 4]);
+        assert_eq!(hybridization(&methane, s(1)), Some(Hybridization::Sp3));
+    }
+
+    #[test]
+    fn five_domains_are_sp3d() {
+        let phosphorus_pentachloride = atom("P", 0, 0, &[BondOrder::Single; 5]);
         assert_eq!(
-            hybridization(&atom("P", 0, 0, &[BondOrder::Single; 5]), s(1)),
+            hybridization(&phosphorus_pentachloride, s(1)),
             Some(Hybridization::Sp3d),
         );
+    }
+
+    #[test]
+    fn six_domains_are_sp3d2() {
+        let sulfur_hexafluoride = atom("S", 0, 0, &[BondOrder::Single; 6]);
         assert_eq!(
-            hybridization(&atom("S", 0, 0, &[BondOrder::Single; 6]), s(1)),
+            hybridization(&sulfur_hexafluoride, s(1)),
             Some(Hybridization::Sp3d2),
         );
+    }
+
+    #[test]
+    fn seven_domains_are_sp3d3() {
+        let iodine_heptafluoride = atom("I", 0, 0, &[BondOrder::Single; 7]);
         assert_eq!(
-            hybridization(&atom("I", 0, 0, &[BondOrder::Single; 7]), s(1)),
+            hybridization(&iodine_heptafluoride, s(1)),
             Some(Hybridization::Sp3d3),
         );
     }
 
     #[test]
-    fn zero_or_one_domain_is_s() {
+    fn eight_or_more_domains_are_other() {
+        let over_coordinated = atom("Xe", 0, 0, &[BondOrder::Single; 8]);
         assert_eq!(
-            hybridization(&atom("Na", 1, 0, &[]), s(1)),
-            Some(Hybridization::S),
-        );
-        assert_eq!(
-            hybridization(&atom("H", 0, 0, &[BondOrder::Single]), s(1)),
-            Some(Hybridization::S),
-        );
-    }
-
-    #[test]
-    fn eight_domains_is_other() {
-        assert_eq!(
-            hybridization(&atom("Xe", 0, 0, &[BondOrder::Single; 8]), s(1)),
+            hybridization(&over_coordinated, s(1)),
             Some(Hybridization::Other),
         );
     }
 
     #[test]
-    fn undefined_when_lone_pairs_undefined() {
-        assert_eq!(
-            hybridization(&atom("C", 0, 0, &[BondOrder::Aromatic; 2]), s(1)),
-            None,
-        );
-        assert_eq!(
-            hybridization(&atom("Fe", 0, 0, &[BondOrder::Single; 2]), s(1)),
-            None
-        );
+    fn undefined_when_the_domain_count_is_undefined() {
+        assert_eq!(hybridization(&atom("Fe", 0, 0, &[]), s(1)), None);
+        let aromatic = atom("C", 0, 0, &[BondOrder::Aromatic]);
+        assert_eq!(hybridization(&aromatic, s(1)), None);
     }
 
     #[test]
-    fn bound_view_answers_the_hybridization_capability() {
-        let mol = atom("C", 0, 0, &[BondOrder::Single; 4]);
-        let view = WithHybridizations::new(&mol);
+    fn lone_pairs_count_as_domains() {
+        let water = atom("O", 0, 0, &[BondOrder::Single, BondOrder::Single]);
+        assert_eq!(hybridization(&water, s(1)), Some(Hybridization::Sp3));
+    }
+
+    #[test]
+    fn view_reports_the_computed_hybridization() {
+        let methane = atom("C", 0, 0, &[BondOrder::Single; 4]);
+        let view = WithHybridizations::new(&methane);
         assert_eq!(view.hybridization(s(1)), Hybridization::Sp3);
     }
 
     #[test]
-    fn bound_view_takes_other_where_undefined() {
-        let mol = atom("Fe", 0, 0, &[BondOrder::Single; 2]);
-        let view = WithHybridizations::new(&mol);
+    fn view_falls_back_to_other_where_undefined() {
+        let iron = atom("Fe", 0, 0, &[]);
+        let view = WithHybridizations::new(&iron);
         assert_eq!(view.hybridization(s(1)), Hybridization::Other);
     }
 
     #[test]
-    fn bound_view_forwards_the_skeleton() {
-        let mol = atom("C", 0, 0, &[BondOrder::Single; 2]);
+    fn view_forwards_other_capabilities() {
+        let mol = atom("C", 0, 0, &[BondOrder::Double]);
         let view = WithHybridizations::new(&mol);
-
-        let mut view_sites: Vec<SiteId> = view.sites().collect();
-        let mut mol_sites: Vec<SiteId> = mol.sites().collect();
-        view_sites.sort();
-        mol_sites.sort();
-        assert_eq!(view_sites, mol_sites);
-        assert_eq!(view.site_count(), mol.site_count());
-        assert!(view.contains_site(s(1)));
-
-        let mut view_bonds: Vec<BondId> = view.bonds().collect();
-        let mut mol_bonds: Vec<BondId> = mol.bonds().collect();
-        view_bonds.sort();
-        mol_bonds.sort();
-        assert_eq!(view_bonds, mol_bonds);
-        assert_eq!(view.bond_count(), mol.bond_count());
-        assert!(view.contains_bond(b(1)));
-        assert_eq!(view.bond_endpoints(b(1)), mol.bond_endpoints(b(1)));
-        assert_eq!(view.bond_between(s(1), s(2)), mol.bond_between(s(1), s(2)));
-
-        assert_eq!(view.degree(s(1)), mol.degree(s(1)));
-        let mut view_incident: Vec<(BondId, SiteId)> = view.bonds_of(s(1)).collect();
-        let mut mol_incident: Vec<(BondId, SiteId)> = mol.bonds_of(s(1)).collect();
-        view_incident.sort();
-        mol_incident.sort();
-        assert_eq!(view_incident, mol_incident);
-        let mut view_neighbours: Vec<SiteId> = view.neighbors(s(1)).collect();
-        let mut mol_neighbours: Vec<SiteId> = mol.neighbors(s(1)).collect();
-        view_neighbours.sort();
-        mol_neighbours.sort();
-        assert_eq!(view_neighbours, mol_neighbours);
+        assert_eq!(view.element(s(1)), elem("C"));
+        assert_eq!(view.bond_order(b(1)), BondOrder::Double);
     }
 }

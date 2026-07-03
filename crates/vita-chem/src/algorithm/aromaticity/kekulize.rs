@@ -2,8 +2,9 @@ use std::collections::{HashMap, HashSet};
 
 use vita_core::{HasElements, SiteId};
 
+use crate::algorithm::utils::valence_electrons;
 use crate::capability::delegation::forward_capabilities;
-use crate::utils::{maximum_matching, valence_electrons};
+use crate::utils::maximum_matching;
 use crate::{BondId, BondOrder, HasBondOrders, HasFormalCharges, HasRadicalElectrons};
 
 /// The Kekulé structure resolved for a molecule's aromatic bonds.
