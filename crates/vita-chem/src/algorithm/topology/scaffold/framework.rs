@@ -73,7 +73,8 @@ impl Framework {
 ///
 /// # Complexity
 ///
-/// O(V log V + E) time and O(V + E) space.
+/// O(V · log V + E · log E) time and O(V + E) space, over the molecule's `V`
+/// sites and `E` bonds.
 pub fn framework<M: HasBonds>(mol: &M) -> Framework {
     let rings = membership(mol);
 

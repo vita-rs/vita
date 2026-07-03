@@ -61,7 +61,7 @@ impl Components {
 ///
 /// # Complexity
 ///
-/// O(V log V + E) time and O(V) space, over the molecule's `V` sites and `E`
+/// O(V · log V + E) time and O(V) space, over the molecule's `V` sites and `E`
 /// bonds, assuming [`neighbors`](HasBonds::neighbors) runs in O(degree); the
 /// log factor orders the components and their sites canonically.
 pub fn components<M: HasBonds>(mol: &M) -> Components {

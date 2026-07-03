@@ -156,9 +156,10 @@ impl Rings {
 ///
 /// # Complexity
 ///
-/// O(V · E³ / w) time and O(V · E² / w) space for machine word width `w = 64`: a
-/// breadth-first tree at each of the `V` sites yields O(V · E) candidate cycles
-/// of `E` bits, which Gaussian elimination over GF(2) reduces to the basis.
+/// O(V · E³ / w) time and O(V · E² / w) space, over the molecule's `V` sites and
+/// `E` bonds for word width `w` = 64. A breadth-first tree at each site yields
+/// O(V · E) candidate cycles of `E` bits, which Gaussian elimination over GF(2)
+/// reduces to the basis.
 pub fn rings<M: HasBonds>(mol: &M) -> Rings {
     let mut sites: Vec<SiteId> = mol.sites().collect();
     sites.sort_unstable();

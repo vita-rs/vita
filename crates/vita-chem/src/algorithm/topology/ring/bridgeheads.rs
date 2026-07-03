@@ -15,8 +15,8 @@ use crate::{BondId, HasBonds};
 ///
 /// # Complexity
 ///
-/// O(V² · E) time, dominated by the minimum cycle basis it builds, and
-/// O(V + E) space.
+/// O(V · E³ / w) time and O(V + E) space, over the molecule's `V` sites and `E`
+/// bonds for word width `w` = 64; building the minimum cycle basis dominates.
 pub fn bridgeheads<M: HasBonds>(mol: &M) -> impl Iterator<Item = SiteId> {
     let basis = rings(mol);
     let ring_bonds: Vec<Vec<BondId>> = basis

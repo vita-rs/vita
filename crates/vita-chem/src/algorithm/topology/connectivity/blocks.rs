@@ -139,7 +139,8 @@ impl Blocks {
 ///
 /// # Complexity
 ///
-/// O(V + E log E) time and O(V + E) space.
+/// O(V · log V + E · log E) time and O(V + E) space, over the molecule's `V`
+/// sites and `E` bonds.
 pub fn blocks<M: HasBonds>(mol: &M) -> Blocks {
     let sites: Vec<SiteId> = mol.sites().collect();
     let bonds: Vec<BondId> = mol.bonds().collect();

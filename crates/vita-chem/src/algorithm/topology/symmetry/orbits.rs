@@ -64,8 +64,9 @@ impl Orbits {
 ///
 /// # Complexity
 ///
-/// O(V · (V + E) · log V) time per refinement, near-linear in practice and
-/// exponential in the worst case; O(V + E) space.
+/// O(V · (V + E) · log V) time per refinement and O(V + E) space, over the
+/// molecule's `V` sites and `E` bonds; near-linear in practice, exponential in
+/// the worst case under individualization backtracking.
 pub fn orbits<M: HasBonds>(mol: &M) -> Orbits {
     let sites: Vec<SiteId> = mol.sites().collect();
     let n = sites.len();

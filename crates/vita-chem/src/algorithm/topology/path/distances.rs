@@ -127,7 +127,8 @@ impl DistanceMatrix {
 ///
 /// # Complexity
 ///
-/// O(V·(V + E)) time and O(V²) space, for `V` sites and `E` bonds.
+/// O(V · (V + E)) time and O(V²) space, over the molecule's `V` sites and `E`
+/// bonds.
 pub fn distances<M: HasBonds>(mol: &M) -> DistanceMatrix {
     let mut sites: Vec<SiteId> = mol.sites().collect();
     sites.sort_unstable();

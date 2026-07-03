@@ -16,9 +16,9 @@ use crate::algorithm::utils::FxHashSet;
 ///
 /// # Complexity
 ///
-/// Exhausting the traversal is O(V + E) time and O(V) auxiliary space, over the
-/// `V` sites and `E` bonds reachable from `start`, assuming
-/// [`neighbors`](HasBonds::neighbors) runs in O(degree).
+/// O(V + E) time and O(V) auxiliary space, over the `V` sites and `E` bonds
+/// reachable from `start`, assuming [`neighbors`](HasBonds::neighbors) runs in
+/// O(degree).
 pub fn bfs<M: HasBonds>(mol: &M, start: SiteId) -> impl Iterator<Item = SiteId> + '_ {
     Bfs::new(mol, start)
 }

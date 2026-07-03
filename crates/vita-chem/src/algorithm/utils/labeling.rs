@@ -41,8 +41,9 @@ impl Labeling {
 ///
 /// # Complexity
 ///
-/// O(V · (V + E) · log V) per refinement — one for a rigid graph, one per search
-/// node where symmetry forces a branch. Near-linear in practice, exponential in
+/// O(V · (V + E) · log V) time per refinement and O(V + E) space, over a graph of
+/// `V` vertices and `E` edges — one refinement for a rigid graph, one per search
+/// node where symmetry forces a branch; near-linear in practice, exponential in
 /// the worst case.
 pub fn labeling(adjacency: &[Vec<(usize, usize)>], seed: &[usize]) -> Labeling {
     let n = adjacency.len();

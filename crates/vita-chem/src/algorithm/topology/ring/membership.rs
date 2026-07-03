@@ -70,7 +70,8 @@ impl RingMembership {
 ///
 /// # Complexity
 ///
-/// O(V + E) time and space.
+/// O(V · log V + E · log E) time and O(V + E) space, over the molecule's `V`
+/// sites and `E` bonds.
 pub fn membership<M: HasBonds>(mol: &M) -> RingMembership {
     let sites: Vec<SiteId> = mol.sites().collect();
     let bonds: Vec<BondId> = mol.bonds().collect();

@@ -194,8 +194,8 @@ impl RingFamilies {
 ///
 /// # Complexity
 ///
-/// O(V²·E) time and O(V·E) space in the worst case, over each biconnected ring
-/// system taken on its own.
+/// O(V² · E) time and O(V · E) space, over the `V` sites and `E` bonds of each
+/// biconnected ring system.
 pub fn families<M: HasBonds>(mol: &M) -> RingFamilies {
     let mut families: Vec<RingFamily> = Vec::new();
 

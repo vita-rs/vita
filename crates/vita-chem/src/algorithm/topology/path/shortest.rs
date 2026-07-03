@@ -15,9 +15,8 @@ use crate::algorithm::utils::FxHashMap;
 ///
 /// # Complexity
 ///
-/// O(V + E) time and O(V) auxiliary space in the worst case, over the `V` sites
-/// and `E` bonds reachable from `start`, assuming
-/// [`neighbors`](HasBonds::neighbors) runs in O(degree).
+/// O(V + E) time and O(V) space, over the `V` sites and `E` bonds reachable from
+/// `start`, assuming [`neighbors`](HasBonds::neighbors) runs in O(degree).
 pub fn path<M: HasBonds>(mol: &M, start: SiteId, end: SiteId) -> Option<Vec<SiteId>> {
     if start == end {
         return Some(vec![start]);
