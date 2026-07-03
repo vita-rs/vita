@@ -22,11 +22,13 @@ impl<K: Ord, V> SortedMap<K, V> {
     }
 
     /// Number of entries.
+    #[allow(dead_code)]
     pub fn len(&self) -> usize {
         self.entries.len()
     }
 
     /// Returns `true` if the map has no entries.
+    #[allow(dead_code)]
     pub fn is_empty(&self) -> bool {
         self.entries.is_empty()
     }
@@ -42,6 +44,7 @@ impl<K: Ord, V> SortedMap<K, V> {
     }
 
     /// Returns `true` if `key` is present.
+    #[allow(dead_code)]
     pub fn contains_key(&self, key: &K) -> bool {
         self.entries.binary_search_by(|(k, _)| k.cmp(key)).is_ok()
     }

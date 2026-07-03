@@ -41,11 +41,13 @@ impl<K: Ord, V: Ord> SortedMultimap<K, V> {
     }
 
     /// Number of distinct keys.
+    #[allow(dead_code)]
     pub fn len(&self) -> usize {
         self.keys.len()
     }
 
     /// Returns `true` if the multimap has no keys.
+    #[allow(dead_code)]
     pub fn is_empty(&self) -> bool {
         self.keys.is_empty()
     }
@@ -61,6 +63,7 @@ impl<K: Ord, V: Ord> SortedMultimap<K, V> {
     }
 
     /// Returns `true` if `key` is present.
+    #[allow(dead_code)]
     pub fn contains_key(&self, key: &K) -> bool {
         self.keys.binary_search_by(|k| k.cmp(key)).is_ok()
     }

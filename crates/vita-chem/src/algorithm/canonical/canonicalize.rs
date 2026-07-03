@@ -4,15 +4,15 @@ use std::hash::{Hash, Hasher};
 
 use vita_core::SiteId;
 
-use crate::utils::labelling;
+use crate::algorithm::utils::labeling;
 use crate::{BondId, HasBonds};
 
-/// The canonical labelling of a molecule's sites: a portable identity, with its
+/// The canonical labeling of a molecule's sites: a portable identity, with its
 /// symmetry classes.
 ///
 /// [`canonicalize`] assigns every site a rank — its place in a total order fixed
 /// by the molecular graph and the colouring it was built with, not by the order
-/// the sites were given in — and records the labelled graph in that order as a
+/// the sites were given in — and records the labeled graph in that order as a
 /// canonical form. Two molecules the colouring makes isomorphic share that form,
 /// so a `Canonical` is a portable identity: compare it to test sameness, hash it
 /// to key a registry, sort molecules into a stable order.
@@ -109,13 +109,13 @@ impl<VK: Hash, EK: Hash> Hash for Canonical<VK, EK> {
 /// their keys are equal. That choice is the definition of identity — pass the
 /// element and bond order to rank by constitution, fold in the formal charge to
 /// tell charge states apart — and the library imposes no default. The sites are
-/// ranked, and the labelled graph recorded, into the one canonical form their
+/// ranked, and the labeled graph recorded, into the one canonical form their
 /// structure and keys dictate: molecules the keys make isomorphic yield equal
 /// [`Canonical`]s, whatever sequence the sites and bonds arrived in.
 ///
 /// The ranking is exact. Colour refinement settles the sites into classes by
 /// their coloured neighbourhoods; where symmetry leaves a class unsplit the
-/// search individualises each of its members in turn and keeps the labelling of
+/// search individualises each of its members in turn and keeps the labeling of
 /// least certificate. Taking the least over every branch — rather than
 /// committing to a greedy tie-break — is what frees the result from the input
 /// order, and the automorphisms it meets along the way are the molecule's
@@ -153,12 +153,12 @@ where
         adjacency[pos[&b]].push((pos[&a], edge[i]));
     }
 
-    let labelled = labelling(&adjacency, &seed);
+    let labeled = labeling(&adjacency, &seed);
 
     let ranks: HashMap<SiteId, usize> = sites
         .iter()
         .enumerate()
-        .map(|(vertex, &site)| (site, labelled.ranks()[vertex]))
+        .map(|(vertex, &site)| (site, labeled.ranks()[vertex]))
         .collect();
     let mut order = sites.clone();
     order.sort_by_key(|site| ranks[site]);
@@ -166,7 +166,7 @@ where
     let mut members: HashMap<usize, Vec<SiteId>> = HashMap::new();
     for (vertex, &site) in sites.iter().enumerate() {
         members
-            .entry(labelled.orbits()[vertex])
+            .entry(labeled.orbits()[vertex])
             .or_default()
             .push(site);
     }
@@ -184,7 +184,7 @@ where
     let mut keyed: Vec<(usize, VK)> = site_keys
         .into_iter()
         .enumerate()
-        .map(|(vertex, key)| (labelled.ranks()[vertex], key))
+        .map(|(vertex, key)| (labeled.ranks()[vertex], key))
         .collect();
     keyed.sort_by_key(|&(rank, _)| rank);
     let form_sites: Vec<VK> = keyed.into_iter().map(|(_, key)| key).collect();
@@ -194,7 +194,7 @@ where
         .zip(bond_keys)
         .map(|(&bond, key)| {
             let (a, b) = mol.bond_endpoints(bond);
-            let (a, b) = (labelled.ranks()[pos[&a]], labelled.ranks()[pos[&b]]);
+            let (a, b) = (labeled.ranks()[pos[&a]], labeled.ranks()[pos[&b]]);
             (a.min(b), a.max(b), key)
         })
         .collect();
@@ -331,7 +331,7 @@ mod tests {
         }
     }
 
-    fn cyanate_relabelled() -> Mol {
+    fn cyanate_relabeled() -> Mol {
         Mol {
             sites: vec![s(4), s(5), s(6)],
             elements: vec![elem("N"), elem("C"), elem("O")],
@@ -461,7 +461,7 @@ mod tests {
     }
 
     #[test]
-    fn asymmetric_labelling_is_independent_of_input_order() {
+    fn asymmetric_labeling_is_independent_of_input_order() {
         let plain = canon(&cyanate());
         let shuffled = canon(&cyanate_shuffled());
         for site in [s(1), s(2), s(3)] {
@@ -525,8 +525,8 @@ mod tests {
     }
 
     #[test]
-    fn relabelled_molecule_is_equal() {
-        assert_eq!(canon(&cyanate()), canon(&cyanate_relabelled()));
+    fn relabeled_molecule_is_equal() {
+        assert_eq!(canon(&cyanate()), canon(&cyanate_relabeled()));
     }
 
     #[test]
@@ -560,10 +560,9 @@ mod tests {
 
     #[test]
     fn equal_canonicals_hash_and_order_alike() {
-        let set: HashSet<Canonical<Element, u8>> =
-            [canon(&cyanate()), canon(&cyanate_relabelled())]
-                .into_iter()
-                .collect();
+        let set: HashSet<Canonical<Element, u8>> = [canon(&cyanate()), canon(&cyanate_relabeled())]
+            .into_iter()
+            .collect();
         assert_eq!(set.len(), 1);
         assert_eq!(
             canon(&cyanate()).cmp(&canon(&cyanate_shuffled())),

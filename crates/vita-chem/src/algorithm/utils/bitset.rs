@@ -27,6 +27,7 @@ impl BitSet {
     }
 
     /// Returns `true` if the bit set has no positions.
+    #[allow(dead_code)]
     pub fn is_empty(&self) -> bool {
         self.len == 0
     }

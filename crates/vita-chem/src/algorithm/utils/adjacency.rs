@@ -30,6 +30,7 @@ impl AdjacencyList {
     }
 
     /// Returns `true` if the graph has no nodes.
+    #[allow(dead_code)]
     pub fn is_empty(&self) -> bool {
         self.adj.is_empty()
     }

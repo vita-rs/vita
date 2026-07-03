@@ -12,6 +12,6 @@ pub use bitset::BitSet;
 pub use disjoint_set::DisjointSet;
 pub use gf2_basis::Gf2Basis;
 pub use hash::{FxHashMap, FxHashSet};
-pub use labeling::{Labeling, labeling};
+pub use labeling::labeling;
 pub use sorted_map::SortedMap;
 pub use sorted_multimap::SortedMultimap;
