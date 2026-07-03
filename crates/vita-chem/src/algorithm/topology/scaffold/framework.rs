@@ -1,8 +1,7 @@
-use std::collections::{HashMap, HashSet, VecDeque};
-
-use vita_core::{HasSites, SiteId};
+use vita_core::SiteId;
 
 use crate::HasBonds;
+use crate::algorithm::utils::{AdjacencyList, FxHashMap, SortedMap};
 use crate::topology::ring::membership;
 
 /// The structural role of an atom in a molecule's Bemis–Murcko framework.
@@ -18,122 +17,137 @@ pub enum Role {
 
 /// The Bemis–Murcko framework of a molecule.
 ///
-/// Classifies every atom by its structural role: in a ring, on a linker between
-/// rings, or on an acyclic side chain. The framework itself — the ring and
-/// linker atoms, given by [`Self::sites`] — is what remains once the side chains
-/// are stripped; an acyclic molecule has none.
+/// Assigns every atom a structural [`Role`]: a ring atom, a linker joining ring
+/// systems, or a side-chain atom on an acyclic branch. The framework itself —
+/// the ring and linker atoms, given by [`sites`](Self::sites) — is what remains
+/// once the side chains are stripped; an acyclic molecule has none.
 ///
 /// Obtain via [`framework`].
 pub struct Framework {
-    roles: Vec<(SiteId, Role)>,
+    roles: SortedMap<SiteId, Role>,
 }
 
 impl Framework {
     /// Returns the structural role of `site`.
     ///
-    /// Returns `None` if `site` is not present in the molecule.
+    /// Returns `None` if `site` is absent from the molecule.
     pub fn role(&self, site: SiteId) -> Option<Role> {
-        self.roles
-            .binary_search_by_key(&site, |&(site, _)| site)
-            .ok()
-            .map(|i| self.roles[i].1)
+        self.roles.get(&site).copied()
     }
 
-    /// Iterates the framework sites — the ring and linker atoms left once the
-    /// side chains are stripped — in ascending order.
+    /// The framework sites — the ring and linker atoms left once the side chains
+    /// are stripped — in ascending order.
     pub fn sites(&self) -> impl Iterator<Item = SiteId> + '_ {
-        self.roles
-            .iter()
-            .filter(|&&(_, r)| r != Role::SideChain)
-            .map(|&(s, _)| s)
+        self.of_role(|role| role != Role::SideChain)
     }
 
-    /// Iterates the linker sites — framework atoms on a path between ring systems
-    /// but in no ring — in ascending order.
+    /// The linker sites — framework atoms on a path between ring systems but in
+    /// no ring — in ascending order.
     pub fn linkers(&self) -> impl Iterator<Item = SiteId> + '_ {
-        self.roles
-            .iter()
-            .filter(|&&(_, r)| r == Role::Linker)
-            .map(|&(s, _)| s)
+        self.of_role(|role| role == Role::Linker)
     }
 
-    /// Iterates the side-chain sites — atoms on the acyclic branches stripped
-    /// from the framework — in ascending order.
+    /// The side-chain sites — atoms on the acyclic branches stripped from the
+    /// framework — in ascending order.
     pub fn side_chains(&self) -> impl Iterator<Item = SiteId> + '_ {
+        self.of_role(|role| role == Role::SideChain)
+    }
+
+    /// The sites whose role satisfies `keep`, in ascending order.
+    fn of_role<'a>(
+        &'a self,
+        keep: impl Fn(Role) -> bool + 'a,
+    ) -> impl Iterator<Item = SiteId> + 'a {
         self.roles
             .iter()
-            .filter(|&&(_, r)| r == Role::SideChain)
-            .map(|&(s, _)| s)
+            .filter(move |&(_, &role)| keep(role))
+            .map(|(&site, _)| site)
     }
 }
 
 /// Bemis–Murcko framework of a molecule.
 ///
-/// Peels away the acyclic side chains by repeatedly removing sites of degree
-/// below two. The surviving sites form the framework, split into the ring atoms
-/// and the linker atoms that join the rings.
+/// Strips the acyclic side chains — the atoms outside the 2-core — by repeatedly
+/// removing atoms of degree below two. Each surviving atom is a ring atom or a
+/// linker between rings, told apart by [ring membership](membership).
 ///
 /// # Complexity
 ///
-/// O(V + E) time.
-pub fn framework<M: HasBonds + HasSites>(mol: &M) -> Framework {
+/// O(V log V + E) time and O(V + E) space.
+pub fn framework<M: HasBonds>(mol: &M) -> Framework {
     let rings = membership(mol);
 
-    let mut adj: HashMap<SiteId, Vec<SiteId>> = HashMap::new();
-    for site in mol.sites() {
-        adj.entry(site).or_default();
-    }
-    for bond in mol.bonds() {
-        let (a, b) = mol.bond_endpoints(bond);
-        adj.entry(a).or_default().push(b);
-        adj.entry(b).or_default().push(a);
+    let sites: Vec<SiteId> = mol.sites().collect();
+    let n = sites.len();
+    let index: FxHashMap<SiteId, usize> = sites.iter().enumerate().map(|(i, &s)| (s, i)).collect();
+    let adjacency = AdjacencyList::build(
+        n,
+        mol.bonds().enumerate().map(|(e, bond)| {
+            let (a, b) = mol.bond_endpoints(bond);
+            (e, index[&a], index[&b])
+        }),
+    );
+
+    let peeled = peel_side_chains(&adjacency);
+
+    let mut is_ring = vec![false; n];
+    for &site in rings.sites() {
+        is_ring[index[&site]] = true;
     }
 
-    let mut degree: HashMap<SiteId, usize> = adj.iter().map(|(&s, nbrs)| (s, nbrs.len())).collect();
-    let mut peeled: HashSet<SiteId> = HashSet::new();
-    let mut queue: VecDeque<SiteId> = degree
-        .iter()
-        .filter(|&(_, &d)| d < 2)
-        .map(|(&s, _)| s)
-        .collect();
-    while let Some(v) = queue.pop_front() {
-        if !peeled.insert(v) {
-            continue;
-        }
-        for &u in &adj[&v] {
-            if peeled.contains(&u) {
-                continue;
-            }
-            let d = degree.get_mut(&u).unwrap();
-            *d -= 1;
-            if *d == 1 {
-                queue.push_back(u);
-            }
-        }
-    }
-
-    let mut roles: Vec<(SiteId, Role)> = Vec::new();
-    for site in mol.sites() {
-        let role = if peeled.contains(&site) {
+    let roles = sites.iter().enumerate().map(|(i, &site)| {
+        let role = if peeled[i] {
             Role::SideChain
-        } else if rings.site(site) {
+        } else if is_ring[i] {
             Role::Ring
         } else {
             Role::Linker
         };
-        roles.push((site, role));
-    }
-    roles.sort_unstable_by_key(|&(site, _)| site);
+        (site, role)
+    });
 
-    Framework { roles }
+    Framework {
+        roles: SortedMap::from_pairs(roles),
+    }
+}
+
+/// Flags each site stripped as a side chain: the atoms outside the 2-core of the
+/// molecular graph.
+///
+/// Repeatedly removes atoms of degree below two until only the 2-core — the ring
+/// and linker atoms — remains. The flag at index `u` refers to the site whose
+/// index is `u` in `adjacency`.
+fn peel_side_chains(adjacency: &AdjacencyList) -> Vec<bool> {
+    let n = adjacency.len();
+    let mut degree: Vec<usize> = (0..n).map(|u| adjacency.neighbors(u).len()).collect();
+    let mut peeled = vec![false; n];
+    let mut worklist: Vec<usize> = (0..n).filter(|&u| degree[u] < 2).collect();
+
+    while let Some(u) = worklist.pop() {
+        if peeled[u] {
+            continue;
+        }
+        peeled[u] = true;
+        for &(_, v) in adjacency.neighbors(u) {
+            if !peeled[v] {
+                degree[v] -= 1;
+                if degree[v] == 1 {
+                    worklist.push(v);
+                }
+            }
+        }
+    }
+
+    peeled
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::BondId;
-    use std::collections::HashSet;
+
     use vita_core::HasSites;
+
+    use crate::BondId;
 
     fn s(n: u32) -> SiteId {
         SiteId::new(n).unwrap()
@@ -166,106 +180,103 @@ mod tests {
         }
     }
 
-    fn mol(sites: &[u32], bonds: &[(u32, u32, u32)]) -> Mol {
+    fn empty() -> Mol {
         Mol {
-            sites: sites.iter().map(|&n| s(n)).collect(),
-            bonds: bonds.iter().map(|&(id, _, _)| b(id)).collect(),
-            endpoints: bonds.iter().map(|&(_, u, v)| (s(u), s(v))).collect(),
+            sites: vec![],
+            bonds: vec![],
+            endpoints: vec![],
         }
     }
 
-    fn empty() -> Mol {
-        mol(&[], &[])
-    }
-
     fn single() -> Mol {
-        mol(&[1], &[])
+        Mol {
+            sites: vec![s(1)],
+            bonds: vec![],
+            endpoints: vec![],
+        }
     }
 
     fn chain() -> Mol {
-        mol(&[1, 2, 3], &[(1, 1, 2), (2, 2, 3)])
+        Mol {
+            sites: vec![s(1), s(2), s(3)],
+            bonds: vec![b(1), b(2)],
+            endpoints: vec![(s(1), s(2)), (s(2), s(3))],
+        }
     }
 
     fn triangle() -> Mol {
-        mol(&[1, 2, 3], &[(1, 1, 2), (2, 2, 3), (3, 1, 3)])
+        Mol {
+            sites: vec![s(1), s(2), s(3)],
+            bonds: vec![b(1), b(2), b(3)],
+            endpoints: vec![(s(1), s(2)), (s(2), s(3)), (s(1), s(3))],
+        }
     }
 
     fn ring_with_tail() -> Mol {
-        mol(&[1, 2, 3, 4], &[(1, 1, 2), (2, 2, 3), (3, 1, 3), (4, 1, 4)])
+        Mol {
+            sites: vec![s(1), s(2), s(3), s(4)],
+            bonds: vec![b(1), b(2), b(3), b(4)],
+            endpoints: vec![(s(1), s(2)), (s(2), s(3)), (s(1), s(3)), (s(1), s(4))],
+        }
     }
 
     fn linked_rings() -> Mol {
-        mol(
-            &[1, 2, 3, 4, 5, 6, 7],
-            &[
-                (1, 1, 2),
-                (2, 2, 3),
-                (3, 1, 3),
-                (4, 4, 5),
-                (5, 5, 6),
-                (6, 4, 6),
-                (7, 3, 7),
-                (8, 7, 4),
+        Mol {
+            sites: vec![s(1), s(2), s(3), s(4), s(5), s(6), s(7)],
+            bonds: vec![b(1), b(2), b(3), b(4), b(5), b(6), b(7), b(8)],
+            endpoints: vec![
+                (s(1), s(2)),
+                (s(2), s(3)),
+                (s(1), s(3)),
+                (s(5), s(6)),
+                (s(6), s(7)),
+                (s(5), s(7)),
+                (s(3), s(4)),
+                (s(4), s(5)),
             ],
-        )
+        }
+    }
+
+    fn decorated() -> Mol {
+        Mol {
+            sites: vec![s(1), s(2), s(3), s(4), s(5), s(6), s(7), s(8)],
+            bonds: vec![b(1), b(2), b(3), b(4), b(5), b(6), b(7), b(8), b(9)],
+            endpoints: vec![
+                (s(1), s(2)),
+                (s(2), s(3)),
+                (s(1), s(3)),
+                (s(5), s(6)),
+                (s(6), s(7)),
+                (s(5), s(7)),
+                (s(3), s(4)),
+                (s(4), s(5)),
+                (s(4), s(8)),
+            ],
+        }
     }
 
     #[test]
-    fn empty_has_no_sites() {
-        let fw = framework(&empty());
-        assert!(fw.role(s(1)).is_none());
-        assert_eq!(fw.sites().count(), 0);
+    fn empty_molecule_has_no_framework_sites() {
+        assert_eq!(framework(&empty()).sites().count(), 0);
     }
 
     #[test]
-    fn single_site_is_a_side_chain() {
+    fn single_atom_is_a_side_chain() {
         assert_eq!(framework(&single()).role(s(1)), Some(Role::SideChain));
     }
 
     #[test]
-    fn acyclic_molecule_is_all_side_chains() {
-        let fw = framework(&chain());
-        assert_eq!(fw.sites().count(), 0);
-        let side: Vec<SiteId> = fw.side_chains().collect();
-        assert_eq!(side, vec![s(1), s(2), s(3)]);
+    fn ring_atom_has_the_ring_role() {
+        assert_eq!(framework(&triangle()).role(s(1)), Some(Role::Ring));
     }
 
     #[test]
-    fn ring_is_all_framework() {
-        let fw = framework(&triangle());
-        let sites: Vec<SiteId> = fw.sites().collect();
-        assert_eq!(sites, vec![s(1), s(2), s(3)]);
-        assert_eq!(fw.side_chains().count(), 0);
+    fn linker_atom_has_the_linker_role() {
+        assert_eq!(framework(&linked_rings()).role(s(4)), Some(Role::Linker));
     }
 
     #[test]
-    fn framework_is_independent_of_input_order() {
-        let shuffled = mol(
-            &[7, 1, 4, 2, 5, 3, 6],
-            &[
-                (8, 7, 4),
-                (1, 1, 2),
-                (5, 5, 6),
-                (2, 2, 3),
-                (6, 4, 6),
-                (3, 1, 3),
-                (7, 3, 7),
-                (4, 4, 5),
-            ],
-        );
-        let parts = |m: &Mol| -> (Vec<SiteId>, Vec<SiteId>, Vec<SiteId>) {
-            let fw = framework(m);
-            (
-                fw.sites().collect(),
-                fw.linkers().collect(),
-                fw.side_chains().collect(),
-            )
-        };
-        assert_eq!(parts(&linked_rings()), parts(&shuffled));
-    }
-
-    #[test]
-    fn tail_atom_is_a_side_chain() {
+    fn stripped_atom_has_the_side_chain_role() {
         assert_eq!(
             framework(&ring_with_tail()).role(s(4)),
             Some(Role::SideChain)
@@ -273,54 +284,96 @@ mod tests {
     }
 
     #[test]
-    fn ring_atoms_are_framework() {
-        let fw = framework(&ring_with_tail());
+    fn absent_site_has_no_role() {
+        assert_eq!(framework(&triangle()).role(s(99)), None);
+    }
+
+    #[test]
+    fn a_single_ring_has_no_linkers() {
+        assert_eq!(framework(&triangle()).linkers().count(), 0);
+    }
+
+    #[test]
+    fn a_ring_is_entirely_framework() {
+        let fw = framework(&triangle());
+        assert_eq!(fw.sites().collect::<Vec<_>>(), vec![s(1), s(2), s(3)]);
+        assert_eq!(fw.side_chains().count(), 0);
+    }
+
+    #[test]
+    fn an_acyclic_molecule_is_entirely_side_chains() {
+        let fw = framework(&chain());
+        assert_eq!(fw.sites().count(), 0);
+        assert_eq!(fw.side_chains().collect::<Vec<_>>(), vec![s(1), s(2), s(3)]);
+    }
+
+    #[test]
+    fn classifies_a_scaffold_with_every_role() {
+        let fw = framework(&decorated());
         assert_eq!(fw.role(s(1)), Some(Role::Ring));
-        let mut sites: Vec<SiteId> = fw.sites().collect();
-        sites.sort_unstable();
-        assert_eq!(sites, vec![s(1), s(2), s(3)]);
+        assert_eq!(fw.role(s(4)), Some(Role::Linker));
+        assert_eq!(fw.role(s(8)), Some(Role::SideChain));
     }
 
     #[test]
-    fn linker_atom_is_a_linker() {
-        assert_eq!(framework(&linked_rings()).role(s(7)), Some(Role::Linker));
-    }
-
-    #[test]
-    fn linkers_are_listed() {
-        let linkers: Vec<SiteId> = framework(&linked_rings()).linkers().collect();
-        assert_eq!(linkers, vec![s(7)]);
-    }
-
-    #[test]
-    fn side_chains_are_listed() {
-        let side: Vec<SiteId> = framework(&ring_with_tail()).side_chains().collect();
-        assert_eq!(side, vec![s(4)]);
-    }
-
-    #[test]
-    fn framework_is_rings_and_linkers() {
-        let mut sites: Vec<SiteId> = framework(&linked_rings()).sites().collect();
-        sites.sort_unstable();
+    fn framework_is_the_ring_and_linker_atoms() {
+        let sites: Vec<SiteId> = framework(&decorated()).sites().collect();
         assert_eq!(sites, vec![s(1), s(2), s(3), s(4), s(5), s(6), s(7)]);
     }
 
     #[test]
-    fn role_of_unknown_site_is_none() {
-        assert!(framework(&triangle()).role(s(99)).is_none());
+    fn linkers_lists_only_the_linker_atoms() {
+        assert_eq!(
+            framework(&decorated()).linkers().collect::<Vec<_>>(),
+            vec![s(4)],
+        );
     }
 
     #[test]
-    fn roles_partition_all_sites() {
-        let m = linked_rings();
-        let fw = framework(&m);
-        for site in m.sites() {
+    fn side_chains_lists_only_the_stripped_atoms() {
+        assert_eq!(
+            framework(&decorated()).side_chains().collect::<Vec<_>>(),
+            vec![s(8)],
+        );
+    }
+
+    #[test]
+    fn framework_and_side_chains_partition_the_atoms() {
+        let mol = decorated();
+        let fw = framework(&mol);
+        for site in mol.sites() {
             assert!(fw.role(site).is_some());
         }
-        let scaffold: HashSet<SiteId> = fw.sites().collect();
-        let side: HashSet<SiteId> = fw.side_chains().collect();
-        assert!(scaffold.is_disjoint(&side));
-        let all: HashSet<SiteId> = m.sites().collect();
-        assert_eq!(&scaffold | &side, all);
+        let mut all: Vec<SiteId> = fw.sites().chain(fw.side_chains()).collect();
+        all.sort_unstable();
+        assert_eq!(all, mol.sites().collect::<Vec<_>>());
+    }
+
+    #[test]
+    fn framework_is_independent_of_input_order() {
+        let shuffled = Mol {
+            sites: vec![s(8), s(7), s(6), s(5), s(4), s(3), s(2), s(1)],
+            bonds: vec![b(9), b(8), b(7), b(6), b(5), b(4), b(3), b(2), b(1)],
+            endpoints: vec![
+                (s(4), s(8)),
+                (s(4), s(5)),
+                (s(3), s(4)),
+                (s(5), s(7)),
+                (s(6), s(7)),
+                (s(5), s(6)),
+                (s(1), s(3)),
+                (s(2), s(3)),
+                (s(1), s(2)),
+            ],
+        };
+        let profile = |m: &Mol| {
+            let fw = framework(m);
+            (
+                fw.sites().collect::<Vec<_>>(),
+                fw.linkers().collect::<Vec<_>>(),
+                fw.side_chains().collect::<Vec<_>>(),
+            )
+        };
+        assert_eq!(profile(&decorated()), profile(&shuffled));
     }
 }
