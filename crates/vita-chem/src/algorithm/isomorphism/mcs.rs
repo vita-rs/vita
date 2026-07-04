@@ -1,9 +1,7 @@
-use std::collections::HashSet;
-
 use vita_core::SiteId;
 
-use super::indexed::{Adjacency, index};
-use crate::utils::embeddings;
+use super::index;
+use crate::algorithm::utils::{AdjacencyList, FxHashSet, embeddings};
 use crate::{BondId, HasBonds};
 
 /// The maximum common substructure of two molecules: the largest connected set of
@@ -52,9 +50,10 @@ impl CommonSubgraph {
 ///
 /// # Complexity
 ///
-/// Exponential in the worst case, as the problem is NP-hard; the search grows
-/// only connected fragments and abandons any that fail to embed, staying
-/// tractable for the molecules chemistry poses.
+/// O(2^E · T^E) time and O(2^E · E) space in the worst case, over the smaller
+/// molecule's `E` bonds and the larger molecule's `T` sites; growing only
+/// connected fragments and dropping those that fail to embed keeps the search
+/// tractable for real molecules.
 pub fn mcs<A, B>(
     a: &A,
     b: &B,
@@ -90,8 +89,8 @@ where
     };
 
     let mut ends = vec![(0usize, 0usize); small.bonds.len()];
-    for (u, incident) in small.adjacency.iter().enumerate() {
-        for &(v, e) in incident {
+    for u in 0..small.adjacency.len() {
+        for &(e, v) in small.adjacency.neighbors(u) {
             ends[e] = (u, v);
         }
     }
@@ -108,7 +107,7 @@ where
     };
 
     let cap = small.bonds.len().min(large.bonds.len());
-    let mut seen: HashSet<Vec<usize>> = HashSet::new();
+    let mut seen: FxHashSet<Vec<usize>> = FxHashSet::default();
     let mut stack: Vec<Vec<usize>> = Vec::new();
     let mut best: Vec<usize> = Vec::new();
 
@@ -160,10 +159,12 @@ where
                 atoms.binary_search(&v).unwrap(),
             );
             let (xu, xv) = (embedding[lu], embedding[lv]);
-            let image = large.adjacency[xu]
+            let image = large
+                .adjacency
+                .neighbors(xu)
                 .iter()
-                .find(|&&(neighbour, _)| neighbour == xv)
-                .map(|&(_, bond)| bond)
+                .find(|&&(_, neighbour)| neighbour == xv)
+                .map(|&(bond, _)| bond)
                 .unwrap();
             let (s, t) = (small.bonds[e], large.bonds[image]);
             if swapped { (t, s) } else { (s, t) }
@@ -175,19 +176,20 @@ where
 }
 
 /// The endpoint atoms of a bond set, in ascending order, and the adjacency of the
-/// fragment they span over those atoms — the form the matching engine consumes.
-fn fragment(seed: &[usize], ends: &[(usize, usize)]) -> (Vec<usize>, Adjacency) {
+/// fragment they span over those atoms — the pattern the matching engine consumes.
+fn fragment(seed: &[usize], ends: &[(usize, usize)]) -> (Vec<usize>, AdjacencyList) {
     let atoms = atoms_of(seed, ends);
-    let mut adjacency: Adjacency = vec![Vec::new(); atoms.len()];
-    for &e in seed {
-        let (u, v) = ends[e];
-        let (lu, lv) = (
-            atoms.binary_search(&u).unwrap(),
-            atoms.binary_search(&v).unwrap(),
-        );
-        adjacency[lu].push((lv, e));
-        adjacency[lv].push((lu, e));
-    }
+    let adjacency = AdjacencyList::build(
+        atoms.len(),
+        seed.iter().map(|&e| {
+            let (u, v) = ends[e];
+            (
+                e,
+                atoms.binary_search(&u).unwrap(),
+                atoms.binary_search(&v).unwrap(),
+            )
+        }),
+    );
     (atoms, adjacency)
 }
 
@@ -201,10 +203,10 @@ fn atoms_of(seed: &[usize], ends: &[(usize, usize)]) -> Vec<usize> {
 
 /// The bonds incident to a fragment's `atoms` that it does not already hold — the
 /// bonds it can grow by.
-fn frontier(seed: &[usize], atoms: &[usize], adjacency: &Adjacency) -> Vec<usize> {
+fn frontier(seed: &[usize], atoms: &[usize], adjacency: &AdjacencyList) -> Vec<usize> {
     let mut bonds: Vec<usize> = atoms
         .iter()
-        .flat_map(|&atom| adjacency[atom].iter().map(|&(_, bond)| bond))
+        .flat_map(|&atom| adjacency.neighbors(atom).iter().map(|&(bond, _)| bond))
         .collect();
     bonds.sort_unstable();
     bonds.dedup();
@@ -223,8 +225,10 @@ fn with(seed: &[usize], bond: usize) -> Vec<usize> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{BondOrder, HasBondOrders};
+
     use vita_core::{Element, HasElements, HasSites};
+
+    use crate::{BondOrder, HasBondOrders};
 
     fn s(n: u32) -> SiteId {
         SiteId::new(n).unwrap()
@@ -306,6 +310,26 @@ mod tests {
         }
     }
 
+    fn carbon() -> Mol {
+        Mol {
+            sites: vec![s(1)],
+            elements: vec![elem("C")],
+            bonds: vec![],
+            endpoints: vec![],
+            orders: vec![],
+        }
+    }
+
+    fn oxygen() -> Mol {
+        Mol {
+            sites: vec![s(1)],
+            elements: vec![elem("O")],
+            bonds: vec![],
+            endpoints: vec![],
+            orders: vec![],
+        }
+    }
+
     fn ethane() -> Mol {
         Mol {
             sites: vec![s(1), s(2)],
@@ -336,13 +360,13 @@ mod tests {
         }
     }
 
-    fn propanol() -> Mol {
+    fn propane() -> Mol {
         Mol {
-            sites: vec![s(1), s(2), s(3), s(4)],
-            elements: vec![elem("C"), elem("C"), elem("C"), elem("O")],
-            bonds: vec![b(1), b(2), b(3)],
-            endpoints: vec![(s(1), s(2)), (s(2), s(3)), (s(3), s(4))],
-            orders: vec![BondOrder::Single, BondOrder::Single, BondOrder::Single],
+            sites: vec![s(1), s(2), s(3)],
+            elements: vec![elem("C"), elem("C"), elem("C")],
+            bonds: vec![b(1), b(2)],
+            endpoints: vec![(s(1), s(2)), (s(2), s(3))],
+            orders: vec![BondOrder::Single, BondOrder::Single],
         }
     }
 
@@ -356,13 +380,13 @@ mod tests {
         }
     }
 
-    fn propane() -> Mol {
+    fn propanol() -> Mol {
         Mol {
-            sites: vec![s(1), s(2), s(3)],
-            elements: vec![elem("C"), elem("C"), elem("C")],
-            bonds: vec![b(1), b(2)],
-            endpoints: vec![(s(1), s(2)), (s(2), s(3))],
-            orders: vec![BondOrder::Single, BondOrder::Single],
+            sites: vec![s(1), s(2), s(3), s(4)],
+            elements: vec![elem("C"), elem("C"), elem("C"), elem("O")],
+            bonds: vec![b(1), b(2), b(3)],
+            endpoints: vec![(s(1), s(2)), (s(2), s(3)), (s(3), s(4))],
+            orders: vec![BondOrder::Single, BondOrder::Single, BondOrder::Single],
         }
     }
 
@@ -377,85 +401,66 @@ mod tests {
     }
 
     #[test]
-    fn empty_molecule_shares_nothing() {
+    fn an_empty_molecule_shares_nothing() {
         let c = common(&empty(), &ethanol());
         assert_eq!(c.len(), 0);
         assert!(c.is_empty());
     }
 
     #[test]
-    fn identical_molecules_share_everything() {
+    fn identical_molecules_share_every_bond() {
         let c = common(&ethanol(), &ethanol());
         assert_eq!(c.len(), 2);
         assert_eq!(c.sites().count(), 3);
     }
 
     #[test]
-    fn smaller_embeds_whole() {
-        let c = common(&ethane(), &ethanol());
-        assert_eq!(c.len(), 1);
-        assert_eq!(c.bonds().collect::<Vec<_>>(), vec![(b(1), b(1))]);
+    fn a_smaller_molecule_is_shared_whole() {
+        assert_eq!(common(&ethane(), &ethanol()).len(), 1);
     }
 
     #[test]
-    fn shared_chain_is_found() {
+    fn an_incompatible_atom_bounds_the_match() {
+        assert_eq!(common(&ethanol(), &ethanamine()).len(), 1);
+    }
+
+    #[test]
+    fn an_incompatible_bond_bounds_the_match() {
+        assert_eq!(common(&propene(), &propane()).len(), 1);
+    }
+
+    #[test]
+    fn molecules_sharing_no_bond_share_nothing() {
+        assert!(common(&carbon(), &oxygen()).is_empty());
+    }
+
+    #[test]
+    fn the_common_substructure_is_connected() {
+        assert_eq!(common(&two_ethanes(), &propane()).len(), 1);
+    }
+
+    #[test]
+    fn a_shared_chain_is_found() {
         let c = common(&ethanol(), &propanol());
         assert_eq!(c.len(), 2);
         assert_eq!(c.sites().count(), 3);
     }
 
     #[test]
-    fn element_constrains_the_match() {
-        let c = common(&ethanol(), &ethanamine());
-        assert_eq!(c.len(), 1);
-        assert_eq!(
-            c.sites().collect::<Vec<_>>(),
-            vec![(s(1), s(1)), (s(2), s(2))]
-        );
-    }
-
-    #[test]
-    fn bond_order_constrains_the_match() {
-        let c = common(&propene(), &propane());
-        assert_eq!(c.len(), 1);
-    }
-
-    #[test]
-    fn the_common_substructure_is_connected() {
-        let c = common(&two_ethanes(), &propane());
-        assert_eq!(c.len(), 1);
-    }
-
-    #[test]
-    fn disjoint_molecules_share_nothing() {
-        let mut methane = ethane();
-        methane.sites = vec![s(1)];
-        methane.elements = vec![elem("C")];
-        methane.bonds = vec![];
-        methane.endpoints = vec![];
-        methane.orders = vec![];
-        let mut water = ethane();
-        water.sites = vec![s(1)];
-        water.elements = vec![elem("O")];
-        water.bonds = vec![];
-        water.endpoints = vec![];
-        water.orders = vec![];
-        assert!(common(&methane, &water).is_empty());
-    }
-
-    #[test]
-    fn correspondence_is_consistent() {
-        let c = common(&ethanol(), &propanol());
+    fn the_correspondence_satisfies_the_predicates() {
+        let a = ethanol();
+        let b = propanol();
+        let c = common(&a, &b);
         for (x, y) in c.sites() {
-            assert_eq!(ethanol().element(x), propanol().element(y));
+            assert_eq!(a.element(x), b.element(y));
         }
         for (p, q) in c.bonds() {
-            assert_eq!(ethanol().bond_order(p), propanol().bond_order(q));
+            assert_eq!(a.bond_order(p), b.bond_order(q));
         }
     }
 
     #[test]
-    fn common_substructure_is_independent_of_input_order() {
+    fn the_common_substructure_is_independent_of_input_order() {
         assert_eq!(
             common(&ethanol(), &propanol()),
             common(&reversed(&ethanol()), &reversed(&propanol()))

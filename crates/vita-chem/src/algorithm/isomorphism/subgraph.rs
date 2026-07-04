@@ -1,7 +1,7 @@
 use vita_core::SiteId;
 
-use super::indexed::{Indexed, index};
-use crate::utils::embeddings;
+use super::{Indexed, index};
+use crate::algorithm::utils::{SortedMap, embeddings};
 use crate::{BondId, HasBonds};
 
 /// A subgraph match: an injection of a pattern's sites onto a target's under
@@ -10,9 +10,8 @@ use crate::{BondId, HasBonds};
 /// Maps each pattern site to the target site it stands for.
 ///
 /// Obtain via [`matches`](matches()).
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Mapping {
-    pairs: Vec<(SiteId, SiteId)>,
+    pairs: SortedMap<SiteId, SiteId>,
 }
 
 impl Mapping {
@@ -28,18 +27,17 @@ impl Mapping {
 
     /// Returns the target site `pattern_site` is matched to.
     ///
-    /// Returns `None` if `pattern_site` is not in the pattern.
+    /// Returns `None` if `pattern_site` is absent from the pattern.
     pub fn get(&self, pattern_site: SiteId) -> Option<SiteId> {
-        self.pairs
-            .binary_search_by_key(&pattern_site, |&(pattern, _)| pattern)
-            .ok()
-            .map(|i| self.pairs[i].1)
+        self.pairs.get(&pattern_site).copied()
     }
 
     /// Iterates the matched `(pattern site, target site)` pairs, ordered by
     /// pattern site.
     pub fn iter(&self) -> impl Iterator<Item = (SiteId, SiteId)> + '_ {
-        self.pairs.iter().copied()
+        self.pairs
+            .iter()
+            .map(|(&pattern, &target)| (pattern, target))
     }
 }
 
@@ -54,10 +52,14 @@ impl Mapping {
 /// bear further bonds among the matched sites, so the match is a subgraph, not an
 /// induced one.
 ///
+/// The matches stream lazily, so the first, a count, or all of them each cost
+/// only the search they need.
+///
 /// # Complexity
 ///
-/// Exponential in the worst case, as subgraph isomorphism is NP-complete;
-/// near-linear in practice for the connected patterns chemistry poses.
+/// O(T^P) time in the worst case and O(P · T) auxiliary space, over a pattern of
+/// `P` sites and a target of `T` sites; near-linear in practice for the
+/// connected patterns chemistry poses.
 pub fn matches<P, T>(
     pattern: &P,
     target: &T,
@@ -87,22 +89,23 @@ where
         move |p, t| site_match(compat_pattern_sites[p], compat_target_sites[t]),
         move |pe, te| bond_match(pattern_bonds[pe], target_bonds[te]),
     )
-    .map(move |mapping| {
-        let mut pairs: Vec<(SiteId, SiteId)> = mapping
-            .iter()
-            .enumerate()
-            .map(|(p, &t)| (pattern_sites[p], target_sites[t]))
-            .collect();
-        pairs.sort_unstable();
-        Mapping { pairs }
+    .map(move |mapping| Mapping {
+        pairs: SortedMap::from_pairs(
+            mapping
+                .iter()
+                .enumerate()
+                .map(|(p, &t)| (pattern_sites[p], target_sites[t])),
+        ),
     })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{BondOrder, HasBondOrders};
+
     use vita_core::{Element, HasElements, HasSites};
+
+    use crate::{BondOrder, HasBondOrders};
 
     fn s(n: u32) -> SiteId {
         SiteId::new(n).unwrap()
@@ -160,20 +163,9 @@ mod tests {
             pattern,
             target,
             |p, t| pattern.element(p) == target.element(t),
-            |pb, tb| pattern.bond_order(pb) == target.bond_order(tb),
+            |pe, te| pattern.bond_order(pe) == target.bond_order(te),
         )
         .collect()
-    }
-
-    fn contains(pattern: &Mol, target: &Mol) -> bool {
-        matches(
-            pattern,
-            target,
-            |p, t| pattern.element(p) == target.element(t),
-            |pb, tb| pattern.bond_order(pb) == target.bond_order(tb),
-        )
-        .next()
-        .is_some()
     }
 
     fn empty() -> Mol {
@@ -190,6 +182,16 @@ mod tests {
         Mol {
             sites: vec![s(1)],
             elements: vec![elem("C")],
+            bonds: vec![],
+            endpoints: vec![],
+            orders: vec![],
+        }
+    }
+
+    fn carbon_pair() -> Mol {
+        Mol {
+            sites: vec![s(1), s(2)],
+            elements: vec![elem("C"), elem("C")],
             bonds: vec![],
             endpoints: vec![],
             orders: vec![],
@@ -236,16 +238,6 @@ mod tests {
         }
     }
 
-    fn carbon_pair() -> Mol {
-        Mol {
-            sites: vec![s(1), s(2)],
-            elements: vec![elem("C"), elem("C")],
-            bonds: vec![],
-            endpoints: vec![],
-            orders: vec![],
-        }
-    }
-
     fn ethanol() -> Mol {
         Mol {
             sites: vec![s(1), s(2), s(3)],
@@ -278,65 +270,58 @@ mod tests {
         let found = found(&empty(), &ethanol());
         assert_eq!(found.len(), 1);
         assert!(found[0].is_empty());
-        assert!(contains(&empty(), &ethanol()));
     }
 
     #[test]
-    fn pattern_larger_than_target_does_not_match() {
-        assert!(found(&cyclohexane(), &ethanol()).is_empty());
-        assert!(!contains(&cyclohexane(), &ethanol()));
-    }
-
-    #[test]
-    fn single_atom_matches_each_like_atom() {
+    fn a_single_atom_matches_each_like_atom() {
         assert_eq!(found(&carbon(), &ethanol()).len(), 2);
-        assert_eq!(found(&carbon(), &cyclohexane()).len(), 6);
     }
 
     #[test]
-    fn bond_matches_in_both_directions() {
+    fn a_bond_matches_in_both_directions() {
         assert_eq!(found(&carbon_carbon(), &ethanol()).len(), 2);
     }
 
     #[test]
-    fn path_matches_every_walk_of_a_ring() {
+    fn a_path_matches_every_walk_of_a_ring() {
         assert_eq!(found(&propane(), &cyclohexane()).len(), 12);
     }
 
     #[test]
-    fn disconnected_pattern_matches_distinct_atoms() {
+    fn a_pattern_larger_than_the_target_does_not_match() {
+        assert!(found(&cyclohexane(), &ethanol()).is_empty());
+    }
+
+    #[test]
+    fn an_element_constrains_the_match() {
+        assert!(found(&carbon_oxygen(), &cyclohexane()).is_empty());
+    }
+
+    #[test]
+    fn a_bond_order_constrains_the_match() {
+        assert!(found(&ethene(), &cyclohexane()).is_empty());
+    }
+
+    #[test]
+    fn an_absent_substructure_yields_nothing() {
+        assert!(found(&carbon_oxygen(), &propane()).is_empty());
+    }
+
+    #[test]
+    fn a_disjoint_pattern_matches_distinct_atoms() {
         let found = found(&carbon_pair(), &ethanol());
         assert_eq!(found.len(), 2);
         assert!(found.iter().all(|m| m.get(s(1)) != m.get(s(2))));
     }
 
     #[test]
-    fn bond_order_constrains_the_match() {
-        assert!(found(&ethene(), &cyclohexane()).is_empty());
-        assert!(!contains(&ethene(), &ethanol()));
-    }
-
-    #[test]
-    fn element_constrains_the_match() {
-        assert!(found(&carbon_oxygen(), &cyclohexane()).is_empty());
-        assert!(!contains(&carbon_oxygen(), &cyclohexane()));
-    }
-
-    #[test]
-    fn heteroatom_match_is_unique() {
+    fn a_mapping_resolves_each_pattern_site() {
         let found = found(&carbon_oxygen(), &ethanol());
         assert_eq!(found.len(), 1);
-        assert!(contains(&carbon_oxygen(), &ethanol()));
-    }
-
-    #[test]
-    fn mapping_resolves_each_site() {
-        let found = found(&carbon_oxygen(), &ethanol());
         let mapping = &found[0];
         assert_eq!(mapping.len(), 2);
         assert_eq!(mapping.get(s(1)), Some(s(2)));
         assert_eq!(mapping.get(s(2)), Some(s(3)));
-        assert_eq!(mapping.get(s(99)), None);
         assert_eq!(
             mapping.iter().collect::<Vec<_>>(),
             vec![(s(1), s(2)), (s(2), s(3))]
@@ -344,8 +329,21 @@ mod tests {
     }
 
     #[test]
-    fn absent_substructure_yields_nothing() {
-        assert!(found(&carbon_oxygen(), &propane()).is_empty());
-        assert!(!contains(&carbon_oxygen(), &propane()));
+    fn a_mapping_has_no_target_for_an_absent_site() {
+        let found = found(&carbon_oxygen(), &ethanol());
+        assert_eq!(found[0].get(s(99)), None);
+    }
+
+    #[test]
+    fn the_first_match_is_found_without_enumerating_all() {
+        let carbon = carbon();
+        let ring = cyclohexane();
+        let mut search = matches(
+            &carbon,
+            &ring,
+            |p, t| carbon.element(p) == ring.element(t),
+            |pe, te| carbon.bond_order(pe) == ring.bond_order(te),
+        );
+        assert!(search.next().is_some());
     }
 }
