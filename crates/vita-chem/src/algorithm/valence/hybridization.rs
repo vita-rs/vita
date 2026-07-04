@@ -27,7 +27,8 @@ use crate::{
 /// # Complexity
 ///
 /// O(d) time and O(1) space, where `d` is the degree of `site`, assuming
-/// [`bonds_of`](crate::HasBonds::bonds_of) runs in O(degree).
+/// [`degree`](crate::HasBonds::degree) and [`bonds_of`](crate::HasBonds::bonds_of)
+/// run in O(degree).
 pub fn hybridization<M: HasBondOrders + HasElements + HasFormalCharges + HasRadicalElectrons>(
     mol: &M,
     site: SiteId,
