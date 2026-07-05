@@ -1,19 +1,18 @@
 use std::cmp::Ordering;
-use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 
 use vita_core::SiteId;
 
-use crate::algorithm::utils::labeling;
+use crate::algorithm::utils::{FxHashMap, SortedMap, labeling};
 use crate::{BondId, HasBonds};
 
 /// The canonical labeling of a molecule's sites: a portable identity, with its
 /// symmetry classes.
 ///
 /// [`canonicalize`] assigns every site a rank — its place in a total order fixed
-/// by the molecular graph and the colouring it was built with, not by the order
+/// by the molecular graph and the coloring it was built with, not by the order
 /// the sites were given in — and records the labeled graph in that order as a
-/// canonical form. Two molecules the colouring makes isomorphic share that form,
+/// canonical form. Two molecules the coloring makes isomorphic share that form,
 /// so a `Canonical` is a portable identity: compare it to test sameness, hash it
 /// to key a registry, sort molecules into a stable order.
 ///
@@ -23,12 +22,11 @@ use crate::{BondId, HasBonds};
 /// and with it the identity, is the same however they fall.
 ///
 /// Obtain via [`canonicalize`].
-#[derive(Debug)]
 pub struct Canonical<VK, EK> {
     order: Vec<SiteId>,
-    ranks: HashMap<SiteId, usize>,
+    ranks: SortedMap<SiteId, usize>,
     classes: Vec<Vec<SiteId>>,
-    class_of: HashMap<SiteId, usize>,
+    class_of: SortedMap<SiteId, usize>,
     // The canonical form: each site's key in rank order, then every bond as its
     // ordered endpoint ranks and key. Equal exactly for molecules the keys make
     // isomorphic — the basis of `Eq`, `Ord`, and `Hash`.
@@ -48,7 +46,7 @@ impl<VK, EK> Canonical<VK, EK> {
 
     /// Returns the canonical rank of `site`.
     ///
-    /// Returns `None` if `site` is not present in the molecule.
+    /// Returns `None` if `site` is absent from the molecule.
     pub fn rank(&self, site: SiteId) -> Option<usize> {
         self.ranks.get(&site).copied()
     }
@@ -62,6 +60,15 @@ impl<VK, EK> Canonical<VK, EK> {
     /// interchange. Classes are ordered by their sites, ascending within each.
     pub fn orbits(&self) -> impl Iterator<Item = &[SiteId]> + '_ {
         self.classes.iter().map(Vec::as_slice)
+    }
+
+    /// Returns the symmetry class containing `site`.
+    ///
+    /// Returns `None` if `site` is absent from the molecule.
+    pub fn orbit(&self, site: SiteId) -> Option<&[SiteId]> {
+        self.class_of
+            .get(&site)
+            .map(|&class| self.classes[class].as_slice())
     }
 
     /// Returns `true` if `a` and `b` are interchangeable by a symmetry of the
@@ -104,7 +111,7 @@ impl<VK: Hash, EK: Hash> Hash for Canonical<VK, EK> {
 
 /// Canonically ranks the sites of a molecule.
 ///
-/// The colouring is the caller's: `site_key` and `bond_key` map each site and
+/// The coloring is the caller's: `site_key` and `bond_key` map each site and
 /// bond to an ordered key, and two atoms or bonds count as the same exactly when
 /// their keys are equal. That choice is the definition of identity — pass the
 /// element and bond order to rank by constitution, fold in the formal charge to
@@ -113,18 +120,19 @@ impl<VK: Hash, EK: Hash> Hash for Canonical<VK, EK> {
 /// structure and keys dictate: molecules the keys make isomorphic yield equal
 /// [`Canonical`]s, whatever sequence the sites and bonds arrived in.
 ///
-/// The ranking is exact. Colour refinement settles the sites into classes by
-/// their coloured neighbourhoods; where symmetry leaves a class unsplit the
-/// search individualises each of its members in turn and keeps the labeling of
-/// least certificate. Taking the least over every branch — rather than
-/// committing to a greedy tie-break — is what frees the result from the input
-/// order, and the automorphisms it meets along the way are the molecule's
+/// The ranking is exact. Color refinement settles the sites into classes by
+/// their colored neighborhoods; where symmetry leaves a class unsplit the search
+/// individualizes each of its members in turn and keeps the labeling of least
+/// certificate. Taking the least over every branch — rather than committing to a
+/// greedy tie-break — is what frees the result from the input order, and the
+/// automorphisms it meets along the way are the molecule's
 /// [`orbits`](Canonical::orbits).
 ///
 /// # Complexity
 ///
-/// O(V · (V + E) · log V) per refinement — one for an asymmetric molecule, one
-/// per search node where symmetry forces a branch. Near-linear in practice,
+/// O(V · (V + E) · log V) time per refinement and O(V + E) space, over the
+/// molecule's `V` sites and `E` bonds — one refinement for a rigid molecule, one
+/// per search node where symmetry forces a branch; near-linear in practice,
 /// exponential in the worst case.
 pub fn canonicalize<M, VK, EK>(
     mol: &M,
@@ -138,55 +146,61 @@ where
 {
     let sites: Vec<SiteId> = mol.sites().collect();
     let n = sites.len();
-    let pos: HashMap<SiteId, usize> = sites.iter().enumerate().map(|(i, &s)| (s, i)).collect();
+    let pos: FxHashMap<SiteId, usize> = sites.iter().enumerate().map(|(i, &s)| (s, i)).collect();
 
     let site_keys: Vec<VK> = sites.iter().map(|&site| site_key(site)).collect();
     let seed = dense(&site_keys);
 
     let bonds: Vec<BondId> = mol.bonds().collect();
     let bond_keys: Vec<EK> = bonds.iter().map(|&bond| bond_key(bond)).collect();
-    let edge = dense(&bond_keys);
+    let colors = dense(&bond_keys);
+
     let mut adjacency: Vec<Vec<(usize, usize)>> = vec![Vec::new(); n];
     for (i, &bond) in bonds.iter().enumerate() {
         let (a, b) = mol.bond_endpoints(bond);
-        adjacency[pos[&a]].push((pos[&b], edge[i]));
-        adjacency[pos[&b]].push((pos[&a], edge[i]));
+        adjacency[pos[&a]].push((pos[&b], colors[i]));
+        adjacency[pos[&b]].push((pos[&a], colors[i]));
     }
 
     let labeled = labeling(&adjacency, &seed);
+    let rank = labeled.ranks();
+    let orbit = labeled.orbits();
 
-    let ranks: HashMap<SiteId, usize> = sites
-        .iter()
-        .enumerate()
-        .map(|(vertex, &site)| (site, labeled.ranks()[vertex]))
-        .collect();
     let mut order = sites.clone();
-    order.sort_by_key(|site| ranks[site]);
-
-    let mut members: HashMap<usize, Vec<SiteId>> = HashMap::new();
     for (vertex, &site) in sites.iter().enumerate() {
-        members
-            .entry(labeled.orbits()[vertex])
-            .or_default()
-            .push(site);
+        order[rank[vertex]] = site;
     }
-    let mut classes: Vec<Vec<SiteId>> = members.into_values().collect();
+
+    let ranks = SortedMap::from_pairs(
+        sites
+            .iter()
+            .enumerate()
+            .map(|(vertex, &site)| (site, rank[vertex])),
+    );
+
+    let mut classes: Vec<Vec<SiteId>> = vec![Vec::new(); n];
+    for (vertex, &site) in sites.iter().enumerate() {
+        classes[orbit[vertex]].push(site);
+    }
+    classes.retain(|class| !class.is_empty());
     for class in &mut classes {
         class.sort_unstable();
     }
     classes.sort_unstable();
-    let class_of: HashMap<SiteId, usize> = classes
-        .iter()
-        .enumerate()
-        .flat_map(|(i, class)| class.iter().map(move |&site| (site, i)))
-        .collect();
+
+    let class_of = SortedMap::from_pairs(
+        classes
+            .iter()
+            .enumerate()
+            .flat_map(|(i, class)| class.iter().map(move |&site| (site, i))),
+    );
 
     let mut keyed: Vec<(usize, VK)> = site_keys
         .into_iter()
         .enumerate()
-        .map(|(vertex, key)| (labeled.ranks()[vertex], key))
+        .map(|(vertex, key)| (rank[vertex], key))
         .collect();
-    keyed.sort_by_key(|&(rank, _)| rank);
+    keyed.sort_unstable_by_key(|entry| entry.0);
     let form_sites: Vec<VK> = keyed.into_iter().map(|(_, key)| key).collect();
 
     let mut form_bonds: Vec<(usize, usize, EK)> = bonds
@@ -194,7 +208,7 @@ where
         .zip(bond_keys)
         .map(|(&bond, key)| {
             let (a, b) = mol.bond_endpoints(bond);
-            let (a, b) = (labeled.ranks()[pos[&a]], labeled.ranks()[pos[&b]]);
+            let (a, b) = (rank[pos[&a]], rank[pos[&b]]);
             (a.min(b), a.max(b), key)
         })
         .collect();
@@ -210,17 +224,17 @@ where
 }
 
 /// Dense ranks of values: equal values share a rank, distinct values rank by
-/// `Ord`, so the result depends only on the values and never on their position.
+/// `Ord`, so the result depends only on the values, never on their position.
 fn dense<K: Ord>(keys: &[K]) -> Vec<usize> {
     let mut order: Vec<usize> = (0..keys.len()).collect();
-    order.sort_by(|&a, &b| keys[a].cmp(&keys[b]));
+    order.sort_unstable_by(|&a, &b| keys[a].cmp(&keys[b]));
     let mut ranks = vec![0; keys.len()];
     let mut rank = 0;
-    for i in 1..order.len() {
-        if keys[order[i]] != keys[order[i - 1]] {
+    for window in order.windows(2) {
+        if keys[window[1]] != keys[window[0]] {
             rank += 1;
         }
-        ranks[order[i]] = rank;
+        ranks[window[1]] = rank;
     }
     ranks
 }
@@ -228,9 +242,8 @@ fn dense<K: Ord>(keys: &[K]) -> Vec<usize> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{BondOrder, HasBondOrders};
-    use std::collections::HashSet;
-    use vita_core::{Element, HasElements, HasSites};
+
+    use vita_core::HasSites;
 
     fn s(n: u32) -> SiteId {
         SiteId::new(n).unwrap()
@@ -240,28 +253,15 @@ mod tests {
         BondId::new(n).unwrap()
     }
 
-    fn elem(symbol: &str) -> Element {
-        Element::from_symbol(symbol).unwrap()
-    }
-
     struct Mol {
         sites: Vec<SiteId>,
-        elements: Vec<Element>,
         bonds: Vec<BondId>,
         endpoints: Vec<(SiteId, SiteId)>,
-        orders: Vec<BondOrder>,
     }
 
     impl HasSites for Mol {
         fn sites(&self) -> impl Iterator<Item = SiteId> + '_ {
             self.sites.iter().copied()
-        }
-    }
-
-    impl HasElements for Mol {
-        fn element(&self, site: SiteId) -> Element {
-            let i = self.sites.iter().position(|&x| x == site).unwrap();
-            self.elements[i]
         }
     }
 
@@ -276,297 +276,220 @@ mod tests {
         }
     }
 
-    impl HasBondOrders for Mol {
-        fn bond_order(&self, bond: BondId) -> BondOrder {
-            let i = self.bonds.iter().position(|&x| x == bond).unwrap();
-            self.orders[i]
-        }
+    fn canon(mol: &Mol) -> Canonical<u32, u32> {
+        canonicalize(mol, |_| 0u32, |_| 0u32)
     }
 
-    fn canon(mol: &Mol) -> Canonical<Element, u8> {
-        canonicalize(
-            mol,
-            |site| mol.element(site),
-            |bond| mol.bond_order(bond) as u8,
-        )
+    fn hash_of(canonical: &Canonical<u32, u32>) -> u64 {
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        canonical.hash(&mut hasher);
+        hasher.finish()
     }
 
     fn empty() -> Mol {
         Mol {
             sites: vec![],
-            elements: vec![],
             bonds: vec![],
             endpoints: vec![],
-            orders: vec![],
         }
     }
 
-    fn methane() -> Mol {
+    fn single() -> Mol {
         Mol {
             sites: vec![s(1)],
-            elements: vec![elem("C")],
             bonds: vec![],
             endpoints: vec![],
-            orders: vec![],
         }
     }
 
-    fn cyanate() -> Mol {
+    fn path() -> Mol {
         Mol {
             sites: vec![s(1), s(2), s(3)],
-            elements: vec![elem("N"), elem("C"), elem("O")],
             bonds: vec![b(1), b(2)],
             endpoints: vec![(s(1), s(2)), (s(2), s(3))],
-            orders: vec![BondOrder::Single, BondOrder::Single],
         }
     }
 
-    fn cyanate_shuffled() -> Mol {
+    fn shifted_path() -> Mol {
+        Mol {
+            sites: vec![s(5), s(6), s(7)],
+            bonds: vec![b(1), b(2)],
+            endpoints: vec![(s(5), s(6)), (s(6), s(7))],
+        }
+    }
+
+    fn reordered_path() -> Mol {
         Mol {
             sites: vec![s(3), s(1), s(2)],
-            elements: vec![elem("O"), elem("N"), elem("C")],
             bonds: vec![b(2), b(1)],
             endpoints: vec![(s(2), s(3)), (s(1), s(2))],
-            orders: vec![BondOrder::Single, BondOrder::Single],
         }
     }
 
-    fn cyanate_relabeled() -> Mol {
-        Mol {
-            sites: vec![s(4), s(5), s(6)],
-            elements: vec![elem("N"), elem("C"), elem("O")],
-            bonds: vec![b(3), b(4)],
-            endpoints: vec![(s(4), s(5)), (s(5), s(6))],
-            orders: vec![BondOrder::Single, BondOrder::Single],
-        }
-    }
-
-    fn ring6() -> Mol {
-        Mol {
-            sites: (1..=6).map(s).collect(),
-            elements: vec![elem("C"); 6],
-            bonds: (1..=6).map(b).collect(),
-            endpoints: vec![
-                (s(1), s(2)),
-                (s(2), s(3)),
-                (s(3), s(4)),
-                (s(4), s(5)),
-                (s(5), s(6)),
-                (s(6), s(1)),
-            ],
-            orders: vec![BondOrder::Single; 6],
-        }
-    }
-
-    fn ring6_rotated() -> Mol {
-        Mol {
-            sites: vec![s(4), s(5), s(6), s(1), s(2), s(3)],
-            elements: vec![elem("C"); 6],
-            bonds: vec![b(4), b(5), b(6), b(1), b(2), b(3)],
-            endpoints: vec![
-                (s(4), s(5)),
-                (s(5), s(6)),
-                (s(6), s(1)),
-                (s(1), s(2)),
-                (s(2), s(3)),
-                (s(3), s(4)),
-            ],
-            orders: vec![BondOrder::Single; 6],
-        }
-    }
-
-    fn two_triangles() -> Mol {
-        Mol {
-            sites: (1..=6).map(s).collect(),
-            elements: vec![elem("C"); 6],
-            bonds: (1..=6).map(b).collect(),
-            endpoints: vec![
-                (s(1), s(2)),
-                (s(2), s(3)),
-                (s(3), s(1)),
-                (s(4), s(5)),
-                (s(5), s(6)),
-                (s(6), s(4)),
-            ],
-            orders: vec![BondOrder::Single; 6],
-        }
-    }
-
-    fn butane() -> Mol {
-        Mol {
-            sites: (1..=4).map(s).collect(),
-            elements: vec![elem("C"); 4],
-            bonds: (1..=3).map(b).collect(),
-            endpoints: vec![(s(1), s(2)), (s(2), s(3)), (s(3), s(4))],
-            orders: vec![BondOrder::Single; 3],
-        }
-    }
-
-    fn isobutane() -> Mol {
-        Mol {
-            sites: (1..=4).map(s).collect(),
-            elements: vec![elem("C"); 4],
-            bonds: (1..=3).map(b).collect(),
-            endpoints: vec![(s(1), s(2)), (s(1), s(3)), (s(1), s(4))],
-            orders: vec![BondOrder::Single; 3],
-        }
-    }
-
-    fn fragments() -> Mol {
+    fn triangle() -> Mol {
         Mol {
             sites: vec![s(1), s(2), s(3)],
-            elements: vec![elem("C"), elem("C"), elem("O")],
-            bonds: vec![b(1)],
-            endpoints: vec![(s(1), s(2))],
-            orders: vec![BondOrder::Single],
+            bonds: vec![b(1), b(2), b(3)],
+            endpoints: vec![(s(1), s(2)), (s(2), s(3)), (s(1), s(3))],
+        }
+    }
+
+    fn star() -> Mol {
+        Mol {
+            sites: vec![s(1), s(2), s(3), s(4)],
+            bonds: vec![b(1), b(2), b(3)],
+            endpoints: vec![(s(1), s(2)), (s(1), s(3)), (s(1), s(4))],
         }
     }
 
     #[test]
     fn empty_molecule_is_empty() {
-        let canonical = canon(&empty());
-        assert_eq!(canonical.len(), 0);
-        assert!(canonical.is_empty());
+        let c = canon(&empty());
+        assert_eq!(c.len(), 0);
+        assert!(c.is_empty());
+    }
+
+    #[test]
+    fn single_site_has_length_one() {
+        let c = canon(&single());
+        assert_eq!(c.len(), 1);
+        assert!(!c.is_empty());
     }
 
     #[test]
     fn single_site_ranks_zero() {
-        let canonical = canon(&methane());
-        assert_eq!(canonical.len(), 1);
-        assert_eq!(canonical.rank(s(1)), Some(0));
+        assert_eq!(canon(&single()).rank(s(1)), Some(0));
     }
 
     #[test]
-    fn ranks_are_a_permutation() {
-        let canonical = canon(&cyanate());
-        let ranks: HashSet<usize> = cyanate()
-            .sites
-            .iter()
-            .map(|&x| canonical.rank(x).unwrap())
-            .collect();
-        assert_eq!(ranks, (0..3).collect());
+    fn single_site_forms_one_orbit() {
+        let c = canon(&single());
+        let orbits: Vec<Vec<SiteId>> = c.orbits().map(<[SiteId]>::to_vec).collect();
+        assert_eq!(orbits, vec![vec![s(1)]]);
     }
 
     #[test]
-    fn order_inverts_rank() {
-        let canonical = canon(&cyanate());
-        for (r, site) in canonical.order().enumerate() {
-            assert_eq!(canonical.rank(site), Some(r));
+    fn order_enumerates_every_site() {
+        let c = canon(&star());
+        assert_eq!(c.len(), 4);
+        let mut sites: Vec<SiteId> = c.order().collect();
+        sites.sort_unstable();
+        assert_eq!(sites, vec![s(1), s(2), s(3), s(4)]);
+    }
+
+    #[test]
+    fn rank_is_the_position_in_the_canonical_order() {
+        let c = canon(&star());
+        for (position, site) in c.order().enumerate() {
+            assert_eq!(c.rank(site), Some(position));
         }
     }
 
     #[test]
-    fn unknown_site_has_no_rank() {
-        assert_eq!(canon(&cyanate()).rank(s(99)), None);
+    fn symmetric_sites_share_an_orbit() {
+        assert!(canon(&path()).same(s(1), s(3)));
     }
 
     #[test]
-    fn asymmetric_labeling_is_independent_of_input_order() {
-        let plain = canon(&cyanate());
-        let shuffled = canon(&cyanate_shuffled());
-        for site in [s(1), s(2), s(3)] {
-            assert_eq!(plain.rank(site), shuffled.rank(site));
-        }
+    fn orbits_group_the_symmetric_sites() {
+        let c = canon(&star());
+        let orbits: Vec<Vec<SiteId>> = c.orbits().map(<[SiteId]>::to_vec).collect();
+        assert_eq!(orbits, vec![vec![s(1)], vec![s(2), s(3), s(4)]]);
     }
 
     #[test]
-    fn least_atomic_number_ranks_first() {
-        let canonical = canon(&cyanate());
-        assert_eq!(canonical.rank(s(2)), Some(0));
-        assert_eq!(canonical.rank(s(1)), Some(1));
-        assert_eq!(canonical.rank(s(3)), Some(2));
+    fn orbit_of_a_site_is_its_symmetry_class() {
+        let c = canon(&star());
+        assert_eq!(c.orbit(s(2)), Some([s(2), s(3), s(4)].as_slice()));
+        assert_eq!(c.orbit(s(1)), Some([s(1)].as_slice()));
     }
 
     #[test]
-    fn symmetric_ring_ranks_every_atom() {
-        let canonical = canon(&ring6());
-        let ranks: HashSet<usize> = (1..=6).map(|i| canonical.rank(s(i)).unwrap()).collect();
-        assert_eq!(ranks, (0..6).collect());
+    fn rank_of_an_absent_site_is_none() {
+        assert_eq!(canon(&path()).rank(s(99)), None);
     }
 
     #[test]
-    fn disconnected_molecule_ranks_every_atom() {
-        let canonical = canon(&fragments());
-        let ranks: HashSet<usize> = (1..=3).map(|i| canonical.rank(s(i)).unwrap()).collect();
-        assert_eq!(ranks, (0..3).collect());
+    fn same_is_false_for_an_absent_site() {
+        assert!(!canon(&path()).same(s(1), s(99)));
     }
 
     #[test]
-    fn rigid_molecule_has_singleton_orbits() {
-        let canonical = canon(&cyanate());
-        assert_eq!(canonical.orbits().count(), 3);
-        assert!(!canonical.same(s(1), s(2)));
+    fn orbit_of_an_absent_site_is_none() {
+        assert_eq!(canon(&path()).orbit(s(99)), None);
     }
 
     #[test]
-    fn symmetric_ring_is_one_orbit() {
-        let canonical = canon(&ring6());
-        assert_eq!(canonical.orbits().count(), 1);
-        assert!(canonical.same(s(1), s(4)));
+    fn asymmetric_sites_lie_in_different_orbits() {
+        assert!(!canon(&path()).same(s(1), s(2)));
     }
 
     #[test]
-    fn equivalent_branches_share_an_orbit() {
-        let canonical = canon(&isobutane());
-        assert_eq!(canonical.orbits().count(), 2);
-        assert!(canonical.same(s(2), s(3)));
-        assert!(canonical.same(s(2), s(4)));
-        assert!(!canonical.same(s(1), s(2)));
+    fn a_symmetric_ring_is_a_single_orbit() {
+        let c = canon(&triangle());
+        assert_eq!(c.orbits().count(), 1);
+        assert!(c.same(s(1), s(2)));
+        assert!(c.same(s(2), s(3)));
     }
 
     #[test]
-    fn same_is_false_for_absent_site() {
-        assert!(!canon(&cyanate()).same(s(1), s(99)));
+    fn a_site_key_splits_a_symmetric_pair() {
+        let c = canonicalize(&path(), |site| (site == s(1)) as u32, |_| 0u32);
+        assert!(!c.same(s(1), s(3)));
     }
 
     #[test]
-    fn reordered_molecule_is_equal() {
-        assert_eq!(canon(&cyanate()), canon(&cyanate_shuffled()));
+    fn a_bond_key_splits_a_symmetric_pair() {
+        let c = canonicalize(&path(), |_| 0u32, |bond| (bond == b(1)) as u32);
+        assert!(!c.same(s(1), s(3)));
     }
 
     #[test]
-    fn relabeled_molecule_is_equal() {
-        assert_eq!(canon(&cyanate()), canon(&cyanate_relabeled()));
+    fn isomorphic_molecules_share_a_canonical_form() {
+        assert!(canon(&path()) == canon(&shifted_path()));
     }
 
     #[test]
-    fn symmetric_molecule_identity_is_independent_of_input_order() {
-        assert_eq!(canon(&ring6()), canon(&ring6_rotated()));
+    fn distinct_structures_are_not_equal() {
+        assert!(canon(&path()) != canon(&triangle()));
     }
 
     #[test]
-    fn different_elements_differ() {
-        let mut thiocyanate = cyanate();
-        thiocyanate.elements = vec![elem("O"), elem("C"), elem("S")];
-        assert_ne!(canon(&cyanate()), canon(&thiocyanate));
+    fn a_site_key_distinguishes_identity() {
+        let plain = canon(&path());
+        let colored = canonicalize(&path(), |site| (site == s(1)) as u32, |_| 0u32);
+        assert!(plain != colored);
     }
 
     #[test]
-    fn different_bond_orders_differ() {
-        let mut doubled = cyanate();
-        doubled.orders = vec![BondOrder::Double, BondOrder::Single];
-        assert_ne!(canon(&cyanate()), canon(&doubled));
+    fn a_bond_key_distinguishes_identity() {
+        let plain = canon(&path());
+        let colored = canonicalize(&path(), |_| 0u32, |bond| (bond == b(1)) as u32);
+        assert!(plain != colored);
     }
 
     #[test]
-    fn topology_is_part_of_identity() {
-        assert_ne!(canon(&butane()), canon(&isobutane()));
+    fn equal_canonicals_hash_equally() {
+        assert_eq!(hash_of(&canon(&path())), hash_of(&canon(&shifted_path())));
     }
 
     #[test]
-    fn cyclic_topology_is_part_of_identity() {
-        assert_ne!(canon(&ring6()), canon(&two_triangles()));
+    fn ordering_agrees_with_equality() {
+        let a = canon(&path());
+        let b = canon(&shifted_path());
+        let c = canon(&triangle());
+        assert_eq!(a.cmp(&b), Ordering::Equal);
+        assert_ne!(a.cmp(&c), Ordering::Equal);
     }
 
     #[test]
-    fn equal_canonicals_hash_and_order_alike() {
-        let set: HashSet<Canonical<Element, u8>> = [canon(&cyanate()), canon(&cyanate_relabeled())]
-            .into_iter()
-            .collect();
-        assert_eq!(set.len(), 1);
-        assert_eq!(
-            canon(&cyanate()).cmp(&canon(&cyanate_shuffled())),
-            Ordering::Equal
-        );
+    fn canonicalization_is_independent_of_input_order() {
+        let plain = canon(&path());
+        let reordered = canon(&reordered_path());
+        assert!(plain == reordered);
+        let orbits = |c: &Canonical<u32, u32>| -> Vec<Vec<SiteId>> {
+            c.orbits().map(<[SiteId]>::to_vec).collect()
+        };
+        assert_eq!(orbits(&plain), orbits(&reordered));
     }
 }
