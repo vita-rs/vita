@@ -1,7 +1,6 @@
 mod algorithm;
 mod capability;
 mod primitive;
-mod utils;
 
 pub use primitive::{BondId, BondOrder, Hybridization};
 

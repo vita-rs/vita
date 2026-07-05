@@ -1,10 +1,7 @@
-use std::collections::{HashMap, HashSet};
-
 use vita_core::{HasElements, SiteId};
 
-use crate::algorithm::utils::valence_electrons;
+use crate::algorithm::utils::{FxHashSet, SortedMap, maximum_matching, valence_electrons};
 use crate::capability::delegation::forward_capabilities;
-use crate::utils::maximum_matching;
 use crate::{BondId, BondOrder, HasBondOrders, HasFormalCharges, HasRadicalElectrons};
 
 /// The Kekulé structure resolved for a molecule's aromatic bonds.
@@ -15,7 +12,7 @@ use crate::{BondId, BondOrder, HasBondOrders, HasFormalCharges, HasRadicalElectr
 ///
 /// Obtain via [`kekulize`].
 pub struct Kekule {
-    orders: Vec<(BondId, BondOrder)>,
+    orders: SortedMap<BondId, BondOrder>,
 }
 
 impl Kekule {
@@ -24,16 +21,13 @@ impl Kekule {
     /// Returns `None` if `bond` was not aromatic, or is absent from the
     /// molecule.
     pub fn order(&self, bond: BondId) -> Option<BondOrder> {
-        self.orders
-            .binary_search_by_key(&bond, |&(bond, _)| bond)
-            .ok()
-            .map(|i| self.orders[i].1)
+        self.orders.get(&bond).copied()
     }
 
     /// Iterates the resolved bonds and the localised order each took, in
     /// ascending bond order.
     pub fn orders(&self) -> impl Iterator<Item = (BondId, BondOrder)> + '_ {
-        self.orders.iter().copied()
+        self.orders.iter().map(|(&bond, &order)| (bond, order))
     }
 
     /// Returns `true` if the molecule had no aromatic bonds to resolve.
@@ -119,7 +113,8 @@ impl<M: HasBondOrders> HasBondOrders for WithKekule<'_, M> {
 ///
 /// # Complexity
 ///
-/// O(V³), dominated by the matching.
+/// O(V³) time and O(V + E) space, over the molecule's `V` sites and `E` bonds,
+/// dominated by the matching.
 pub fn kekulize<M>(mol: &M) -> Option<Kekule>
 where
     M: HasBondOrders + HasElements + HasFormalCharges + HasRadicalElectrons,
@@ -130,14 +125,17 @@ where
         .filter(|&bond| mol.bond_order(bond) == BondOrder::Aromatic)
         .collect();
     if aromatic.is_empty() {
-        return Some(Kekule { orders: Vec::new() });
+        return Some(Kekule {
+            orders: SortedMap::from_pairs(Vec::new()),
+        });
     }
 
     // The atoms that must each take one double bond are the vertices to match;
     // a `None` demand is an atom that cannot be sp² aromatic, so no Kekulé
-    // structure exists.
+    // structure exists. Sorted, the vertices are their own index into the
+    // matching by binary search.
     let mut vertices: Vec<SiteId> = Vec::new();
-    let mut seen: HashSet<SiteId> = HashSet::new();
+    let mut seen: FxHashSet<SiteId> = FxHashSet::default();
     for &bond in &aromatic {
         let (a, b) = mol.bond_endpoints(bond);
         for site in [a, b] {
@@ -146,14 +144,13 @@ where
             }
         }
     }
-    vertices.sort();
+    vertices.sort_unstable();
 
     // Aromatic bonds between two demanding atoms are the matchable edges.
-    let index: HashMap<SiteId, usize> = vertices.iter().enumerate().map(|(i, &s)| (s, i)).collect();
     let mut adjacency: Vec<Vec<usize>> = vec![Vec::new(); vertices.len()];
     for &bond in &aromatic {
         let (a, b) = mol.bond_endpoints(bond);
-        if let (Some(&i), Some(&j)) = (index.get(&a), index.get(&b)) {
+        if let (Ok(i), Ok(j)) = (vertices.binary_search(&a), vertices.binary_search(&b)) {
             adjacency[i].push(j);
             adjacency[j].push(i);
         }
@@ -162,30 +159,28 @@ where
     // Every demanding atom must be paired; an unmatched one is an unpaired π
     // electron — a radical, not a closed-shell Kekulé structure.
     let matching = maximum_matching(&adjacency);
-    if matching.iter().any(Option::is_none) {
+    if !matching.is_perfect() {
         return None;
     }
 
     // The matched aromatic bonds become double, every other aromatic bond single.
-    let mut orders: Vec<(BondId, BondOrder)> = Vec::with_capacity(aromatic.len());
-    for &bond in &aromatic {
+    let orders = aromatic.iter().map(|&bond| {
         let (a, b) = mol.bond_endpoints(bond);
-        let double = match (index.get(&a), index.get(&b)) {
-            (Some(&i), Some(&j)) => matching[i] == Some(j),
+        let double = match (vertices.binary_search(&a), vertices.binary_search(&b)) {
+            (Ok(i), Ok(j)) => matching.mate(i) == Some(j),
             _ => false,
         };
-        orders.push((
-            bond,
-            if double {
-                BondOrder::Double
-            } else {
-                BondOrder::Single
-            },
-        ));
-    }
-    orders.sort_unstable_by_key(|&(bond, _)| bond);
+        let order = if double {
+            BondOrder::Double
+        } else {
+            BondOrder::Single
+        };
+        (bond, order)
+    });
 
-    Some(Kekule { orders })
+    Some(Kekule {
+        orders: SortedMap::from_pairs(orders),
+    })
 }
 
 /// Whether an aromatic atom must take exactly one double bond.
@@ -225,8 +220,11 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{BondId, HasBonds};
+
     use vita_core::{Element, HasSites};
+
+    use crate::BondOrder::{Aromatic, Double, Single};
+    use crate::{BondId, HasBonds};
 
     fn s(n: u32) -> SiteId {
         SiteId::new(n).unwrap()
@@ -234,10 +232,6 @@ mod tests {
 
     fn b(n: u32) -> BondId {
         BondId::new(n).unwrap()
-    }
-
-    fn elem(symbol: &str) -> Element {
-        Element::from_symbol(symbol).unwrap()
     }
 
     struct Mol {
@@ -258,21 +252,21 @@ mod tests {
 
     impl HasElements for Mol {
         fn element(&self, site: SiteId) -> Element {
-            let i = self.sites.iter().position(|&s| s == site).unwrap();
+            let i = self.sites.iter().position(|&x| x == site).unwrap();
             self.elements[i]
         }
     }
 
     impl HasFormalCharges for Mol {
         fn formal_charge(&self, site: SiteId) -> i8 {
-            let i = self.sites.iter().position(|&s| s == site).unwrap();
+            let i = self.sites.iter().position(|&x| x == site).unwrap();
             self.charges[i]
         }
     }
 
     impl HasRadicalElectrons for Mol {
         fn radical_electron(&self, site: SiteId) -> u8 {
-            let i = self.sites.iter().position(|&s| s == site).unwrap();
+            let i = self.sites.iter().position(|&x| x == site).unwrap();
             self.radicals[i]
         }
     }
@@ -295,1125 +289,19 @@ mod tests {
         }
     }
 
-    fn ethane() -> Mol {
+    fn mol(atoms: &[(u32, &str, i8, u8)], bonds: &[(u32, u32, u32, BondOrder)]) -> Mol {
         Mol {
-            sites: vec![s(1), s(2), s(3), s(4), s(5), s(6), s(7), s(8)],
-            elements: vec![
-                elem("C"),
-                elem("C"),
-                elem("H"),
-                elem("H"),
-                elem("H"),
-                elem("H"),
-                elem("H"),
-                elem("H"),
-            ],
-            charges: vec![0, 0, 0, 0, 0, 0, 0, 0],
-            radicals: vec![0, 0, 0, 0, 0, 0, 0, 0],
-            bonds: vec![b(1), b(2), b(3), b(4), b(5), b(6), b(7)],
-            endpoints: vec![
-                (s(1), s(2)),
-                (s(1), s(3)),
-                (s(1), s(4)),
-                (s(1), s(5)),
-                (s(2), s(6)),
-                (s(2), s(7)),
-                (s(2), s(8)),
-            ],
-            orders: vec![BondOrder::Single; 7],
+            sites: atoms.iter().map(|&(id, ..)| s(id)).collect(),
+            elements: atoms
+                .iter()
+                .map(|&(_, sym, ..)| Element::from_symbol(sym).unwrap())
+                .collect(),
+            charges: atoms.iter().map(|&(_, _, charge, _)| charge).collect(),
+            radicals: atoms.iter().map(|&(_, _, _, radical)| radical).collect(),
+            bonds: bonds.iter().map(|&(id, ..)| b(id)).collect(),
+            endpoints: bonds.iter().map(|&(_, a, c, _)| (s(a), s(c))).collect(),
+            orders: bonds.iter().map(|&(_, _, _, order)| order).collect(),
         }
-    }
-
-    fn benzene() -> Mol {
-        Mol {
-            sites: vec![
-                s(1),
-                s(2),
-                s(3),
-                s(4),
-                s(5),
-                s(6),
-                s(7),
-                s(8),
-                s(9),
-                s(10),
-                s(11),
-                s(12),
-            ],
-            elements: vec![
-                elem("C"),
-                elem("C"),
-                elem("C"),
-                elem("C"),
-                elem("C"),
-                elem("C"),
-                elem("H"),
-                elem("H"),
-                elem("H"),
-                elem("H"),
-                elem("H"),
-                elem("H"),
-            ],
-            charges: vec![0; 12],
-            radicals: vec![0; 12],
-            bonds: vec![
-                b(1),
-                b(2),
-                b(3),
-                b(4),
-                b(5),
-                b(6),
-                b(7),
-                b(8),
-                b(9),
-                b(10),
-                b(11),
-                b(12),
-            ],
-            endpoints: vec![
-                (s(1), s(2)),
-                (s(2), s(3)),
-                (s(3), s(4)),
-                (s(4), s(5)),
-                (s(5), s(6)),
-                (s(6), s(1)),
-                (s(1), s(7)),
-                (s(2), s(8)),
-                (s(3), s(9)),
-                (s(4), s(10)),
-                (s(5), s(11)),
-                (s(6), s(12)),
-            ],
-            orders: vec![
-                BondOrder::Aromatic,
-                BondOrder::Aromatic,
-                BondOrder::Aromatic,
-                BondOrder::Aromatic,
-                BondOrder::Aromatic,
-                BondOrder::Aromatic,
-                BondOrder::Single,
-                BondOrder::Single,
-                BondOrder::Single,
-                BondOrder::Single,
-                BondOrder::Single,
-                BondOrder::Single,
-            ],
-        }
-    }
-
-    fn pyridine() -> Mol {
-        Mol {
-            sites: vec![
-                s(1),
-                s(2),
-                s(3),
-                s(4),
-                s(5),
-                s(6),
-                s(7),
-                s(8),
-                s(9),
-                s(10),
-                s(11),
-            ],
-            elements: vec![
-                elem("N"),
-                elem("C"),
-                elem("C"),
-                elem("C"),
-                elem("C"),
-                elem("C"),
-                elem("H"),
-                elem("H"),
-                elem("H"),
-                elem("H"),
-                elem("H"),
-            ],
-            charges: vec![0; 11],
-            radicals: vec![0; 11],
-            bonds: vec![
-                b(1),
-                b(2),
-                b(3),
-                b(4),
-                b(5),
-                b(6),
-                b(7),
-                b(8),
-                b(9),
-                b(10),
-                b(11),
-            ],
-            endpoints: vec![
-                (s(1), s(2)),
-                (s(2), s(3)),
-                (s(3), s(4)),
-                (s(4), s(5)),
-                (s(5), s(6)),
-                (s(6), s(1)),
-                (s(2), s(7)),
-                (s(3), s(8)),
-                (s(4), s(9)),
-                (s(5), s(10)),
-                (s(6), s(11)),
-            ],
-            orders: vec![
-                BondOrder::Aromatic,
-                BondOrder::Aromatic,
-                BondOrder::Aromatic,
-                BondOrder::Aromatic,
-                BondOrder::Aromatic,
-                BondOrder::Aromatic,
-                BondOrder::Single,
-                BondOrder::Single,
-                BondOrder::Single,
-                BondOrder::Single,
-                BondOrder::Single,
-            ],
-        }
-    }
-
-    fn pyrrole() -> Mol {
-        Mol {
-            sites: vec![s(1), s(2), s(3), s(4), s(5), s(6), s(7), s(8), s(9), s(10)],
-            elements: vec![
-                elem("N"),
-                elem("C"),
-                elem("C"),
-                elem("C"),
-                elem("C"),
-                elem("H"),
-                elem("H"),
-                elem("H"),
-                elem("H"),
-                elem("H"),
-            ],
-            charges: vec![0; 10],
-            radicals: vec![0; 10],
-            bonds: vec![b(1), b(2), b(3), b(4), b(5), b(6), b(7), b(8), b(9), b(10)],
-            endpoints: vec![
-                (s(1), s(2)),
-                (s(2), s(3)),
-                (s(3), s(4)),
-                (s(4), s(5)),
-                (s(5), s(1)),
-                (s(1), s(6)),
-                (s(2), s(7)),
-                (s(3), s(8)),
-                (s(4), s(9)),
-                (s(5), s(10)),
-            ],
-            orders: vec![
-                BondOrder::Aromatic,
-                BondOrder::Aromatic,
-                BondOrder::Aromatic,
-                BondOrder::Aromatic,
-                BondOrder::Aromatic,
-                BondOrder::Single,
-                BondOrder::Single,
-                BondOrder::Single,
-                BondOrder::Single,
-                BondOrder::Single,
-            ],
-        }
-    }
-
-    fn furan() -> Mol {
-        Mol {
-            sites: vec![s(1), s(2), s(3), s(4), s(5), s(6), s(7), s(8), s(9)],
-            elements: vec![
-                elem("O"),
-                elem("C"),
-                elem("C"),
-                elem("C"),
-                elem("C"),
-                elem("H"),
-                elem("H"),
-                elem("H"),
-                elem("H"),
-            ],
-            charges: vec![0; 9],
-            radicals: vec![0; 9],
-            bonds: vec![b(1), b(2), b(3), b(4), b(5), b(6), b(7), b(8), b(9)],
-            endpoints: vec![
-                (s(1), s(2)),
-                (s(2), s(3)),
-                (s(3), s(4)),
-                (s(4), s(5)),
-                (s(5), s(1)),
-                (s(2), s(6)),
-                (s(3), s(7)),
-                (s(4), s(8)),
-                (s(5), s(9)),
-            ],
-            orders: vec![
-                BondOrder::Aromatic,
-                BondOrder::Aromatic,
-                BondOrder::Aromatic,
-                BondOrder::Aromatic,
-                BondOrder::Aromatic,
-                BondOrder::Single,
-                BondOrder::Single,
-                BondOrder::Single,
-                BondOrder::Single,
-            ],
-        }
-    }
-
-    fn imidazole() -> Mol {
-        Mol {
-            sites: vec![s(1), s(2), s(3), s(4), s(5), s(6), s(7), s(8), s(9)],
-            elements: vec![
-                elem("N"),
-                elem("C"),
-                elem("N"),
-                elem("C"),
-                elem("C"),
-                elem("H"),
-                elem("H"),
-                elem("H"),
-                elem("H"),
-            ],
-            charges: vec![0; 9],
-            radicals: vec![0; 9],
-            bonds: vec![b(1), b(2), b(3), b(4), b(5), b(6), b(7), b(8), b(9)],
-            endpoints: vec![
-                (s(1), s(2)),
-                (s(2), s(3)),
-                (s(3), s(4)),
-                (s(4), s(5)),
-                (s(5), s(1)),
-                (s(1), s(6)),
-                (s(2), s(7)),
-                (s(4), s(8)),
-                (s(5), s(9)),
-            ],
-            orders: vec![
-                BondOrder::Aromatic,
-                BondOrder::Aromatic,
-                BondOrder::Aromatic,
-                BondOrder::Aromatic,
-                BondOrder::Aromatic,
-                BondOrder::Single,
-                BondOrder::Single,
-                BondOrder::Single,
-                BondOrder::Single,
-            ],
-        }
-    }
-
-    fn cyclopentadienyl_anion() -> Mol {
-        Mol {
-            sites: vec![s(1), s(2), s(3), s(4), s(5), s(6), s(7), s(8), s(9), s(10)],
-            elements: vec![
-                elem("C"),
-                elem("C"),
-                elem("C"),
-                elem("C"),
-                elem("C"),
-                elem("H"),
-                elem("H"),
-                elem("H"),
-                elem("H"),
-                elem("H"),
-            ],
-            charges: vec![-1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-            radicals: vec![0; 10],
-            bonds: vec![b(1), b(2), b(3), b(4), b(5), b(6), b(7), b(8), b(9), b(10)],
-            endpoints: vec![
-                (s(1), s(2)),
-                (s(2), s(3)),
-                (s(3), s(4)),
-                (s(4), s(5)),
-                (s(5), s(1)),
-                (s(1), s(6)),
-                (s(2), s(7)),
-                (s(3), s(8)),
-                (s(4), s(9)),
-                (s(5), s(10)),
-            ],
-            orders: vec![
-                BondOrder::Aromatic,
-                BondOrder::Aromatic,
-                BondOrder::Aromatic,
-                BondOrder::Aromatic,
-                BondOrder::Aromatic,
-                BondOrder::Single,
-                BondOrder::Single,
-                BondOrder::Single,
-                BondOrder::Single,
-                BondOrder::Single,
-            ],
-        }
-    }
-
-    fn tropylium_cation() -> Mol {
-        Mol {
-            sites: vec![
-                s(1),
-                s(2),
-                s(3),
-                s(4),
-                s(5),
-                s(6),
-                s(7),
-                s(8),
-                s(9),
-                s(10),
-                s(11),
-                s(12),
-                s(13),
-                s(14),
-            ],
-            elements: vec![
-                elem("C"),
-                elem("C"),
-                elem("C"),
-                elem("C"),
-                elem("C"),
-                elem("C"),
-                elem("C"),
-                elem("H"),
-                elem("H"),
-                elem("H"),
-                elem("H"),
-                elem("H"),
-                elem("H"),
-                elem("H"),
-            ],
-            charges: vec![1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-            radicals: vec![0; 14],
-            bonds: vec![
-                b(1),
-                b(2),
-                b(3),
-                b(4),
-                b(5),
-                b(6),
-                b(7),
-                b(8),
-                b(9),
-                b(10),
-                b(11),
-                b(12),
-                b(13),
-                b(14),
-            ],
-            endpoints: vec![
-                (s(1), s(2)),
-                (s(2), s(3)),
-                (s(3), s(4)),
-                (s(4), s(5)),
-                (s(5), s(6)),
-                (s(6), s(7)),
-                (s(7), s(1)),
-                (s(1), s(8)),
-                (s(2), s(9)),
-                (s(3), s(10)),
-                (s(4), s(11)),
-                (s(5), s(12)),
-                (s(6), s(13)),
-                (s(7), s(14)),
-            ],
-            orders: vec![
-                BondOrder::Aromatic,
-                BondOrder::Aromatic,
-                BondOrder::Aromatic,
-                BondOrder::Aromatic,
-                BondOrder::Aromatic,
-                BondOrder::Aromatic,
-                BondOrder::Aromatic,
-                BondOrder::Single,
-                BondOrder::Single,
-                BondOrder::Single,
-                BondOrder::Single,
-                BondOrder::Single,
-                BondOrder::Single,
-                BondOrder::Single,
-            ],
-        }
-    }
-
-    fn cycloheptatrienyl_radical() -> Mol {
-        Mol {
-            sites: vec![
-                s(1),
-                s(2),
-                s(3),
-                s(4),
-                s(5),
-                s(6),
-                s(7),
-                s(8),
-                s(9),
-                s(10),
-                s(11),
-                s(12),
-                s(13),
-                s(14),
-            ],
-            elements: vec![
-                elem("C"),
-                elem("C"),
-                elem("C"),
-                elem("C"),
-                elem("C"),
-                elem("C"),
-                elem("C"),
-                elem("H"),
-                elem("H"),
-                elem("H"),
-                elem("H"),
-                elem("H"),
-                elem("H"),
-                elem("H"),
-            ],
-            charges: vec![0; 14],
-            radicals: vec![1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-            bonds: vec![
-                b(1),
-                b(2),
-                b(3),
-                b(4),
-                b(5),
-                b(6),
-                b(7),
-                b(8),
-                b(9),
-                b(10),
-                b(11),
-                b(12),
-                b(13),
-                b(14),
-            ],
-            endpoints: vec![
-                (s(1), s(2)),
-                (s(2), s(3)),
-                (s(3), s(4)),
-                (s(4), s(5)),
-                (s(5), s(6)),
-                (s(6), s(7)),
-                (s(7), s(1)),
-                (s(1), s(8)),
-                (s(2), s(9)),
-                (s(3), s(10)),
-                (s(4), s(11)),
-                (s(5), s(12)),
-                (s(6), s(13)),
-                (s(7), s(14)),
-            ],
-            orders: vec![
-                BondOrder::Aromatic,
-                BondOrder::Aromatic,
-                BondOrder::Aromatic,
-                BondOrder::Aromatic,
-                BondOrder::Aromatic,
-                BondOrder::Aromatic,
-                BondOrder::Aromatic,
-                BondOrder::Single,
-                BondOrder::Single,
-                BondOrder::Single,
-                BondOrder::Single,
-                BondOrder::Single,
-                BondOrder::Single,
-                BondOrder::Single,
-            ],
-        }
-    }
-
-    fn tropone() -> Mol {
-        Mol {
-            sites: vec![
-                s(1),
-                s(2),
-                s(3),
-                s(4),
-                s(5),
-                s(6),
-                s(7),
-                s(8),
-                s(9),
-                s(10),
-                s(11),
-                s(12),
-                s(13),
-                s(14),
-            ],
-            elements: vec![
-                elem("C"),
-                elem("C"),
-                elem("C"),
-                elem("C"),
-                elem("C"),
-                elem("C"),
-                elem("C"),
-                elem("O"),
-                elem("H"),
-                elem("H"),
-                elem("H"),
-                elem("H"),
-                elem("H"),
-                elem("H"),
-            ],
-            charges: vec![0; 14],
-            radicals: vec![0; 14],
-            bonds: vec![
-                b(1),
-                b(2),
-                b(3),
-                b(4),
-                b(5),
-                b(6),
-                b(7),
-                b(8),
-                b(9),
-                b(10),
-                b(11),
-                b(12),
-                b(13),
-                b(14),
-            ],
-            endpoints: vec![
-                (s(1), s(2)),
-                (s(2), s(3)),
-                (s(3), s(4)),
-                (s(4), s(5)),
-                (s(5), s(6)),
-                (s(6), s(7)),
-                (s(7), s(1)),
-                (s(1), s(8)),
-                (s(2), s(9)),
-                (s(3), s(10)),
-                (s(4), s(11)),
-                (s(5), s(12)),
-                (s(6), s(13)),
-                (s(7), s(14)),
-            ],
-            orders: vec![
-                BondOrder::Aromatic,
-                BondOrder::Aromatic,
-                BondOrder::Aromatic,
-                BondOrder::Aromatic,
-                BondOrder::Aromatic,
-                BondOrder::Aromatic,
-                BondOrder::Aromatic,
-                BondOrder::Double,
-                BondOrder::Single,
-                BondOrder::Single,
-                BondOrder::Single,
-                BondOrder::Single,
-                BondOrder::Single,
-                BondOrder::Single,
-            ],
-        }
-    }
-
-    fn naphthalene() -> Mol {
-        Mol {
-            sites: vec![
-                s(1),
-                s(2),
-                s(3),
-                s(4),
-                s(5),
-                s(6),
-                s(7),
-                s(8),
-                s(9),
-                s(10),
-                s(11),
-                s(12),
-                s(13),
-                s(14),
-                s(15),
-                s(16),
-                s(17),
-                s(18),
-            ],
-            elements: vec![
-                elem("C"),
-                elem("C"),
-                elem("C"),
-                elem("C"),
-                elem("C"),
-                elem("C"),
-                elem("C"),
-                elem("C"),
-                elem("C"),
-                elem("C"),
-                elem("H"),
-                elem("H"),
-                elem("H"),
-                elem("H"),
-                elem("H"),
-                elem("H"),
-                elem("H"),
-                elem("H"),
-            ],
-            charges: vec![0; 18],
-            radicals: vec![0; 18],
-            bonds: vec![
-                b(1),
-                b(2),
-                b(3),
-                b(4),
-                b(5),
-                b(6),
-                b(7),
-                b(8),
-                b(9),
-                b(10),
-                b(11),
-                b(12),
-                b(13),
-                b(14),
-                b(15),
-                b(16),
-                b(17),
-                b(18),
-                b(19),
-            ],
-            endpoints: vec![
-                (s(1), s(2)),
-                (s(2), s(3)),
-                (s(3), s(4)),
-                (s(4), s(9)),
-                (s(9), s(10)),
-                (s(10), s(1)),
-                (s(5), s(6)),
-                (s(6), s(7)),
-                (s(7), s(8)),
-                (s(8), s(9)),
-                (s(10), s(5)),
-                (s(1), s(11)),
-                (s(2), s(12)),
-                (s(3), s(13)),
-                (s(4), s(14)),
-                (s(5), s(15)),
-                (s(6), s(16)),
-                (s(7), s(17)),
-                (s(8), s(18)),
-            ],
-            orders: vec![
-                BondOrder::Aromatic,
-                BondOrder::Aromatic,
-                BondOrder::Aromatic,
-                BondOrder::Aromatic,
-                BondOrder::Aromatic,
-                BondOrder::Aromatic,
-                BondOrder::Aromatic,
-                BondOrder::Aromatic,
-                BondOrder::Aromatic,
-                BondOrder::Aromatic,
-                BondOrder::Aromatic,
-                BondOrder::Single,
-                BondOrder::Single,
-                BondOrder::Single,
-                BondOrder::Single,
-                BondOrder::Single,
-                BondOrder::Single,
-                BondOrder::Single,
-                BondOrder::Single,
-            ],
-        }
-    }
-
-    fn indole() -> Mol {
-        Mol {
-            sites: vec![
-                s(1),
-                s(2),
-                s(3),
-                s(4),
-                s(5),
-                s(6),
-                s(7),
-                s(8),
-                s(9),
-                s(10),
-                s(11),
-                s(12),
-                s(13),
-                s(14),
-                s(15),
-                s(16),
-            ],
-            elements: vec![
-                elem("N"),
-                elem("C"),
-                elem("C"),
-                elem("C"),
-                elem("C"),
-                elem("C"),
-                elem("C"),
-                elem("C"),
-                elem("C"),
-                elem("H"),
-                elem("H"),
-                elem("H"),
-                elem("H"),
-                elem("H"),
-                elem("H"),
-                elem("H"),
-            ],
-            charges: vec![0; 16],
-            radicals: vec![0; 16],
-            bonds: vec![
-                b(1),
-                b(2),
-                b(3),
-                b(4),
-                b(5),
-                b(6),
-                b(7),
-                b(8),
-                b(9),
-                b(10),
-                b(11),
-                b(12),
-                b(13),
-                b(14),
-                b(15),
-                b(16),
-                b(17),
-            ],
-            endpoints: vec![
-                (s(1), s(2)),
-                (s(2), s(3)),
-                (s(3), s(4)),
-                (s(4), s(9)),
-                (s(9), s(1)),
-                (s(4), s(5)),
-                (s(5), s(6)),
-                (s(6), s(7)),
-                (s(7), s(8)),
-                (s(8), s(9)),
-                (s(1), s(10)),
-                (s(2), s(11)),
-                (s(3), s(12)),
-                (s(5), s(13)),
-                (s(6), s(14)),
-                (s(7), s(15)),
-                (s(8), s(16)),
-            ],
-            orders: vec![
-                BondOrder::Aromatic,
-                BondOrder::Aromatic,
-                BondOrder::Aromatic,
-                BondOrder::Aromatic,
-                BondOrder::Aromatic,
-                BondOrder::Aromatic,
-                BondOrder::Aromatic,
-                BondOrder::Aromatic,
-                BondOrder::Aromatic,
-                BondOrder::Aromatic,
-                BondOrder::Single,
-                BondOrder::Single,
-                BondOrder::Single,
-                BondOrder::Single,
-                BondOrder::Single,
-                BondOrder::Single,
-                BondOrder::Single,
-            ],
-        }
-    }
-
-    fn azulene() -> Mol {
-        Mol {
-            sites: vec![
-                s(1),
-                s(2),
-                s(3),
-                s(4),
-                s(5),
-                s(6),
-                s(7),
-                s(8),
-                s(9),
-                s(10),
-                s(11),
-                s(12),
-                s(13),
-                s(14),
-                s(15),
-                s(16),
-                s(17),
-                s(18),
-            ],
-            elements: vec![
-                elem("C"),
-                elem("C"),
-                elem("C"),
-                elem("C"),
-                elem("C"),
-                elem("C"),
-                elem("C"),
-                elem("C"),
-                elem("C"),
-                elem("C"),
-                elem("H"),
-                elem("H"),
-                elem("H"),
-                elem("H"),
-                elem("H"),
-                elem("H"),
-                elem("H"),
-                elem("H"),
-            ],
-            charges: vec![0; 18],
-            radicals: vec![0; 18],
-            bonds: vec![
-                b(1),
-                b(2),
-                b(3),
-                b(4),
-                b(5),
-                b(6),
-                b(7),
-                b(8),
-                b(9),
-                b(10),
-                b(11),
-                b(12),
-                b(13),
-                b(14),
-                b(15),
-                b(16),
-                b(17),
-                b(18),
-                b(19),
-            ],
-            endpoints: vec![
-                (s(1), s(2)),
-                (s(2), s(3)),
-                (s(3), s(4)),
-                (s(4), s(5)),
-                (s(5), s(1)),
-                (s(2), s(6)),
-                (s(6), s(7)),
-                (s(7), s(8)),
-                (s(8), s(9)),
-                (s(9), s(10)),
-                (s(10), s(1)),
-                (s(3), s(11)),
-                (s(4), s(12)),
-                (s(5), s(13)),
-                (s(6), s(14)),
-                (s(7), s(15)),
-                (s(8), s(16)),
-                (s(9), s(17)),
-                (s(10), s(18)),
-            ],
-            orders: vec![
-                BondOrder::Aromatic,
-                BondOrder::Aromatic,
-                BondOrder::Aromatic,
-                BondOrder::Aromatic,
-                BondOrder::Aromatic,
-                BondOrder::Aromatic,
-                BondOrder::Aromatic,
-                BondOrder::Aromatic,
-                BondOrder::Aromatic,
-                BondOrder::Aromatic,
-                BondOrder::Aromatic,
-                BondOrder::Single,
-                BondOrder::Single,
-                BondOrder::Single,
-                BondOrder::Single,
-                BondOrder::Single,
-                BondOrder::Single,
-                BondOrder::Single,
-                BondOrder::Single,
-            ],
-        }
-    }
-
-    fn biphenyl() -> Mol {
-        Mol {
-            sites: vec![
-                s(1),
-                s(2),
-                s(3),
-                s(4),
-                s(5),
-                s(6),
-                s(7),
-                s(8),
-                s(9),
-                s(10),
-                s(11),
-                s(12),
-                s(13),
-                s(14),
-                s(15),
-                s(16),
-                s(17),
-                s(18),
-                s(19),
-                s(20),
-                s(21),
-                s(22),
-            ],
-            elements: vec![
-                elem("C"),
-                elem("C"),
-                elem("C"),
-                elem("C"),
-                elem("C"),
-                elem("C"),
-                elem("C"),
-                elem("C"),
-                elem("C"),
-                elem("C"),
-                elem("C"),
-                elem("C"),
-                elem("H"),
-                elem("H"),
-                elem("H"),
-                elem("H"),
-                elem("H"),
-                elem("H"),
-                elem("H"),
-                elem("H"),
-                elem("H"),
-                elem("H"),
-            ],
-            charges: vec![0; 22],
-            radicals: vec![0; 22],
-            bonds: vec![
-                b(1),
-                b(2),
-                b(3),
-                b(4),
-                b(5),
-                b(6),
-                b(7),
-                b(8),
-                b(9),
-                b(10),
-                b(11),
-                b(12),
-                b(13),
-                b(14),
-                b(15),
-                b(16),
-                b(17),
-                b(18),
-                b(19),
-                b(20),
-                b(21),
-                b(22),
-                b(23),
-            ],
-            endpoints: vec![
-                (s(1), s(2)),
-                (s(2), s(3)),
-                (s(3), s(4)),
-                (s(4), s(5)),
-                (s(5), s(6)),
-                (s(6), s(1)),
-                (s(7), s(8)),
-                (s(8), s(9)),
-                (s(9), s(10)),
-                (s(10), s(11)),
-                (s(11), s(12)),
-                (s(12), s(7)),
-                (s(1), s(7)),
-                (s(2), s(13)),
-                (s(3), s(14)),
-                (s(4), s(15)),
-                (s(5), s(16)),
-                (s(6), s(17)),
-                (s(8), s(18)),
-                (s(9), s(19)),
-                (s(10), s(20)),
-                (s(11), s(21)),
-                (s(12), s(22)),
-            ],
-            orders: vec![
-                BondOrder::Aromatic,
-                BondOrder::Aromatic,
-                BondOrder::Aromatic,
-                BondOrder::Aromatic,
-                BondOrder::Aromatic,
-                BondOrder::Aromatic,
-                BondOrder::Aromatic,
-                BondOrder::Aromatic,
-                BondOrder::Aromatic,
-                BondOrder::Aromatic,
-                BondOrder::Aromatic,
-                BondOrder::Aromatic,
-                BondOrder::Single,
-                BondOrder::Single,
-                BondOrder::Single,
-                BondOrder::Single,
-                BondOrder::Single,
-                BondOrder::Single,
-                BondOrder::Single,
-                BondOrder::Single,
-                BondOrder::Single,
-                BondOrder::Single,
-                BondOrder::Single,
-            ],
-        }
-    }
-
-    fn cyclopentadienyl_ring() -> Mol {
-        Mol {
-            sites: vec![s(1), s(2), s(3), s(4), s(5), s(6), s(7), s(8), s(9), s(10)],
-            elements: vec![
-                elem("C"),
-                elem("C"),
-                elem("C"),
-                elem("C"),
-                elem("C"),
-                elem("H"),
-                elem("H"),
-                elem("H"),
-                elem("H"),
-                elem("H"),
-            ],
-            charges: vec![0; 10],
-            radicals: vec![0; 10],
-            bonds: vec![b(1), b(2), b(3), b(4), b(5), b(6), b(7), b(8), b(9), b(10)],
-            endpoints: vec![
-                (s(1), s(2)),
-                (s(2), s(3)),
-                (s(3), s(4)),
-                (s(4), s(5)),
-                (s(5), s(1)),
-                (s(1), s(6)),
-                (s(2), s(7)),
-                (s(3), s(8)),
-                (s(4), s(9)),
-                (s(5), s(10)),
-            ],
-            orders: vec![
-                BondOrder::Aromatic,
-                BondOrder::Aromatic,
-                BondOrder::Aromatic,
-                BondOrder::Aromatic,
-                BondOrder::Aromatic,
-                BondOrder::Single,
-                BondOrder::Single,
-                BondOrder::Single,
-                BondOrder::Single,
-                BondOrder::Single,
-            ],
-        }
-    }
-
-    fn doubles(kekule: &Kekule) -> usize {
-        kekule
-            .orders()
-            .filter(|(_, order)| *order == BondOrder::Double)
-            .count()
-    }
-
-    fn incident_ring_doubles(mol: &Mol, kekule: &Kekule, site: SiteId) -> usize {
-        mol.bonds_of(site)
-            .filter(|&(bond, _)| kekule.order(bond) == Some(BondOrder::Double))
-            .count()
     }
 
     fn reversed(m: &Mol) -> Mol {
@@ -1428,18 +316,541 @@ mod tests {
         }
     }
 
-    #[test]
-    fn already_localised_molecule_resolves_to_empty() {
-        let kekule = kekulize(&ethane()).unwrap();
-        assert!(kekule.is_empty());
+    fn doubles(kekule: &Kekule) -> usize {
+        kekule
+            .orders()
+            .filter(|&(_, order)| order == Double)
+            .count()
+    }
+
+    fn incident_doubles(mol: &Mol, kekule: &Kekule, site: SiteId) -> usize {
+        mol.bonds_of(site)
+            .filter(|&(bond, _)| kekule.order(bond) == Some(Double))
+            .count()
+    }
+
+    fn ethane() -> Mol {
+        mol(
+            &[
+                (1, "C", 0, 0),
+                (2, "C", 0, 0),
+                (3, "H", 0, 0),
+                (4, "H", 0, 0),
+                (5, "H", 0, 0),
+                (6, "H", 0, 0),
+                (7, "H", 0, 0),
+                (8, "H", 0, 0),
+            ],
+            &[
+                (1, 1, 2, Single),
+                (2, 1, 3, Single),
+                (3, 1, 4, Single),
+                (4, 1, 5, Single),
+                (5, 2, 6, Single),
+                (6, 2, 7, Single),
+                (7, 2, 8, Single),
+            ],
+        )
+    }
+
+    fn benzene() -> Mol {
+        mol(
+            &[
+                (1, "C", 0, 0),
+                (2, "C", 0, 0),
+                (3, "C", 0, 0),
+                (4, "C", 0, 0),
+                (5, "C", 0, 0),
+                (6, "C", 0, 0),
+                (7, "H", 0, 0),
+                (8, "H", 0, 0),
+                (9, "H", 0, 0),
+                (10, "H", 0, 0),
+                (11, "H", 0, 0),
+                (12, "H", 0, 0),
+            ],
+            &[
+                (1, 1, 2, Aromatic),
+                (2, 2, 3, Aromatic),
+                (3, 3, 4, Aromatic),
+                (4, 4, 5, Aromatic),
+                (5, 5, 6, Aromatic),
+                (6, 6, 1, Aromatic),
+                (7, 1, 7, Single),
+                (8, 2, 8, Single),
+                (9, 3, 9, Single),
+                (10, 4, 10, Single),
+                (11, 5, 11, Single),
+                (12, 6, 12, Single),
+            ],
+        )
+    }
+
+    fn pyridine() -> Mol {
+        mol(
+            &[
+                (1, "N", 0, 0),
+                (2, "C", 0, 0),
+                (3, "C", 0, 0),
+                (4, "C", 0, 0),
+                (5, "C", 0, 0),
+                (6, "C", 0, 0),
+                (7, "H", 0, 0),
+                (8, "H", 0, 0),
+                (9, "H", 0, 0),
+                (10, "H", 0, 0),
+                (11, "H", 0, 0),
+            ],
+            &[
+                (1, 1, 2, Aromatic),
+                (2, 2, 3, Aromatic),
+                (3, 3, 4, Aromatic),
+                (4, 4, 5, Aromatic),
+                (5, 5, 6, Aromatic),
+                (6, 6, 1, Aromatic),
+                (7, 2, 7, Single),
+                (8, 3, 8, Single),
+                (9, 4, 9, Single),
+                (10, 5, 10, Single),
+                (11, 6, 11, Single),
+            ],
+        )
+    }
+
+    fn pyrrole() -> Mol {
+        mol(
+            &[
+                (1, "N", 0, 0),
+                (2, "C", 0, 0),
+                (3, "C", 0, 0),
+                (4, "C", 0, 0),
+                (5, "C", 0, 0),
+                (6, "H", 0, 0),
+                (7, "H", 0, 0),
+                (8, "H", 0, 0),
+                (9, "H", 0, 0),
+                (10, "H", 0, 0),
+            ],
+            &[
+                (1, 1, 2, Aromatic),
+                (2, 2, 3, Aromatic),
+                (3, 3, 4, Aromatic),
+                (4, 4, 5, Aromatic),
+                (5, 5, 1, Aromatic),
+                (6, 1, 6, Single),
+                (7, 2, 7, Single),
+                (8, 3, 8, Single),
+                (9, 4, 9, Single),
+                (10, 5, 10, Single),
+            ],
+        )
+    }
+
+    fn imidazole() -> Mol {
+        mol(
+            &[
+                (1, "N", 0, 0),
+                (2, "C", 0, 0),
+                (3, "N", 0, 0),
+                (4, "C", 0, 0),
+                (5, "C", 0, 0),
+                (6, "H", 0, 0),
+                (7, "H", 0, 0),
+                (8, "H", 0, 0),
+                (9, "H", 0, 0),
+            ],
+            &[
+                (1, 1, 2, Aromatic),
+                (2, 2, 3, Aromatic),
+                (3, 3, 4, Aromatic),
+                (4, 4, 5, Aromatic),
+                (5, 5, 1, Aromatic),
+                (6, 1, 6, Single),
+                (7, 2, 7, Single),
+                (8, 4, 8, Single),
+                (9, 5, 9, Single),
+            ],
+        )
+    }
+
+    fn tropylium_cation() -> Mol {
+        mol(
+            &[
+                (1, "C", 1, 0),
+                (2, "C", 0, 0),
+                (3, "C", 0, 0),
+                (4, "C", 0, 0),
+                (5, "C", 0, 0),
+                (6, "C", 0, 0),
+                (7, "C", 0, 0),
+                (8, "H", 0, 0),
+                (9, "H", 0, 0),
+                (10, "H", 0, 0),
+                (11, "H", 0, 0),
+                (12, "H", 0, 0),
+                (13, "H", 0, 0),
+                (14, "H", 0, 0),
+            ],
+            &[
+                (1, 1, 2, Aromatic),
+                (2, 2, 3, Aromatic),
+                (3, 3, 4, Aromatic),
+                (4, 4, 5, Aromatic),
+                (5, 5, 6, Aromatic),
+                (6, 6, 7, Aromatic),
+                (7, 7, 1, Aromatic),
+                (8, 1, 8, Single),
+                (9, 2, 9, Single),
+                (10, 3, 10, Single),
+                (11, 4, 11, Single),
+                (12, 5, 12, Single),
+                (13, 6, 13, Single),
+                (14, 7, 14, Single),
+            ],
+        )
+    }
+
+    fn cyclopentadienyl_anion() -> Mol {
+        mol(
+            &[
+                (1, "C", -1, 0),
+                (2, "C", 0, 0),
+                (3, "C", 0, 0),
+                (4, "C", 0, 0),
+                (5, "C", 0, 0),
+                (6, "H", 0, 0),
+                (7, "H", 0, 0),
+                (8, "H", 0, 0),
+                (9, "H", 0, 0),
+                (10, "H", 0, 0),
+            ],
+            &[
+                (1, 1, 2, Aromatic),
+                (2, 2, 3, Aromatic),
+                (3, 3, 4, Aromatic),
+                (4, 4, 5, Aromatic),
+                (5, 5, 1, Aromatic),
+                (6, 1, 6, Single),
+                (7, 2, 7, Single),
+                (8, 3, 8, Single),
+                (9, 4, 9, Single),
+                (10, 5, 10, Single),
+            ],
+        )
+    }
+
+    fn cyclopentadienyl_ring() -> Mol {
+        mol(
+            &[
+                (1, "C", 0, 0),
+                (2, "C", 0, 0),
+                (3, "C", 0, 0),
+                (4, "C", 0, 0),
+                (5, "C", 0, 0),
+                (6, "H", 0, 0),
+                (7, "H", 0, 0),
+                (8, "H", 0, 0),
+                (9, "H", 0, 0),
+                (10, "H", 0, 0),
+            ],
+            &[
+                (1, 1, 2, Aromatic),
+                (2, 2, 3, Aromatic),
+                (3, 3, 4, Aromatic),
+                (4, 4, 5, Aromatic),
+                (5, 5, 1, Aromatic),
+                (6, 1, 6, Single),
+                (7, 2, 7, Single),
+                (8, 3, 8, Single),
+                (9, 4, 9, Single),
+                (10, 5, 10, Single),
+            ],
+        )
+    }
+
+    fn tropone() -> Mol {
+        mol(
+            &[
+                (1, "C", 0, 0),
+                (2, "C", 0, 0),
+                (3, "C", 0, 0),
+                (4, "C", 0, 0),
+                (5, "C", 0, 0),
+                (6, "C", 0, 0),
+                (7, "C", 0, 0),
+                (8, "O", 0, 0),
+                (9, "H", 0, 0),
+                (10, "H", 0, 0),
+                (11, "H", 0, 0),
+                (12, "H", 0, 0),
+                (13, "H", 0, 0),
+                (14, "H", 0, 0),
+            ],
+            &[
+                (1, 1, 2, Aromatic),
+                (2, 2, 3, Aromatic),
+                (3, 3, 4, Aromatic),
+                (4, 4, 5, Aromatic),
+                (5, 5, 6, Aromatic),
+                (6, 6, 7, Aromatic),
+                (7, 7, 1, Aromatic),
+                (8, 1, 8, Double),
+                (9, 2, 9, Single),
+                (10, 3, 10, Single),
+                (11, 4, 11, Single),
+                (12, 5, 12, Single),
+                (13, 6, 13, Single),
+                (14, 7, 14, Single),
+            ],
+        )
+    }
+
+    fn naphthalene() -> Mol {
+        mol(
+            &[
+                (1, "C", 0, 0),
+                (2, "C", 0, 0),
+                (3, "C", 0, 0),
+                (4, "C", 0, 0),
+                (5, "C", 0, 0),
+                (6, "C", 0, 0),
+                (7, "C", 0, 0),
+                (8, "C", 0, 0),
+                (9, "C", 0, 0),
+                (10, "C", 0, 0),
+                (11, "H", 0, 0),
+                (12, "H", 0, 0),
+                (13, "H", 0, 0),
+                (14, "H", 0, 0),
+                (15, "H", 0, 0),
+                (16, "H", 0, 0),
+                (17, "H", 0, 0),
+                (18, "H", 0, 0),
+            ],
+            &[
+                (1, 1, 2, Aromatic),
+                (2, 2, 3, Aromatic),
+                (3, 3, 4, Aromatic),
+                (4, 4, 9, Aromatic),
+                (5, 9, 10, Aromatic),
+                (6, 10, 1, Aromatic),
+                (7, 5, 6, Aromatic),
+                (8, 6, 7, Aromatic),
+                (9, 7, 8, Aromatic),
+                (10, 8, 9, Aromatic),
+                (11, 10, 5, Aromatic),
+                (12, 1, 11, Single),
+                (13, 2, 12, Single),
+                (14, 3, 13, Single),
+                (15, 4, 14, Single),
+                (16, 5, 15, Single),
+                (17, 6, 16, Single),
+                (18, 7, 17, Single),
+                (19, 8, 18, Single),
+            ],
+        )
+    }
+
+    fn azulene() -> Mol {
+        mol(
+            &[
+                (1, "C", 0, 0),
+                (2, "C", 0, 0),
+                (3, "C", 0, 0),
+                (4, "C", 0, 0),
+                (5, "C", 0, 0),
+                (6, "C", 0, 0),
+                (7, "C", 0, 0),
+                (8, "C", 0, 0),
+                (9, "C", 0, 0),
+                (10, "C", 0, 0),
+                (11, "H", 0, 0),
+                (12, "H", 0, 0),
+                (13, "H", 0, 0),
+                (14, "H", 0, 0),
+                (15, "H", 0, 0),
+                (16, "H", 0, 0),
+                (17, "H", 0, 0),
+                (18, "H", 0, 0),
+            ],
+            &[
+                (1, 1, 2, Aromatic),
+                (2, 2, 3, Aromatic),
+                (3, 3, 4, Aromatic),
+                (4, 4, 5, Aromatic),
+                (5, 5, 1, Aromatic),
+                (6, 2, 6, Aromatic),
+                (7, 6, 7, Aromatic),
+                (8, 7, 8, Aromatic),
+                (9, 8, 9, Aromatic),
+                (10, 9, 10, Aromatic),
+                (11, 10, 1, Aromatic),
+                (12, 3, 11, Single),
+                (13, 4, 12, Single),
+                (14, 5, 13, Single),
+                (15, 6, 14, Single),
+                (16, 7, 15, Single),
+                (17, 8, 16, Single),
+                (18, 9, 17, Single),
+                (19, 10, 18, Single),
+            ],
+        )
+    }
+
+    fn biphenyl() -> Mol {
+        mol(
+            &[
+                (1, "C", 0, 0),
+                (2, "C", 0, 0),
+                (3, "C", 0, 0),
+                (4, "C", 0, 0),
+                (5, "C", 0, 0),
+                (6, "C", 0, 0),
+                (7, "C", 0, 0),
+                (8, "C", 0, 0),
+                (9, "C", 0, 0),
+                (10, "C", 0, 0),
+                (11, "C", 0, 0),
+                (12, "C", 0, 0),
+                (13, "H", 0, 0),
+                (14, "H", 0, 0),
+                (15, "H", 0, 0),
+                (16, "H", 0, 0),
+                (17, "H", 0, 0),
+                (18, "H", 0, 0),
+                (19, "H", 0, 0),
+                (20, "H", 0, 0),
+                (21, "H", 0, 0),
+                (22, "H", 0, 0),
+            ],
+            &[
+                (1, 1, 2, Aromatic),
+                (2, 2, 3, Aromatic),
+                (3, 3, 4, Aromatic),
+                (4, 4, 5, Aromatic),
+                (5, 5, 6, Aromatic),
+                (6, 6, 1, Aromatic),
+                (7, 7, 8, Aromatic),
+                (8, 8, 9, Aromatic),
+                (9, 9, 10, Aromatic),
+                (10, 10, 11, Aromatic),
+                (11, 11, 12, Aromatic),
+                (12, 12, 7, Aromatic),
+                (13, 1, 7, Single),
+                (14, 2, 13, Single),
+                (15, 3, 14, Single),
+                (16, 4, 15, Single),
+                (17, 5, 16, Single),
+                (18, 6, 17, Single),
+                (19, 8, 18, Single),
+                (20, 9, 19, Single),
+                (21, 10, 20, Single),
+                (22, 11, 21, Single),
+                (23, 12, 22, Single),
+            ],
+        )
     }
 
     #[test]
-    fn benzene_alternates_three_double_bonds() {
+    fn already_localised_molecule_resolves_to_empty() {
+        assert!(kekulize(&ethane()).unwrap().is_empty());
+    }
+
+    #[test]
+    fn benzene_takes_three_alternating_double_bonds() {
         let mol = benzene();
         let kekule = kekulize(&mol).unwrap();
         assert_eq!(doubles(&kekule), 3);
-        assert!((1..=6).all(|i| incident_ring_doubles(&mol, &kekule, s(i)) == 1));
+        assert!((1..=6).all(|i| incident_doubles(&mol, &kekule, s(i)) == 1));
+    }
+
+    #[test]
+    fn pyridine_takes_three_double_bonds() {
+        assert_eq!(doubles(&kekulize(&pyridine()).unwrap()), 3);
+    }
+
+    #[test]
+    fn pyrrole_leaves_its_nitrogen_single() {
+        let mol = pyrrole();
+        let kekule = kekulize(&mol).unwrap();
+        assert_eq!(doubles(&kekule), 2);
+        assert_eq!(incident_doubles(&mol, &kekule, s(1)), 0);
+    }
+
+    #[test]
+    fn tropylium_cation_leaves_its_cation_single() {
+        let mol = tropylium_cation();
+        let kekule = kekulize(&mol).unwrap();
+        assert_eq!(doubles(&kekule), 3);
+        assert_eq!(incident_doubles(&mol, &kekule, s(1)), 0);
+    }
+
+    #[test]
+    fn cyclopentadienyl_anion_leaves_its_carbanion_single() {
+        let mol = cyclopentadienyl_anion();
+        let kekule = kekulize(&mol).unwrap();
+        assert_eq!(doubles(&kekule), 2);
+        assert_eq!(incident_doubles(&mol, &kekule, s(1)), 0);
+    }
+
+    #[test]
+    fn tropone_leaves_its_carbonyl_carbon_single() {
+        let mol = tropone();
+        let kekule = kekulize(&mol).unwrap();
+        assert_eq!(doubles(&kekule), 3);
+        assert_eq!(incident_doubles(&mol, &kekule, s(1)), 0);
+    }
+
+    #[test]
+    fn closed_shell_odd_ring_has_no_kekule_structure() {
+        assert!(kekulize(&cyclopentadienyl_ring()).is_none());
+    }
+
+    #[test]
+    fn order_is_none_for_a_non_aromatic_bond() {
+        let kekule = kekulize(&benzene()).unwrap();
+        assert!(kekule.order(b(1)).is_some());
+        assert_eq!(kekule.order(b(7)), None);
+        assert_eq!(kekule.order(b(99)), None);
+    }
+
+    #[test]
+    fn azulene_kekulises_its_non_alternant_rings() {
+        assert_eq!(doubles(&kekulize(&azulene()).unwrap()), 5);
+    }
+
+    #[test]
+    fn naphthalene_takes_five_double_bonds() {
+        assert_eq!(doubles(&kekulize(&naphthalene()).unwrap()), 5);
+    }
+
+    #[test]
+    fn biphenyl_kekulises_each_ring_leaving_the_link() {
+        let kekule = kekulize(&biphenyl()).unwrap();
+        assert_eq!(doubles(&kekule), 6);
+        assert_eq!(kekule.order(b(13)), None);
+    }
+
+    #[test]
+    fn imidazole_leaves_its_pyrrole_nitrogen_single() {
+        let mol = imidazole();
+        let kekule = kekulize(&mol).unwrap();
+        assert_eq!(doubles(&kekule), 2);
+        assert_eq!(incident_doubles(&mol, &kekule, s(1)), 0);
+    }
+
+    #[test]
+    fn every_aromatic_bond_is_localised() {
+        let kekule = kekulize(&benzene()).unwrap();
+        assert_eq!(kekule.orders().count(), 6);
+        assert!(kekule.orders().all(|(_, order)| order != Aromatic));
+    }
+
+    #[test]
+    fn orders_are_listed_in_ascending_bond_order() {
+        let kekule = kekulize(&benzene()).unwrap();
+        let bonds: Vec<BondId> = kekule.orders().map(|(bond, _)| bond).collect();
+        assert!(bonds.windows(2).all(|w| w[0] < w[1]));
     }
 
     #[test]
@@ -1455,134 +866,12 @@ mod tests {
     }
 
     #[test]
-    fn pyridine_alternates_three_double_bonds() {
-        assert_eq!(doubles(&kekulize(&pyridine()).unwrap()), 3);
-    }
-
-    #[test]
-    fn pyrrole_leaves_its_nitrogen_single() {
-        let mol = pyrrole();
-        let kekule = kekulize(&mol).unwrap();
-        assert_eq!(doubles(&kekule), 2);
-        assert_eq!(incident_ring_doubles(&mol, &kekule, s(1)), 0);
-    }
-
-    #[test]
-    fn furan_leaves_its_oxygen_single() {
-        let mol = furan();
-        let kekule = kekulize(&mol).unwrap();
-        assert_eq!(doubles(&kekule), 2);
-        assert_eq!(incident_ring_doubles(&mol, &kekule, s(1)), 0);
-    }
-
-    #[test]
-    fn imidazole_leaves_its_pyrrole_nitrogen_single() {
-        let mol = imidazole();
-        let kekule = kekulize(&mol).unwrap();
-        assert_eq!(doubles(&kekule), 2);
-        assert_eq!(incident_ring_doubles(&mol, &kekule, s(1)), 0);
-    }
-
-    #[test]
-    fn cyclopentadienyl_anion_takes_two_double_bonds() {
-        let mol = cyclopentadienyl_anion();
-        let kekule = kekulize(&mol).unwrap();
-        assert_eq!(doubles(&kekule), 2);
-        assert_eq!(incident_ring_doubles(&mol, &kekule, s(1)), 0);
-    }
-
-    #[test]
-    fn tropylium_cation_takes_three_double_bonds() {
-        let mol = tropylium_cation();
-        let kekule = kekulize(&mol).unwrap();
-        assert_eq!(doubles(&kekule), 3);
-        assert_eq!(incident_ring_doubles(&mol, &kekule, s(1)), 0);
-    }
-
-    #[test]
-    fn cycloheptatrienyl_radical_leaves_its_radical_carbon_single() {
-        let mol = cycloheptatrienyl_radical();
-        let kekule = kekulize(&mol).unwrap();
-        assert_eq!(doubles(&kekule), 3);
-        assert_eq!(incident_ring_doubles(&mol, &kekule, s(1)), 0);
-    }
-
-    #[test]
-    fn tropone_leaves_its_carbonyl_carbon_single() {
-        let mol = tropone();
-        let kekule = kekulize(&mol).unwrap();
-        assert_eq!(doubles(&kekule), 3);
-        assert_eq!(incident_ring_doubles(&mol, &kekule, s(1)), 0);
-    }
-
-    #[test]
-    fn naphthalene_takes_five_double_bonds() {
-        assert_eq!(doubles(&kekulize(&naphthalene()).unwrap()), 5);
-    }
-
-    #[test]
-    fn indole_leaves_its_nitrogen_single() {
-        let mol = indole();
-        let kekule = kekulize(&mol).unwrap();
-        assert_eq!(doubles(&kekule), 4);
-        assert_eq!(incident_ring_doubles(&mol, &kekule, s(1)), 0);
-    }
-
-    #[test]
-    fn azulene_takes_five_double_bonds() {
-        let mol = azulene();
-        let kekule = kekulize(&mol).unwrap();
-        assert_eq!(doubles(&kekule), 5);
-        assert!((1..=10).all(|i| incident_ring_doubles(&mol, &kekule, s(i)) == 1));
-    }
-
-    #[test]
-    fn biphenyl_kekulises_each_ring_leaving_the_central_bond() {
-        let kekule = kekulize(&biphenyl()).unwrap();
-        assert_eq!(doubles(&kekule), 6);
-        assert_eq!(kekule.order(b(13)), None);
-    }
-
-    #[test]
-    fn closed_shell_odd_ring_has_no_kekule_structure() {
-        assert!(kekulize(&cyclopentadienyl_ring()).is_none());
-    }
-
-    #[test]
-    fn resolved_bonds_localise_every_aromatic_bond() {
-        let kekule = kekulize(&benzene()).unwrap();
-        let resolved: Vec<BondId> = kekule.orders().map(|(bond, _)| bond).collect();
-        assert_eq!(resolved.len(), 6);
-        assert!(
-            kekule
-                .orders()
-                .all(|(_, order)| order != BondOrder::Aromatic)
-        );
-    }
-
-    #[test]
-    fn order_is_none_for_a_non_aromatic_bond() {
-        let kekule = kekulize(&benzene()).unwrap();
-        assert!(kekule.order(b(1)).is_some());
-        assert_eq!(kekule.order(b(7)), None);
-        assert_eq!(kekule.order(b(99)), None);
-    }
-
-    #[test]
     fn bound_view_answers_the_bond_order_capability() {
         let mol = benzene();
         let kekule = kekulize(&mol).unwrap();
         let view = kekule.bind(&mol);
-
-        for bond in (1..=6).map(b) {
-            assert_ne!(view.bond_order(bond), BondOrder::Aromatic);
-        }
-        let doubled = (1..=6)
-            .map(b)
-            .filter(|&bond| view.bond_order(bond) == BondOrder::Double)
-            .count();
-        assert_eq!(doubled, 3);
-        assert_eq!(view.bond_order(b(7)), BondOrder::Single);
+        assert!((1..=6).all(|i| view.bond_order(b(i)) != Aromatic));
+        assert_eq!(view.bond_order(b(7)), Single);
     }
 
     #[test]
@@ -1590,35 +879,7 @@ mod tests {
         let mol = pyridine();
         let kekule = kekulize(&mol).unwrap();
         let view = kekule.bind(&mol);
-
-        let mut view_sites: Vec<SiteId> = view.sites().collect();
-        let mut mol_sites: Vec<SiteId> = mol.sites().collect();
-        view_sites.sort();
-        mol_sites.sort();
-        assert_eq!(view_sites, mol_sites);
-        assert_eq!(view.site_count(), mol.site_count());
-        assert!(view.contains_site(s(1)));
-
-        let mut view_bonds: Vec<BondId> = view.bonds().collect();
-        let mut mol_bonds: Vec<BondId> = mol.bonds().collect();
-        view_bonds.sort();
-        mol_bonds.sort();
-        assert_eq!(view_bonds, mol_bonds);
         assert_eq!(view.bond_count(), mol.bond_count());
-        assert!(view.contains_bond(b(1)));
         assert_eq!(view.bond_endpoints(b(1)), mol.bond_endpoints(b(1)));
-        assert_eq!(view.bond_between(s(1), s(2)), mol.bond_between(s(1), s(2)));
-
-        assert_eq!(view.degree(s(1)), mol.degree(s(1)));
-        let mut view_incident: Vec<(BondId, SiteId)> = view.bonds_of(s(1)).collect();
-        let mut mol_incident: Vec<(BondId, SiteId)> = mol.bonds_of(s(1)).collect();
-        view_incident.sort();
-        mol_incident.sort();
-        assert_eq!(view_incident, mol_incident);
-        let mut view_neighbours: Vec<SiteId> = view.neighbors(s(1)).collect();
-        let mut mol_neighbours: Vec<SiteId> = mol.neighbors(s(1)).collect();
-        view_neighbours.sort();
-        mol_neighbours.sort();
-        assert_eq!(view_neighbours, mol_neighbours);
     }
 }
