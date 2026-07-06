@@ -39,9 +39,9 @@ impl Paths {
 ///
 /// # Complexity
 ///
-/// O(V + E + P · log P) time and O(V + P) space, over the `V` sites and `E` bonds
-/// reachable from `start`, where `P` is the total length of the paths returned,
-/// assuming [`neighbors`](HasBonds::neighbors) runs in O(degree).
+/// O(V + E + P · log P) time and O(V + E + P) space, over the `V` sites and `E`
+/// bonds reachable from `start`, where `P` is the total length of the paths
+/// returned, assuming [`neighbors`](HasBonds::neighbors) runs in O(degree).
 pub fn paths<M: HasBonds>(mol: &M, start: SiteId, end: SiteId) -> Paths {
     if start == end {
         return Paths {
