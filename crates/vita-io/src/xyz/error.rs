@@ -66,29 +66,29 @@ mod tests {
     use super::*;
 
     #[test]
-    fn display_unexpected_eof() {
+    fn unexpected_eof_reports_the_end_of_input() {
         assert_eq!(
             ErrorKind::UnexpectedEof.to_string(),
-            "unexpected end of input"
+            "unexpected end of input",
         );
     }
 
     #[test]
-    fn display_atom_count() {
+    fn atom_count_reports_the_offending_text() {
         assert_eq!(
             ErrorKind::AtomCount {
                 found: "two".into()
             }
             .to_string(),
-            "expected an atom count, found \"two\""
+            r#"expected an atom count, found "two""#,
         );
     }
 
     #[test]
-    fn display_atom_count_range() {
+    fn atom_count_range_reports_the_maximum() {
         assert_eq!(
             ErrorKind::AtomCountRange {
-                count: 5_000_000_000
+                count: 5_000_000_000,
             }
             .to_string(),
             "atom count 5000000000 exceeds the maximum (4294967295)",
@@ -96,29 +96,29 @@ mod tests {
     }
 
     #[test]
-    fn display_field_count() {
+    fn field_count_reports_the_number_of_fields_found() {
         assert_eq!(
             ErrorKind::FieldCount { found: 3 }.to_string(),
-            "expected 4 fields (symbol x y z), found 3"
+            "expected 4 fields (symbol x y z), found 3",
         );
     }
 
     #[test]
-    fn display_element_symbol() {
+    fn element_symbol_reports_the_unknown_symbol() {
         assert_eq!(
             ErrorKind::ElementSymbol { found: "Xx".into() }.to_string(),
-            "unknown element symbol \"Xx\""
+            r#"unknown element symbol "Xx""#,
         );
     }
 
     #[test]
-    fn display_coordinate() {
+    fn coordinate_reports_the_invalid_text() {
         assert_eq!(
             ErrorKind::Coordinate {
-                found: "1.x".into()
+                found: "1.0.0".into()
             }
             .to_string(),
-            "invalid coordinate \"1.x\""
+            r#"invalid coordinate "1.0.0""#,
         );
     }
 }

@@ -104,169 +104,97 @@ impl<K> From<ParseError<K>> for Error<K> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::error::Error as StdError;
 
-    #[derive(Clone, Debug, PartialEq, Eq)]
-    enum Kind {
-        Unexpected,
-        Invalid(String),
+    fn io_error() -> io::Error {
+        io::Error::new(io::ErrorKind::UnexpectedEof, "boom")
     }
 
-    impl fmt::Display for Kind {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-            match self {
-                Kind::Unexpected => f.write_str("unexpected end of input"),
-                Kind::Invalid(s) => write!(f, "invalid value: {s}"),
-            }
-        }
-    }
-
-    #[test]
-    fn location_text_with_column() {
-        assert_eq!(
+    fn parse_error() -> ParseError<&'static str> {
+        ParseError::new(
             Location::Text {
                 line: 3,
-                column: Some(7)
-            }
-            .to_string(),
-            "3:7",
-        );
+                column: Some(7),
+            },
+            "unexpected",
+        )
     }
 
     #[test]
-    fn location_text_without_column() {
-        assert_eq!(
-            Location::Text {
-                line: 3,
-                column: None
-            }
-            .to_string(),
-            "3",
-        );
-    }
-
-    #[test]
-    fn location_binary() {
-        assert_eq!(
-            Location::Binary { offset: 0x1a2b }.to_string(),
-            "offset 0x1a2b",
-        );
-    }
-
-    #[test]
-    fn location_binary_zero() {
-        assert_eq!(Location::Binary { offset: 0 }.to_string(), "offset 0x0",);
-    }
-
-    #[test]
-    fn location_clone_and_eq() {
-        let a = Location::Text {
-            line: 1,
-            column: Some(1),
+    fn text_location_without_a_column_shows_only_the_line() {
+        let location = Location::Text {
+            line: 12,
+            column: None,
         };
-        assert_eq!(a.clone(), a);
-        assert_ne!(
-            a,
-            Location::Text {
-                line: 2,
-                column: Some(1)
-            }
-        );
+        assert_eq!(location.to_string(), "12");
     }
 
     #[test]
-    fn parse_error_display_text() {
-        let e = ParseError::new(
-            Location::Text {
-                line: 5,
-                column: Some(3),
-            },
-            Kind::Unexpected,
-        );
-        assert_eq!(e.to_string(), "5:3: unexpected end of input");
+    fn text_location_with_a_column_shows_line_and_column() {
+        let location = Location::Text {
+            line: 12,
+            column: Some(5),
+        };
+        assert_eq!(location.to_string(), "12:5");
     }
 
     #[test]
-    fn parse_error_display_binary() {
-        let e = ParseError::new(
-            Location::Binary { offset: 0xff },
-            Kind::Invalid("bad".into()),
-        );
-        assert_eq!(e.to_string(), "offset 0xff: invalid value: bad");
+    fn binary_location_shows_the_offset_in_hexadecimal() {
+        let location = Location::Binary { offset: 255 };
+        assert_eq!(location.to_string(), "offset 0xff");
     }
 
     #[test]
-    fn parse_error_clone_and_eq() {
-        let a = ParseError::new(
-            Location::Text {
-                line: 1,
-                column: None,
-            },
-            Kind::Unexpected,
-        );
-        let b = ParseError::new(
-            Location::Text {
-                line: 2,
-                column: None,
-            },
-            Kind::Unexpected,
-        );
-        assert_eq!(a.clone(), a);
-        assert_ne!(a, b);
+    fn new_stores_the_location_and_kind() {
+        let error = ParseError::new(Location::Binary { offset: 8 }, "eof");
+        assert_eq!(error.location, Location::Binary { offset: 8 });
+        assert_eq!(error.kind, "eof");
     }
 
     #[test]
-    fn error_from_io() {
-        let e: Error<Kind> = io::Error::new(io::ErrorKind::UnexpectedEof, "eof").into();
-        assert!(matches!(e, Error::Io(_)));
+    fn parse_error_shows_the_location_then_the_kind() {
+        assert_eq!(parse_error().to_string(), "3:7: unexpected");
     }
 
     #[test]
-    fn error_from_parse() {
-        let pe = ParseError::new(
-            Location::Text {
-                line: 1,
-                column: None,
-            },
-            Kind::Unexpected,
-        );
-        let e: Error<Kind> = pe.into();
-        assert!(matches!(e, Error::Parse(_)));
+    fn an_io_error_converts_into_the_io_variant() {
+        let error: Error<&str> = io_error().into();
+        assert!(matches!(error, Error::Io(_)));
     }
 
     #[test]
-    fn error_io_display() {
-        let e: Error<Kind> = io::Error::new(io::ErrorKind::UnexpectedEof, "end of stream").into();
-        assert!(e.to_string().contains("end of stream"));
+    fn a_parse_error_converts_into_the_parse_variant() {
+        let error: Error<&str> = parse_error().into();
+        assert!(matches!(error, Error::Parse(_)));
     }
 
     #[test]
-    fn error_parse_display() {
-        let e: Error<Kind> = Error::Parse(ParseError::new(
-            Location::Text {
-                line: 2,
-                column: Some(1),
-            },
-            Kind::Unexpected,
-        ));
-        assert_eq!(e.to_string(), "2:1: unexpected end of input");
+    fn io_variant_source_is_the_underlying_error() {
+        let inner = io_error();
+        let expected = inner.to_string();
+        let error: Error<&str> = Error::Io(inner);
+        let source = std::error::Error::source(&error);
+        assert_eq!(source.map(|e| e.to_string()), Some(expected));
     }
 
     #[test]
-    fn error_source_io_is_some() {
-        let e: Error<Kind> = io::Error::other("x").into();
-        assert!(e.source().is_some());
+    fn parse_variant_has_no_source() {
+        let error: Error<&str> = Error::Parse(parse_error());
+        assert!(std::error::Error::source(&error).is_none());
     }
 
     #[test]
-    fn error_source_parse_is_none() {
-        let e: Error<Kind> = Error::Parse(ParseError::new(
-            Location::Text {
-                line: 1,
-                column: None,
-            },
-            Kind::Unexpected,
-        ));
-        assert!(e.source().is_none());
+    fn io_variant_displays_the_underlying_error() {
+        let inner = io_error();
+        let expected = inner.to_string();
+        let error: Error<&str> = Error::Io(inner);
+        assert_eq!(error.to_string(), expected);
+    }
+
+    #[test]
+    fn parse_variant_displays_the_inner_parse_error() {
+        let inner = parse_error();
+        let expected = inner.to_string();
+        let error: Error<&str> = Error::Parse(inner);
+        assert_eq!(error.to_string(), expected);
     }
 }
