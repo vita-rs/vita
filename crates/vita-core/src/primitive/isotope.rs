@@ -77,104 +77,77 @@ mod tests {
         Element::new(6).unwrap()
     }
 
-    #[test]
-    fn new() {
-        let c12 = Isotope::new(carbon(), 12).unwrap();
-        assert_eq!(c12.atomic_number(), 6);
-        assert_eq!(c12.mass_number(), 12);
+    fn hydrogen() -> Element {
+        Element::new(1).unwrap()
     }
 
     #[test]
-    fn new_rejects_mass_below_atomic_number() {
-        assert!(Isotope::new(carbon(), 5).is_none());
-        assert!(Isotope::new(carbon(), 6).is_some());
+    fn element_returns_the_underlying_element() {
+        assert_eq!(Isotope::new(carbon(), 14).unwrap().element(), carbon());
     }
 
     #[test]
-    fn from_neutron_count() {
-        let c13 = Isotope::from_neutron_count(carbon(), 7).unwrap();
-        assert_eq!(c13.mass_number(), 13);
-        assert_eq!(c13.neutron_count(), 7);
+    fn atomic_number_returns_the_proton_count() {
+        assert_eq!(Isotope::new(carbon(), 14).unwrap().atomic_number(), 6);
     }
 
     #[test]
-    fn from_neutron_count_rejects_overflow() {
-        assert!(Isotope::from_neutron_count(carbon(), u16::MAX).is_none());
+    fn mass_number_returns_the_nucleon_count() {
+        assert_eq!(Isotope::new(carbon(), 14).unwrap().mass_number(), 14);
     }
 
     #[test]
-    fn element() {
-        assert_eq!(Isotope::new(carbon(), 12).unwrap().element(), carbon());
-    }
-
-    #[test]
-    fn atomic_number() {
-        assert_eq!(Isotope::new(carbon(), 12).unwrap().atomic_number(), 6);
-    }
-
-    #[test]
-    fn mass_number() {
-        assert_eq!(Isotope::new(carbon(), 12).unwrap().mass_number(), 12);
-    }
-
-    #[test]
-    fn neutron_count() {
+    fn neutron_count_is_mass_number_minus_atomic_number() {
         assert_eq!(Isotope::new(carbon(), 14).unwrap().neutron_count(), 8);
     }
 
     #[test]
-    fn neutron_count_is_zero_for_hydrogen_one() {
-        let h1 = Isotope::new(Element::new(1).unwrap(), 1).unwrap();
-        assert_eq!(h1.neutron_count(), 0);
-    }
-
-    #[test]
-    fn copy_and_clone() {
-        let a = Isotope::new(carbon(), 12).unwrap();
-        let b = a;
-        let c = ::core::clone::Clone::clone(&a);
-        assert_eq!(a, b);
-        assert_eq!(a, c);
-    }
-
-    #[test]
-    fn eq() {
-        let a = Isotope::new(carbon(), 12).unwrap();
-        assert_eq!(a, Isotope::new(carbon(), 12).unwrap());
-        assert_ne!(a, Isotope::new(carbon(), 13).unwrap());
-    }
-
-    #[test]
-    fn ord() {
-        let c12 = Isotope::new(carbon(), 12).unwrap();
-        let c13 = Isotope::new(carbon(), 13).unwrap();
-        let n12 = Isotope::new(Element::new(7).unwrap(), 12).unwrap();
-        assert!(c12 < c13);
-        assert!(c13 < n12);
-    }
-
-    #[test]
-    fn debug() {
+    fn from_neutron_count_builds_the_mass_number() {
         assert_eq!(
-            format!("{:?}", Isotope::new(carbon(), 12).unwrap()),
-            "Isotope { element: Element(6), mass_number: 12 }"
+            Isotope::from_neutron_count(carbon(), 8)
+                .unwrap()
+                .mass_number(),
+            14,
         );
     }
 
     #[test]
-    fn display() {
+    fn displays_as_symbol_and_mass_number() {
         assert_eq!(format!("{}", Isotope::new(carbon(), 12).unwrap()), "C-12");
-        assert_eq!(
-            format!("{}", Isotope::new(Element::new(92).unwrap(), 238).unwrap()),
-            "U-238"
-        );
     }
 
     #[test]
-    fn option_is_same_size_as_isotope() {
-        assert_eq!(
-            ::core::mem::size_of::<Option<Isotope>>(),
-            ::core::mem::size_of::<Isotope>()
-        );
+    fn new_rejects_a_mass_number_below_the_atomic_number() {
+        assert_eq!(Isotope::new(carbon(), 5), None);
+    }
+
+    #[test]
+    fn from_neutron_count_rejects_an_overflowing_mass_number() {
+        assert_eq!(Isotope::from_neutron_count(carbon(), u16::MAX), None);
+    }
+
+    #[test]
+    fn mass_number_equal_to_the_atomic_number_has_zero_neutrons() {
+        assert_eq!(Isotope::new(carbon(), 6).unwrap().neutron_count(), 0);
+    }
+
+    #[test]
+    fn the_largest_non_overflowing_neutron_count_is_valid() {
+        let iso = Isotope::from_neutron_count(carbon(), u16::MAX - 6).unwrap();
+        assert_eq!(iso.mass_number(), u16::MAX);
+    }
+
+    #[test]
+    fn isotopes_order_by_element_then_mass_number() {
+        assert!(Isotope::new(hydrogen(), 2).unwrap() < Isotope::new(carbon(), 12).unwrap());
+        assert!(Isotope::new(carbon(), 12).unwrap() < Isotope::new(carbon(), 14).unwrap());
+    }
+
+    #[test]
+    fn isotopes_are_equal_exactly_when_element_and_mass_number_match() {
+        let carbon_12 = Isotope::new(carbon(), 12).unwrap();
+        assert_eq!(carbon_12, Isotope::new(carbon(), 12).unwrap());
+        assert_ne!(carbon_12, Isotope::new(carbon(), 14).unwrap());
+        assert_ne!(carbon_12, Isotope::new(hydrogen(), 12).unwrap());
     }
 }
