@@ -288,7 +288,7 @@ mod tests {
     fn every_matched_pair_is_a_symmetric_edge() {
         let graph = joined_triangles();
         let m = maximum_matching(&graph);
-        for v in 0..graph.len() {
+        for (v, _) in graph.iter().enumerate() {
             if let Some(u) = m.mate(v) {
                 assert_eq!(m.mate(u), Some(v), "pairing of {v} and {u} is asymmetric");
                 assert!(
