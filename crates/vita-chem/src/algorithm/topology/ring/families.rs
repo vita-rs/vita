@@ -12,22 +12,23 @@ use crate::{BondId, HasBonds};
 /// A unique ring family (URF) of a molecule.
 ///
 /// An equivalence class of interchangeable relevant cycles: rings of one
-/// [`size`](Self::size) that overlap in a bond and differ only by smaller
-/// rings. Its [`sites`](Self::sites) and [`bonds`](Self::bonds) are the union
-/// over the member cycles, so they may exceed `size` when the family holds
-/// several interchangeable rings.
+/// [`ring_size`](Self::ring_size) that overlap in a bond and differ only by
+/// smaller rings. Its [`sites`](Self::sites) and [`bonds`](Self::bonds) are the
+/// union over the member cycles, so they may exceed `ring_size` when the family
+/// holds several interchangeable rings.
 ///
 /// Obtain via [`RingFamilies`].
 pub struct RingFamily {
-    size: usize,
+    ring_size: usize,
     sites: Vec<SiteId>,
     bonds: Vec<BondId>,
 }
 
 impl RingFamily {
-    /// The number of bonds in each ring of the family.
-    pub fn size(&self) -> usize {
-        self.size
+    /// The size of each ring in the family — its number of bonds, equivalently
+    /// atoms.
+    pub fn ring_size(&self) -> usize {
+        self.ring_size
     }
 
     /// Returns `true` if `site` lies in some ring of the family.
@@ -91,7 +92,7 @@ impl RingFamilies {
         self.families.is_empty()
     }
 
-    /// Iterates the families, ordered by size then by their sites.
+    /// Iterates the families, ordered by ring size then by their sites.
     pub fn iter(&self) -> impl Iterator<Item = &RingFamily> + '_ {
         self.families.iter()
     }
@@ -100,7 +101,7 @@ impl RingFamilies {
     ///
     /// Returns `None` if the molecule is acyclic.
     pub fn girth(&self) -> Option<usize> {
-        self.families.iter().map(|f| f.size).min()
+        self.families.iter().map(|f| f.ring_size).min()
     }
 
     /// Iterates the families containing `site`, in the order of [`iter`](Self::iter).
@@ -253,7 +254,7 @@ pub fn families<M: HasBonds>(mol: &M) -> RingFamilies {
             .map(|(e, &ends)| (ends, e))
             .collect();
 
-        for (size, edges) in bcc_families(n, m, &adjacency, &edge_id) {
+        for (ring_size, edges) in bcc_families(n, m, &adjacency, &edge_id) {
             let mut bonds: Vec<BondId> = edges.iter().map(|&e| bond_ids[e]).collect();
             let mut family_sites: FxHashSet<usize> = FxHashSet::default();
             for &e in &edges {
@@ -266,14 +267,18 @@ pub fn families<M: HasBonds>(mol: &M) -> RingFamilies {
             family_sites.sort_unstable();
             bonds.sort_unstable();
             families.push(RingFamily {
-                size,
+                ring_size,
                 sites: family_sites,
                 bonds,
             });
         }
     }
 
-    families.sort_by(|a, b| a.size.cmp(&b.size).then_with(|| a.sites.cmp(&b.sites)));
+    families.sort_by(|a, b| {
+        a.ring_size
+            .cmp(&b.ring_size)
+            .then_with(|| a.sites.cmp(&b.sites))
+    });
 
     let site_index = SortedMultimap::from_pairs(
         families
@@ -855,7 +860,7 @@ mod tests {
     fn a_triangle_family_is_a_three_membered_ring() {
         let f = families(&triangle());
         let family = f.iter().next().unwrap();
-        assert_eq!(family.size(), 3);
+        assert_eq!(family.ring_size(), 3);
         assert_eq!(family.site_count(), 3);
         assert_eq!(family.bond_count(), 3);
     }
@@ -874,7 +879,7 @@ mod tests {
     fn a_square_is_one_family_of_size_four() {
         let f = families(&square());
         assert_eq!(f.len(), 1);
-        assert_eq!(f.iter().next().unwrap().size(), 4);
+        assert_eq!(f.iter().next().unwrap().ring_size(), 4);
     }
 
     #[test]
@@ -885,7 +890,7 @@ mod tests {
     #[test]
     fn iter_orders_families_by_ascending_size() {
         let f = families(&bridged_square());
-        let sizes: Vec<usize> = f.iter().map(|fam| fam.size()).collect();
+        let sizes: Vec<usize> = f.iter().map(|fam| fam.ring_size()).collect();
         assert!(sizes.windows(2).all(|w| w[0] <= w[1]));
     }
 
@@ -921,10 +926,10 @@ mod tests {
 
     #[test]
     fn a_degenerate_ring_system_yields_a_family_per_relevant_cycle() {
-        for (m, count, size) in [(cube(), 6, 4), (k4(), 4, 3), (bicyclo222(), 3, 6)] {
+        for (m, count, ring_size) in [(cube(), 6, 4), (k4(), 4, 3), (bicyclo222(), 3, 6)] {
             let f = families(&m);
             assert_eq!(f.len(), count);
-            assert!(f.iter().all(|fam| fam.size() == size));
+            assert!(f.iter().all(|fam| fam.ring_size() == ring_size));
         }
     }
 
@@ -948,10 +953,10 @@ mod tests {
     fn a_bridged_system_fuses_interchangeable_rings() {
         let f = families(&bridged_square());
         assert_eq!(f.len(), 2);
-        let mut sizes: Vec<usize> = f.iter().map(|fam| fam.size()).collect();
+        let mut sizes: Vec<usize> = f.iter().map(|fam| fam.ring_size()).collect();
         sizes.sort_unstable();
         assert_eq!(sizes, vec![4, 5]);
-        let five = f.iter().find(|fam| fam.size() == 5).unwrap();
+        let five = f.iter().find(|fam| fam.ring_size() == 5).unwrap();
         assert_eq!(five.site_count(), 6);
     }
 
@@ -1063,7 +1068,7 @@ mod tests {
         let shape = |m: &Mol| -> Vec<(usize, Vec<SiteId>)> {
             families(m)
                 .iter()
-                .map(|f| (f.size(), f.sites().collect::<Vec<_>>()))
+                .map(|f| (f.ring_size(), f.sites().collect::<Vec<_>>()))
                 .collect()
         };
         for m in [fused(), bridged_square(), cube()] {
