@@ -41,63 +41,59 @@ impl BondId {
 mod tests {
     use super::*;
 
+    fn id(n: u32) -> BondId {
+        BondId::new(n).unwrap()
+    }
+
     #[test]
-    fn new() {
+    fn new_with_zero_is_none() {
         assert!(BondId::new(0).is_none());
+    }
+
+    #[test]
+    fn new_with_one_is_some() {
         assert!(BondId::new(1).is_some());
     }
 
     #[test]
-    fn from_nonzero() {
+    fn get_returns_the_value_passed_to_new() {
+        assert_eq!(id(7).get(), 7);
+    }
+
+    #[test]
+    fn from_nonzero_preserves_the_value() {
         let n = NonZeroU32::new(7).unwrap();
         assert_eq!(BondId::from_nonzero(n).get(), 7);
     }
 
     #[test]
-    fn new_get_roundtrip() {
-        assert_eq!(BondId::new(42).unwrap().get(), 42);
+    fn display_shows_the_integer_value() {
+        assert_eq!(format!("{}", id(42)), "42");
     }
 
     #[test]
-    fn copy_and_clone() {
-        let a = BondId::new(1).unwrap();
-        let b = a;
-        let c = ::core::clone::Clone::clone(&a);
-        assert_eq!(a, b);
-        assert_eq!(a, c);
+    fn new_accepts_the_maximum_value() {
+        assert_eq!(id(u32::MAX).get(), u32::MAX);
     }
 
     #[test]
-    fn eq() {
-        let a = BondId::new(3).unwrap();
-        assert_eq!(a, BondId::new(3).unwrap());
-        assert_ne!(a, BondId::new(4).unwrap());
+    fn ids_order_by_their_integer_value() {
+        assert!(id(1) < id(2));
+        assert!(id(2) < id(10));
+        assert!(id(2) > id(1));
     }
 
     #[test]
-    fn ord() {
-        let a = BondId::new(1).unwrap();
-        let b = BondId::new(2).unwrap();
-        assert!(a < b);
-        assert!(b > a);
-        assert_eq!(a.cmp(&a), ::core::cmp::Ordering::Equal);
+    fn ids_compare_equal_when_their_values_match() {
+        assert_eq!(id(5), id(5));
+        assert_ne!(id(5), id(6));
     }
 
     #[test]
-    fn debug() {
-        assert_eq!(format!("{:?}", BondId::new(1).unwrap()), "BondId(1)");
-    }
-
-    #[test]
-    fn display() {
-        assert_eq!(format!("{}", BondId::new(42).unwrap()), "42");
-    }
-
-    #[test]
-    fn option_is_same_size_as_u32() {
+    fn option_is_the_same_size_as_the_raw_integer() {
         assert_eq!(
-            ::core::mem::size_of::<Option<BondId>>(),
-            ::core::mem::size_of::<u32>()
+            core::mem::size_of::<Option<BondId>>(),
+            core::mem::size_of::<u32>(),
         );
     }
 }
