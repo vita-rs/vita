@@ -31,14 +31,24 @@ impl RingMembership {
         self.bonds.binary_search(&bond).is_ok()
     }
 
-    /// The ring sites, in ascending order.
-    pub fn sites(&self) -> &[SiteId] {
-        &self.sites
+    /// Number of ring sites.
+    pub fn site_count(&self) -> usize {
+        self.sites.len()
     }
 
-    /// The ring bonds, in ascending order.
-    pub fn bonds(&self) -> &[BondId] {
-        &self.bonds
+    /// Number of ring bonds.
+    pub fn bond_count(&self) -> usize {
+        self.bonds.len()
+    }
+
+    /// Iterates the ring sites in ascending order.
+    pub fn sites(&self) -> impl Iterator<Item = SiteId> + '_ {
+        self.sites.iter().copied()
+    }
+
+    /// Iterates the ring bonds in ascending order.
+    pub fn bonds(&self) -> impl Iterator<Item = BondId> + '_ {
+        self.bonds.iter().copied()
     }
 
     /// Returns `true` if the molecule has no rings.
@@ -334,20 +344,20 @@ mod tests {
     #[test]
     fn ring_sites_are_listed_in_ascending_order() {
         let m = membership(&dumbbell());
-        assert_eq!(m.sites(), &[s(1), s(2), s(3), s(4), s(5), s(6)]);
+        assert!(m.sites().eq([s(1), s(2), s(3), s(4), s(5), s(6)]));
     }
 
     #[test]
     fn ring_bonds_exclude_the_bridge_and_are_listed_in_ascending_order() {
         let m = membership(&dumbbell());
-        assert_eq!(m.bonds(), &[b(1), b(2), b(3), b(5), b(6), b(7)]);
+        assert!(m.bonds().eq([b(1), b(2), b(3), b(5), b(6), b(7)]));
     }
 
     #[test]
     fn disjoint_cycles_are_each_perceived() {
         let m = membership(&two_triangles());
-        assert_eq!(m.sites().len(), 6);
-        assert_eq!(m.bonds().len(), 6);
+        assert_eq!(m.site_count(), 6);
+        assert_eq!(m.bond_count(), 6);
     }
 
     #[test]
@@ -367,7 +377,7 @@ mod tests {
         };
         let parts = |mol: &Mol| {
             let m = membership(mol);
-            (m.sites().to_vec(), m.bonds().to_vec())
+            (m.sites().collect::<Vec<_>>(), m.bonds().collect::<Vec<_>>())
         };
         assert_eq!(parts(&dumbbell()), parts(&shuffled));
     }

@@ -26,7 +26,7 @@ impl Aromaticity {
     ///
     /// Returns `false` if `site` is absent from the molecule or is not
     /// aromatic.
-    pub fn site(&self, site: SiteId) -> bool {
+    pub fn contains_site(&self, site: SiteId) -> bool {
         self.sites.binary_search(&site).is_ok()
     }
 
@@ -34,16 +34,26 @@ impl Aromaticity {
     ///
     /// Returns `false` if `bond` is absent from the molecule or is not
     /// aromatic.
-    pub fn bond(&self, bond: BondId) -> bool {
+    pub fn contains_bond(&self, bond: BondId) -> bool {
         self.bonds.binary_search(&bond).is_ok()
     }
 
-    /// Iterates the aromatic sites, in ascending order.
+    /// Number of aromatic sites.
+    pub fn site_count(&self) -> usize {
+        self.sites.len()
+    }
+
+    /// Number of aromatic bonds.
+    pub fn bond_count(&self) -> usize {
+        self.bonds.len()
+    }
+
+    /// Iterates the aromatic sites in ascending order.
     pub fn sites(&self) -> impl Iterator<Item = SiteId> + '_ {
         self.sites.iter().copied()
     }
 
-    /// Iterates the aromatic bonds, in ascending order.
+    /// Iterates the aromatic bonds in ascending order.
     pub fn bonds(&self) -> impl Iterator<Item = BondId> + '_ {
         self.bonds.iter().copied()
     }
@@ -103,11 +113,11 @@ forward_capabilities!(
 
 impl<M: HasBonds> HasAromaticity for WithAromaticity<'_, M> {
     fn is_aromatic(&self, bond: BondId) -> bool {
-        self.aromaticity.bond(bond)
+        self.aromaticity.contains_bond(bond)
     }
 
     fn is_aromatic_site(&self, site: SiteId) -> bool {
-        self.aromaticity.site(site)
+        self.aromaticity.contains_site(site)
     }
 }
 
@@ -160,8 +170,7 @@ where
     let pi: SortedMap<SiteId, Option<u32>> = SortedMap::from_pairs(
         membership
             .sites()
-            .iter()
-            .map(|&site| (site, contribution(mol, site, &membership))),
+            .map(|site| (site, contribution(mol, site, &membership))),
     );
 
     let basis: Vec<&Ring> = rings.iter().collect();
@@ -1038,41 +1047,41 @@ mod tests {
     fn benzene_is_aromatic() {
         let aromaticity = perceive(&benzene());
         assert!(!aromaticity.is_empty());
-        assert!((1..=6).all(|i| aromaticity.bond(b(i))));
-        assert!((1..=6).all(|i| aromaticity.site(s(i))));
+        assert!((1..=6).all(|i| aromaticity.contains_bond(b(i))));
+        assert!((1..=6).all(|i| aromaticity.contains_site(s(i))));
     }
 
     #[test]
     fn pyridine_is_aromatic() {
-        assert!((1..=6).all(|i| perceive(&pyridine()).bond(b(i))));
+        assert!((1..=6).all(|i| perceive(&pyridine()).contains_bond(b(i))));
     }
 
     #[test]
     fn pyrrole_is_aromatic_through_its_nitrogen_lone_pair() {
         let aromaticity = perceive(&pyrrole());
-        assert!((1..=5).all(|i| aromaticity.bond(b(i))));
-        assert!(aromaticity.site(s(1)));
+        assert!((1..=5).all(|i| aromaticity.contains_bond(b(i))));
+        assert!(aromaticity.contains_site(s(1)));
     }
 
     #[test]
     fn tropylium_cation_is_aromatic_through_its_empty_orbital() {
         let aromaticity = perceive(&tropylium_cation());
-        assert!((1..=7).all(|i| aromaticity.bond(b(i))));
-        assert!(aromaticity.site(s(1)));
+        assert!((1..=7).all(|i| aromaticity.contains_bond(b(i))));
+        assert!(aromaticity.contains_site(s(1)));
     }
 
     #[test]
     fn cyclopentadienyl_anion_is_aromatic_through_its_carbanion() {
         let aromaticity = perceive(&cyclopentadienyl_anion());
-        assert!((1..=5).all(|i| aromaticity.bond(b(i))));
-        assert!(aromaticity.site(s(1)));
+        assert!((1..=5).all(|i| aromaticity.contains_bond(b(i))));
+        assert!(aromaticity.contains_site(s(1)));
     }
 
     #[test]
     fn tropone_is_aromatic_through_its_exocyclic_carbonyl() {
         let aromaticity = perceive(&tropone());
-        assert!((1..=7).all(|i| aromaticity.bond(b(i))));
-        assert!(!aromaticity.bond(b(8)));
+        assert!((1..=7).all(|i| aromaticity.contains_bond(b(i))));
+        assert!(!aromaticity.contains_bond(b(8)));
     }
 
     #[test]
@@ -1102,42 +1111,42 @@ mod tests {
 
     #[test]
     fn non_aromatic_bond_is_not_reported() {
-        assert!(!perceive(&benzene()).bond(b(7)));
+        assert!(!perceive(&benzene()).contains_bond(b(7)));
     }
 
     #[test]
     fn unknown_bond_is_not_aromatic() {
-        assert!(!perceive(&benzene()).bond(b(99)));
+        assert!(!perceive(&benzene()).contains_bond(b(99)));
     }
 
     #[test]
     fn unknown_site_is_not_aromatic() {
-        assert!(!perceive(&benzene()).site(s(99)));
+        assert!(!perceive(&benzene()).contains_site(s(99)));
     }
 
     #[test]
     fn azulene_is_aromatic_on_its_perimeter() {
         let aromaticity = perceive(&azulene());
         assert!(!aromaticity.is_empty());
-        assert!(aromaticity.bond(b(1)));
+        assert!(aromaticity.contains_bond(b(1)));
     }
 
     #[test]
     fn naphthalene_is_aromatic_across_both_rings() {
-        assert!((1..=11).all(|i| perceive(&naphthalene()).bond(b(i))));
+        assert!((1..=11).all(|i| perceive(&naphthalene()).contains_bond(b(i))));
     }
 
     #[test]
     fn biphenyl_rings_are_aromatic_but_the_link_is_not() {
         let aromaticity = perceive(&biphenyl());
-        assert!(aromaticity.site(s(1)));
-        assert!(aromaticity.site(s(7)));
-        assert!(!aromaticity.bond(b(13)));
+        assert!(aromaticity.contains_site(s(1)));
+        assert!(aromaticity.contains_site(s(7)));
+        assert!(!aromaticity.contains_bond(b(13)));
     }
 
     #[test]
     fn imidazole_is_aromatic_with_both_nitrogen_kinds() {
-        assert!((1..=5).all(|i| perceive(&imidazole()).bond(b(i))));
+        assert!((1..=5).all(|i| perceive(&imidazole()).contains_bond(b(i))));
     }
 
     #[test]
@@ -1147,6 +1156,13 @@ mod tests {
         let bonds: Vec<BondId> = aromaticity.bonds().collect();
         assert!(sites.windows(2).all(|w| w[0] < w[1]));
         assert!(bonds.windows(2).all(|w| w[0] < w[1]));
+    }
+
+    #[test]
+    fn counts_report_the_number_of_aromatic_sites_and_bonds() {
+        let aromaticity = perceive(&benzene());
+        assert_eq!(aromaticity.site_count(), 6);
+        assert_eq!(aromaticity.bond_count(), 6);
     }
 
     #[test]

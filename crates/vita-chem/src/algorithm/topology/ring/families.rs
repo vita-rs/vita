@@ -2,7 +2,7 @@ use std::collections::VecDeque;
 
 use vita_core::SiteId;
 
-use super::RingMembership;
+use super::{RingMembership, RingSystems};
 use crate::algorithm::utils::{
     AdjacencyList, BitSet, DisjointSet, FxHashMap, FxHashSet, Gf2Basis, SortedMultimap,
 };
@@ -30,14 +30,34 @@ impl RingFamily {
         self.size
     }
 
-    /// The sites lying in some ring of the family, in ascending order.
-    pub fn sites(&self) -> &[SiteId] {
-        &self.sites
+    /// Returns `true` if `site` lies in some ring of the family.
+    pub fn contains_site(&self, site: SiteId) -> bool {
+        self.sites.binary_search(&site).is_ok()
     }
 
-    /// The bonds lying in some ring of the family, in ascending order.
-    pub fn bonds(&self) -> &[BondId] {
-        &self.bonds
+    /// Returns `true` if `bond` lies in some ring of the family.
+    pub fn contains_bond(&self, bond: BondId) -> bool {
+        self.bonds.binary_search(&bond).is_ok()
+    }
+
+    /// Number of sites lying in some ring of the family.
+    pub fn site_count(&self) -> usize {
+        self.sites.len()
+    }
+
+    /// Number of bonds lying in some ring of the family.
+    pub fn bond_count(&self) -> usize {
+        self.bonds.len()
+    }
+
+    /// Iterates the sites lying in some ring of the family, in ascending order.
+    pub fn sites(&self) -> impl Iterator<Item = SiteId> + '_ {
+        self.sites.iter().copied()
+    }
+
+    /// Iterates the bonds lying in some ring of the family, in ascending order.
+    pub fn bonds(&self) -> impl Iterator<Item = BondId> + '_ {
+        self.bonds.iter().copied()
     }
 }
 
@@ -141,12 +161,11 @@ impl RingFamilies {
         )
     }
 
-    /// Iterates the ring systems, each as its sites in ascending order.
+    /// The ring systems: maximal sets of families joined through shared sites.
     ///
-    /// A ring system is a maximal set of families joined through shared sites;
-    /// fused, bridged, and spiro rings coalesce into one. Systems are ordered by
-    /// their sites.
-    pub fn systems(&self) -> impl Iterator<Item = Vec<SiteId>> {
+    /// Fused, bridged, and spiro rings coalesce into one system. Systems are
+    /// ordered by their sites.
+    pub fn systems(&self) -> RingSystems {
         let mut components = DisjointSet::new(self.families.len());
         for (_, members) in self.site_index.iter() {
             for pair in members.windows(2) {
@@ -168,7 +187,7 @@ impl RingFamilies {
             })
             .collect();
         systems.sort_unstable();
-        systems.into_iter()
+        RingSystems::new(systems)
     }
 
     /// Returns `true` if two of the families share exactly one site.
@@ -204,13 +223,13 @@ pub fn families<M: HasBonds>(mol: &M) -> RingFamilies {
             continue;
         }
 
-        let mut sites: Vec<SiteId> = block.sites().to_vec();
+        let mut sites: Vec<SiteId> = block.sites().collect();
         sites.sort_unstable();
         let n = sites.len();
         let pos: FxHashMap<SiteId, usize> =
             sites.iter().enumerate().map(|(i, &s)| (s, i)).collect();
 
-        let bond_ids: Vec<BondId> = block.bonds().to_vec();
+        let bond_ids: Vec<BondId> = block.bonds().collect();
         let m = bond_ids.len();
         let endpoints: Vec<(usize, usize)> = bond_ids
             .iter()
@@ -837,8 +856,18 @@ mod tests {
         let f = families(&triangle());
         let family = f.iter().next().unwrap();
         assert_eq!(family.size(), 3);
-        assert_eq!(family.sites().len(), 3);
-        assert_eq!(family.bonds().len(), 3);
+        assert_eq!(family.site_count(), 3);
+        assert_eq!(family.bond_count(), 3);
+    }
+
+    #[test]
+    fn a_family_reports_membership_of_its_sites_and_bonds() {
+        let f = families(&triangle());
+        let family = f.iter().next().unwrap();
+        assert!(family.contains_site(s(1)));
+        assert!(!family.contains_site(s(99)));
+        assert!(family.contains_bond(b(1)));
+        assert!(!family.contains_bond(b(99)));
     }
 
     #[test]
@@ -923,7 +952,7 @@ mod tests {
         sizes.sort_unstable();
         assert_eq!(sizes, vec![4, 5]);
         let five = f.iter().find(|fam| fam.size() == 5).unwrap();
-        assert_eq!(five.sites().len(), 6);
+        assert_eq!(five.site_count(), 6);
     }
 
     #[test]
@@ -990,24 +1019,28 @@ mod tests {
         let m = fused();
         let derived = families(&m).membership();
         let direct = membership(&m);
-        assert_eq!(derived.sites(), direct.sites());
-        assert_eq!(derived.bonds(), direct.bonds());
+        assert!(derived.sites().eq(direct.sites()));
+        assert!(derived.bonds().eq(direct.bonds()));
     }
 
     #[test]
     fn fused_rings_form_one_system() {
-        let systems: Vec<Vec<SiteId>> = families(&fused()).systems().collect();
+        let f = families(&fused());
+        let systems: Vec<Vec<SiteId>> =
+            f.systems().iter().map(|sys| sys.iter().collect()).collect();
         assert_eq!(systems, vec![vec![s(1), s(2), s(3), s(4), s(5), s(6)]]);
     }
 
     #[test]
     fn spiro_rings_form_one_system() {
-        assert_eq!(families(&spiro()).systems().count(), 1);
+        assert_eq!(families(&spiro()).systems().len(), 1);
     }
 
     #[test]
     fn separate_rings_form_separate_systems() {
-        let systems: Vec<Vec<SiteId>> = families(&two_triangles()).systems().collect();
+        let f = families(&two_triangles());
+        let systems: Vec<Vec<SiteId>> =
+            f.systems().iter().map(|sys| sys.iter().collect()).collect();
         assert_eq!(
             systems,
             vec![vec![s(1), s(2), s(3)], vec![s(4), s(5), s(6)]]
@@ -1018,9 +1051,11 @@ mod tests {
     fn systems_partition_the_ring_sites() {
         let m = fused();
         let f = families(&m);
-        let mut from_systems: Vec<SiteId> = f.systems().flatten().collect();
+        let systems = f.systems();
+        let mut from_systems: Vec<SiteId> = systems.iter().flat_map(|sys| sys.iter()).collect();
         from_systems.sort_unstable();
-        assert_eq!(from_systems, f.membership().sites());
+        let from_membership: Vec<SiteId> = f.membership().sites().collect();
+        assert_eq!(from_systems, from_membership);
     }
 
     #[test]
@@ -1028,7 +1063,7 @@ mod tests {
         let shape = |m: &Mol| -> Vec<(usize, Vec<SiteId>)> {
             families(m)
                 .iter()
-                .map(|f| (f.size(), f.sites().to_vec()))
+                .map(|f| (f.size(), f.sites().collect::<Vec<_>>()))
                 .collect()
         };
         for m in [fused(), bridged_square(), cube()] {
@@ -1040,10 +1075,12 @@ mod tests {
     fn derived_queries_are_independent_of_input_order() {
         let query = |m: &Mol| -> (Vec<SiteId>, Vec<BondId>, Vec<Vec<SiteId>>) {
             let f = families(m);
+            let systems: Vec<Vec<SiteId>> =
+                f.systems().iter().map(|sys| sys.iter().collect()).collect();
             (
                 f.spiro_sites().collect(),
                 f.fusion_bonds().collect(),
-                f.systems().collect(),
+                systems,
             )
         };
         for m in [spiro(), fused(), two_triangles()] {

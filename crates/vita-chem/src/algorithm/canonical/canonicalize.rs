@@ -4,6 +4,7 @@ use std::hash::{Hash, Hasher};
 use vita_core::SiteId;
 
 use crate::algorithm::utils::{FxHashMap, SortedMap, labeling};
+use crate::topology::symmetry::Orbit;
 use crate::{BondId, HasBonds};
 
 /// The canonical labeling of a molecule's sites: a portable identity, with its
@@ -25,7 +26,7 @@ use crate::{BondId, HasBonds};
 pub struct Canonical<VK, EK> {
     order: Vec<SiteId>,
     ranks: SortedMap<SiteId, usize>,
-    classes: Vec<Vec<SiteId>>,
+    classes: Vec<Orbit>,
     class_of: SortedMap<SiteId, usize>,
     // The canonical form: each site's key in rank order, then every bond as its
     // ordered endpoint ranks and key. Equal exactly for molecules the keys make
@@ -51,24 +52,24 @@ impl<VK, EK> Canonical<VK, EK> {
         self.ranks.get(&site).copied()
     }
 
-    /// Iterates the sites in canonical order, rank `0` first.
-    pub fn order(&self) -> impl Iterator<Item = SiteId> + '_ {
-        self.order.iter().copied()
+    /// The sites in canonical order, rank `0` first.
+    pub fn order(&self) -> &[SiteId] {
+        &self.order
     }
 
-    /// Iterates the symmetry classes, each a set of sites an automorphism can
-    /// interchange. Classes are ordered by their sites, ascending within each.
-    pub fn orbits(&self) -> impl Iterator<Item = &[SiteId]> + '_ {
-        self.classes.iter().map(Vec::as_slice)
+    /// Iterates the symmetry classes, each an [`Orbit`] of sites that an
+    /// automorphism *preserving the colouring* can interchange — the equivalent
+    /// atoms of the coloured molecule, not of the bare skeleton. Classes are
+    /// ordered by their sites, ascending within each.
+    pub fn orbits(&self) -> impl Iterator<Item = &Orbit> + '_ {
+        self.classes.iter()
     }
 
     /// Returns the symmetry class containing `site`.
     ///
     /// Returns `None` if `site` is absent from the molecule.
-    pub fn orbit(&self, site: SiteId) -> Option<&[SiteId]> {
-        self.class_of
-            .get(&site)
-            .map(|&class| self.classes[class].as_slice())
+    pub fn orbit(&self, site: SiteId) -> Option<&Orbit> {
+        self.class_of.get(&site).map(|&class| &self.classes[class])
     }
 
     /// Returns `true` if `a` and `b` are interchangeable by a symmetry of the
@@ -194,6 +195,7 @@ where
             .enumerate()
             .flat_map(|(i, class)| class.iter().map(move |&site| (site, i))),
     );
+    let classes: Vec<Orbit> = classes.into_iter().map(Orbit::new).collect();
 
     let mut keyed: Vec<(usize, VK)> = site_keys
         .into_iter()
@@ -364,7 +366,7 @@ mod tests {
     #[test]
     fn single_site_forms_one_orbit() {
         let c = canon(&single());
-        let orbits: Vec<Vec<SiteId>> = c.orbits().map(<[SiteId]>::to_vec).collect();
+        let orbits: Vec<Vec<SiteId>> = c.orbits().map(|o| o.iter().collect()).collect();
         assert_eq!(orbits, vec![vec![s(1)]]);
     }
 
@@ -372,7 +374,7 @@ mod tests {
     fn order_enumerates_every_site() {
         let c = canon(&star());
         assert_eq!(c.len(), 4);
-        let mut sites: Vec<SiteId> = c.order().collect();
+        let mut sites: Vec<SiteId> = c.order().to_vec();
         sites.sort_unstable();
         assert_eq!(sites, vec![s(1), s(2), s(3), s(4)]);
     }
@@ -380,7 +382,7 @@ mod tests {
     #[test]
     fn rank_is_the_position_in_the_canonical_order() {
         let c = canon(&star());
-        for (position, site) in c.order().enumerate() {
+        for (position, &site) in c.order().iter().enumerate() {
             assert_eq!(c.rank(site), Some(position));
         }
     }
@@ -393,15 +395,19 @@ mod tests {
     #[test]
     fn orbits_group_the_symmetric_sites() {
         let c = canon(&star());
-        let orbits: Vec<Vec<SiteId>> = c.orbits().map(<[SiteId]>::to_vec).collect();
+        let orbits: Vec<Vec<SiteId>> = c.orbits().map(|o| o.iter().collect()).collect();
         assert_eq!(orbits, vec![vec![s(1)], vec![s(2), s(3), s(4)]]);
     }
 
     #[test]
     fn orbit_of_a_site_is_its_symmetry_class() {
         let c = canon(&star());
-        assert_eq!(c.orbit(s(2)), Some([s(2), s(3), s(4)].as_slice()));
-        assert_eq!(c.orbit(s(1)), Some([s(1)].as_slice()));
+        let many = c.orbit(s(2)).unwrap();
+        assert_eq!(many.len(), 3);
+        assert!(many.contains(s(2)) && many.contains(s(3)) && many.contains(s(4)));
+        let lone = c.orbit(s(1)).unwrap();
+        assert_eq!(lone.len(), 1);
+        assert!(lone.contains(s(1)));
     }
 
     #[test]
@@ -416,7 +422,7 @@ mod tests {
 
     #[test]
     fn orbit_of_an_absent_site_is_none() {
-        assert_eq!(canon(&path()).orbit(s(99)), None);
+        assert!(canon(&path()).orbit(s(99)).is_none());
     }
 
     #[test]
@@ -488,7 +494,7 @@ mod tests {
         let reordered = canon(&reordered_path());
         assert!(plain == reordered);
         let orbits = |c: &Canonical<u32, u32>| -> Vec<Vec<SiteId>> {
-            c.orbits().map(<[SiteId]>::to_vec).collect()
+            c.orbits().map(|o| o.iter().collect()).collect()
         };
         assert_eq!(orbits(&plain), orbits(&reordered));
     }

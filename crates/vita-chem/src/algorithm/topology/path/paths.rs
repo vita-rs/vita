@@ -5,21 +5,48 @@ use vita_core::SiteId;
 use crate::HasBonds;
 use crate::algorithm::utils::FxHashMap;
 
-/// Every shortest path from `start` to `end`.
+/// Every shortest path between two sites.
 ///
-/// A shortest path uses the fewest bonds; when several tie, all are returned,
-/// each listing its sites in order from `start` to `end` inclusive. The result
-/// is empty when `end` is unreachable from `start`, and is the single path
-/// `[start]` when `start == end`. Paths are returned in ascending order.
+/// A shortest path uses the fewest bonds; when several tie, all are kept. Each
+/// path lists its sites in order from `start` to `end` inclusive. Empty when
+/// `end` is unreachable from `start`, and the single path `[start]` when
+/// `start == end`. The paths are ordered ascending.
+///
+/// Obtain via [`paths`].
+pub struct Paths {
+    paths: Vec<Vec<SiteId>>,
+}
+
+impl Paths {
+    /// Number of shortest paths.
+    pub fn len(&self) -> usize {
+        self.paths.len()
+    }
+
+    /// Returns `true` if the two sites are disconnected, so no path exists.
+    pub fn is_empty(&self) -> bool {
+        self.paths.is_empty()
+    }
+
+    /// Iterates the shortest paths, ascending; each is a sequence of sites from
+    /// `start` to `end`.
+    pub fn iter(&self) -> impl Iterator<Item = &[SiteId]> + '_ {
+        self.paths.iter().map(Vec::as_slice)
+    }
+}
+
+/// Every shortest path from `start` to `end`.
 ///
 /// # Complexity
 ///
 /// O(V + E + P · log P) time and O(V + P) space, over the `V` sites and `E` bonds
 /// reachable from `start`, where `P` is the total length of the paths returned,
 /// assuming [`neighbors`](HasBonds::neighbors) runs in O(degree).
-pub fn paths<M: HasBonds>(mol: &M, start: SiteId, end: SiteId) -> Vec<Vec<SiteId>> {
+pub fn paths<M: HasBonds>(mol: &M, start: SiteId, end: SiteId) -> Paths {
     if start == end {
-        return vec![vec![start]];
+        return Paths {
+            paths: vec![vec![start]],
+        };
     }
 
     let mut dist: FxHashMap<SiteId, usize> = FxHashMap::default();
@@ -44,14 +71,14 @@ pub fn paths<M: HasBonds>(mol: &M, start: SiteId, end: SiteId) -> Vec<Vec<SiteId
     }
 
     if !dist.contains_key(&end) {
-        return Vec::new();
+        return Paths { paths: Vec::new() };
     }
 
     let mut result: Vec<Vec<SiteId>> = Vec::new();
     let mut path: Vec<SiteId> = Vec::new();
     collect(&parents, start, end, &mut path, &mut result);
     result.sort_unstable();
-    result
+    Paths { paths: result }
 }
 
 /// Follows the predecessor lists `parents` from `site` back to `start`,
@@ -148,14 +175,21 @@ mod tests {
         }
     }
 
+    fn listed(paths: &Paths) -> Vec<Vec<SiteId>> {
+        paths.iter().map(<[SiteId]>::to_vec).collect()
+    }
+
     #[test]
     fn start_equal_to_end_yields_the_lone_site() {
-        assert_eq!(paths(&chain(), s(2), s(2)), vec![vec![s(2)]]);
+        assert_eq!(listed(&paths(&chain(), s(2), s(2))), vec![vec![s(2)]]);
     }
 
     #[test]
     fn a_tree_yields_its_unique_shortest_path() {
-        assert_eq!(paths(&chain(), s(1), s(3)), vec![vec![s(1), s(2), s(3)]]);
+        assert_eq!(
+            listed(&paths(&chain(), s(1), s(3))),
+            vec![vec![s(1), s(2), s(3)]]
+        );
     }
 
     #[test]
@@ -165,12 +199,15 @@ mod tests {
 
     #[test]
     fn excludes_paths_longer_than_the_shortest() {
-        assert_eq!(paths(&triangle(), s(1), s(3)), vec![vec![s(1), s(3)]]);
+        assert_eq!(
+            listed(&paths(&triangle(), s(1), s(3))),
+            vec![vec![s(1), s(3)]]
+        );
     }
 
     #[test]
     fn a_cycle_yields_every_tied_shortest_path() {
-        let result = paths(&square(), s(1), s(3));
+        let result = listed(&paths(&square(), s(1), s(3)));
         assert_eq!(result.len(), 2);
         assert!(result.contains(&vec![s(1), s(2), s(3)]));
         assert!(result.contains(&vec![s(1), s(4), s(3)]));
@@ -184,7 +221,7 @@ mod tests {
 
     #[test]
     fn every_path_runs_from_start_to_end() {
-        for path in paths(&square(), s(3), s(1)) {
+        for path in paths(&square(), s(3), s(1)).iter() {
             assert_eq!(path.first(), Some(&s(3)));
             assert_eq!(path.last(), Some(&s(1)));
         }
@@ -193,7 +230,7 @@ mod tests {
     #[test]
     fn consecutive_sites_in_each_path_are_bonded() {
         let mol = square();
-        for path in paths(&mol, s(1), s(3)) {
+        for path in paths(&mol, s(1), s(3)).iter() {
             for window in path.windows(2) {
                 assert!(mol.bond_between(window[0], window[1]).is_some());
             }
@@ -202,7 +239,7 @@ mod tests {
 
     #[test]
     fn paths_are_listed_in_ascending_order() {
-        let result = paths(&square(), s(1), s(3));
+        let result = listed(&paths(&square(), s(1), s(3)));
         let mut sorted = result.clone();
         sorted.sort();
         assert_eq!(result, sorted);
@@ -215,6 +252,9 @@ mod tests {
             bonds: vec![b(4), b(3), b(2), b(1)],
             endpoints: vec![(s(1), s(4)), (s(3), s(4)), (s(2), s(3)), (s(1), s(2))],
         };
-        assert_eq!(paths(&square(), s(1), s(3)), paths(&reordered, s(1), s(3)));
+        assert_eq!(
+            listed(&paths(&square(), s(1), s(3))),
+            listed(&paths(&reordered, s(1), s(3)))
+        );
     }
 }

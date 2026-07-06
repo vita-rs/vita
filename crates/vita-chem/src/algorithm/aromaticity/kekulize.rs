@@ -16,6 +16,16 @@ pub struct Kekule {
 }
 
 impl Kekule {
+    /// Number of bonds the Kekulé structure resolves.
+    pub fn len(&self) -> usize {
+        self.orders.len()
+    }
+
+    /// Returns `true` if the molecule had no aromatic bonds to resolve.
+    pub fn is_empty(&self) -> bool {
+        self.orders.is_empty()
+    }
+
     /// Returns the localised order resolved for `bond`.
     ///
     /// Returns `None` if `bond` was not aromatic, or is absent from the
@@ -28,11 +38,6 @@ impl Kekule {
     /// ascending bond order.
     pub fn orders(&self) -> impl Iterator<Item = (BondId, BondOrder)> + '_ {
         self.orders.iter().map(|(&bond, &order)| (bond, order))
-    }
-
-    /// Returns `true` if the molecule had no aromatic bonds to resolve.
-    pub fn is_empty(&self) -> bool {
-        self.orders.is_empty()
     }
 
     /// Binds this structure to `mol`, yielding a view that implements
@@ -844,6 +849,12 @@ mod tests {
         let kekule = kekulize(&benzene()).unwrap();
         assert_eq!(kekule.orders().count(), 6);
         assert!(kekule.orders().all(|(_, order)| order != Aromatic));
+    }
+
+    #[test]
+    fn len_counts_the_resolved_bonds() {
+        assert_eq!(kekulize(&benzene()).unwrap().len(), 6);
+        assert_eq!(kekulize(&ethane()).unwrap().len(), 0);
     }
 
     #[test]

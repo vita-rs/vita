@@ -5,19 +5,49 @@ use vita_core::SiteId;
 use super::rings;
 use crate::{BondId, HasBonds};
 
-/// The bridgehead atoms of a molecule, in ascending order.
+/// The bridgehead atoms of a molecule: the set of atoms where a bridge joins a
+/// ring.
 ///
-/// A bridgehead is an atom where a bridge joins a ring. When two rings of the
-/// minimum cycle basis share two or more bonds, those bonds form a bridge whose
-/// ends — the atoms incident to exactly one shared bond — are the bridgeheads.
-/// Rings sharing a single bond (ortho-fused) or a single atom (spiro) have none,
-/// so naphthalene yields nothing while bicyclo[2.2.2]octane yields two.
+/// When two rings of the minimum cycle basis share two or more bonds, those
+/// bonds form a bridge whose ends — the atoms incident to exactly one shared
+/// bond — are the bridgeheads. Rings sharing a single bond (ortho-fused) or a
+/// single atom (spiro) have none, so naphthalene yields nothing while
+/// bicyclo[2.2.2]octane yields two.
+///
+/// Obtain via [`bridgeheads`].
+pub struct Bridgeheads {
+    sites: Vec<SiteId>,
+}
+
+impl Bridgeheads {
+    /// Number of bridgehead atoms.
+    pub fn len(&self) -> usize {
+        self.sites.len()
+    }
+
+    /// Returns `true` if the molecule has no bridgehead atoms.
+    pub fn is_empty(&self) -> bool {
+        self.sites.is_empty()
+    }
+
+    /// Returns `true` if `site` is a bridgehead atom.
+    pub fn contains(&self, site: SiteId) -> bool {
+        self.sites.binary_search(&site).is_ok()
+    }
+
+    /// Iterates the bridgehead atoms in ascending order.
+    pub fn iter(&self) -> impl Iterator<Item = SiteId> + '_ {
+        self.sites.iter().copied()
+    }
+}
+
+/// The bridgehead atoms of a molecule.
 ///
 /// # Complexity
 ///
 /// O(V · E³ / w) time and O(V + E) space, over the molecule's `V` sites and `E`
 /// bonds for word width `w` = 64; building the minimum cycle basis dominates.
-pub fn bridgeheads<M: HasBonds>(mol: &M) -> impl Iterator<Item = SiteId> {
+pub fn bridgeheads<M: HasBonds>(mol: &M) -> Bridgeheads {
     let basis = rings(mol);
     let ring_bonds: Vec<Vec<BondId>> = basis
         .iter()
@@ -53,7 +83,7 @@ pub fn bridgeheads<M: HasBonds>(mol: &M) -> impl Iterator<Item = SiteId> {
 
     heads.sort_unstable();
     heads.dedup();
-    heads.into_iter()
+    Bridgeheads { sites: heads }
 }
 
 /// The bonds common to two ascending bond slices.
@@ -239,53 +269,66 @@ mod tests {
 
     #[test]
     fn empty_molecule_has_no_bridgeheads() {
-        assert_eq!(bridgeheads(&empty()).count(), 0);
+        assert_eq!(bridgeheads(&empty()).len(), 0);
     }
 
     #[test]
     fn single_ring_has_no_bridgeheads() {
-        assert_eq!(bridgeheads(&triangle()).count(), 0);
+        assert_eq!(bridgeheads(&triangle()).len(), 0);
     }
 
     #[test]
     fn bridgeheads_are_the_atoms_where_the_bridges_meet_the_rings() {
         assert_eq!(
-            bridgeheads(&bicyclo222()).collect::<Vec<_>>(),
+            bridgeheads(&bicyclo222()).iter().collect::<Vec<_>>(),
             vec![s(1), s(8)]
         );
     }
 
     #[test]
+    fn bridgeheads_report_membership() {
+        let bh = bridgeheads(&bicyclo222());
+        assert!(bh.contains(s(1)));
+        assert!(!bh.contains(s(2)));
+    }
+
+    #[test]
     fn an_acyclic_molecule_has_no_bridgeheads() {
-        assert_eq!(bridgeheads(&chain()).count(), 0);
+        assert_eq!(bridgeheads(&chain()).len(), 0);
     }
 
     #[test]
     fn ortho_fused_rings_have_no_bridgeheads() {
-        assert_eq!(bridgeheads(&fused()).count(), 0);
+        assert_eq!(bridgeheads(&fused()).len(), 0);
     }
 
     #[test]
     fn spiro_rings_have_no_bridgeheads() {
-        assert_eq!(bridgeheads(&spiro()).count(), 0);
+        assert_eq!(bridgeheads(&spiro()).len(), 0);
     }
 
     #[test]
     fn rings_sharing_exactly_two_bonds_yield_bridgeheads() {
-        assert_eq!(bridgeheads(&theta()).collect::<Vec<_>>(), vec![s(1), s(2)]);
+        assert_eq!(
+            bridgeheads(&theta()).iter().collect::<Vec<_>>(),
+            vec![s(1), s(2)]
+        );
     }
 
     #[test]
     fn unbridged_components_add_no_bridgeheads() {
         assert_eq!(
-            bridgeheads(&disconnected()).collect::<Vec<_>>(),
-            vec![s(1), s(8)],
+            bridgeheads(&disconnected()).iter().collect::<Vec<_>>(),
+            vec![s(1), s(8)]
         );
     }
 
     #[test]
     fn a_bridgehead_shared_by_several_ring_pairs_is_listed_once() {
-        assert_eq!(bridgeheads(&k24()).collect::<Vec<_>>(), vec![s(1), s(2)]);
+        assert_eq!(
+            bridgeheads(&k24()).iter().collect::<Vec<_>>(),
+            vec![s(1), s(2)]
+        );
     }
 
     #[test]
@@ -306,8 +349,8 @@ mod tests {
             ],
         };
         assert_eq!(
-            bridgeheads(&bicyclo222()).collect::<Vec<_>>(),
-            bridgeheads(&reordered).collect::<Vec<_>>(),
+            bridgeheads(&bicyclo222()).iter().collect::<Vec<_>>(),
+            bridgeheads(&reordered).iter().collect::<Vec<_>>()
         );
     }
 }

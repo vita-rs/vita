@@ -3,16 +3,57 @@ use vita_core::SiteId;
 use crate::HasBonds;
 use crate::algorithm::utils::{FxHashMap, SortedMap, labeling};
 
+/// A set of sites interchangeable by a symmetry of the molecule.
+///
+/// A relabeling of the molecule onto itself carries any member of the orbit onto
+/// any other. *Which* symmetry — of the bare bond skeleton, or of the coloured
+/// molecule — is fixed by the function that produced the orbit, not by this type.
+///
+/// Obtain from [`Orbits`] (skeleton symmetry) or from a
+/// [`Canonical`](crate::canonical::Canonical) labeling (colour-preserving
+/// symmetry).
+pub struct Orbit {
+    sites: Vec<SiteId>,
+}
+
+impl Orbit {
+    /// Wraps an ascending set of sites; the sites must be sorted so that
+    /// [`contains`](Self::contains) can bisect.
+    pub(crate) fn new(sites: Vec<SiteId>) -> Self {
+        Orbit { sites }
+    }
+
+    /// Number of sites in the orbit.
+    pub fn len(&self) -> usize {
+        self.sites.len()
+    }
+
+    /// Returns `true` if the orbit contains no sites. Always `false` — an orbit
+    /// is non-empty — but provided alongside [`len`](Self::len).
+    pub fn is_empty(&self) -> bool {
+        self.sites.is_empty()
+    }
+
+    /// Returns `true` if `site` lies in this orbit.
+    pub fn contains(&self, site: SiteId) -> bool {
+        self.sites.binary_search(&site).is_ok()
+    }
+
+    /// Iterates the orbit's sites in ascending order.
+    pub fn iter(&self) -> impl Iterator<Item = SiteId> + '_ {
+        self.sites.iter().copied()
+    }
+}
+
 /// The symmetry classes of a molecule's sites.
 ///
-/// Each class — an orbit — is a maximal set of sites a graph automorphism can
-/// interchange: a relabeling of the bond skeleton onto itself carries any member
-/// of a class onto any other. The classification is topological, blind to the
-/// elements at the sites. An empty molecule has no classes.
+/// Each class is an [`Orbit`] — a maximal set of sites a graph automorphism can
+/// interchange. The classification is topological, blind to the elements at the
+/// sites. An empty molecule has no classes.
 ///
 /// Obtain via [`orbits`].
 pub struct Orbits {
-    groups: Vec<Vec<SiteId>>,
+    groups: Vec<Orbit>,
     index: SortedMap<SiteId, usize>,
 }
 
@@ -28,17 +69,15 @@ impl Orbits {
     }
 
     /// Iterates the classes, ordered by their sites, ascending within each.
-    pub fn iter(&self) -> impl Iterator<Item = &[SiteId]> + '_ {
-        self.groups.iter().map(Vec::as_slice)
+    pub fn iter(&self) -> impl Iterator<Item = &Orbit> + '_ {
+        self.groups.iter()
     }
 
     /// Returns the class containing `site`.
     ///
     /// Returns `None` if `site` is absent from the molecule.
-    pub fn get(&self, site: SiteId) -> Option<&[SiteId]> {
-        self.index
-            .get(&site)
-            .map(|&group| self.groups[group].as_slice())
+    pub fn get(&self, site: SiteId) -> Option<&Orbit> {
+        self.index.get(&site).map(|&group| &self.groups[group])
     }
 
     /// Returns `true` if `a` and `b` are interchangeable by a symmetry of the
@@ -98,6 +137,7 @@ pub fn orbits<M: HasBonds>(mol: &M) -> Orbits {
             .enumerate()
             .flat_map(|(g, group)| group.iter().map(move |&site| (site, g))),
     );
+    let groups = groups.into_iter().map(Orbit::new).collect();
 
     Orbits { groups, index }
 }
@@ -201,7 +241,9 @@ mod tests {
         let orbits = orbits(&single());
         assert_eq!(orbits.len(), 1);
         assert!(!orbits.is_empty());
-        assert_eq!(orbits.get(s(1)), Some([s(1)].as_slice()));
+        let class = orbits.get(s(1)).unwrap();
+        assert_eq!(class.len(), 1);
+        assert!(class.contains(s(1)));
     }
 
     #[test]
@@ -211,13 +253,16 @@ mod tests {
 
     #[test]
     fn get_returns_the_class_of_a_site() {
-        assert_eq!(orbits(&path()).get(s(1)), Some([s(1), s(3)].as_slice()));
+        let orbits = orbits(&path());
+        let class = orbits.get(s(1)).unwrap();
+        assert_eq!(class.len(), 2);
+        assert!(class.contains(s(1)) && class.contains(s(3)));
     }
 
     #[test]
     fn iter_lists_the_classes_in_site_order() {
         let orbits = orbits(&star());
-        let classes: Vec<Vec<SiteId>> = orbits.iter().map(|class| class.to_vec()).collect();
+        let classes: Vec<Vec<SiteId>> = orbits.iter().map(|class| class.iter().collect()).collect();
         assert_eq!(classes, vec![vec![s(1)], vec![s(2), s(3), s(4)]]);
     }
 
@@ -233,7 +278,7 @@ mod tests {
 
     #[test]
     fn get_is_none_for_an_absent_site() {
-        assert_eq!(orbits(&path()).get(s(99)), None);
+        assert!(orbits(&path()).get(s(99)).is_none());
     }
 
     #[test]
@@ -253,14 +298,17 @@ mod tests {
 
     #[test]
     fn an_asymmetric_site_is_a_singleton_class() {
-        assert_eq!(orbits(&path()).get(s(2)), Some([s(2)].as_slice()));
+        let orbits = orbits(&path());
+        let class = orbits.get(s(2)).unwrap();
+        assert_eq!(class.len(), 1);
+        assert!(class.contains(s(2)));
     }
 
     #[test]
     fn classes_partition_every_site() {
         let orbits = orbits(&star());
         assert_eq!(orbits.len(), 2);
-        let mut sites: Vec<SiteId> = orbits.iter().flatten().copied().collect();
+        let mut sites: Vec<SiteId> = orbits.iter().flat_map(|class| class.iter()).collect();
         sites.sort_unstable();
         assert_eq!(sites, vec![s(1), s(2), s(3), s(4)]);
     }
@@ -273,7 +321,10 @@ mod tests {
             endpoints: vec![(s(2), s(3)), (s(1), s(2))],
         };
         let classes = |mol: &Mol| -> Vec<Vec<SiteId>> {
-            orbits(mol).iter().map(|class| class.to_vec()).collect()
+            orbits(mol)
+                .iter()
+                .map(|class| class.iter().collect())
+                .collect()
         };
         assert_eq!(classes(&path()), classes(&reordered));
     }

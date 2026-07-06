@@ -17,14 +17,34 @@ pub struct Block {
 }
 
 impl Block {
-    /// The sites in this block, in ascending order.
-    pub fn sites(&self) -> &[SiteId] {
-        &self.sites
+    /// Returns `true` if `site` lies in this block.
+    pub fn contains_site(&self, site: SiteId) -> bool {
+        self.sites.binary_search(&site).is_ok()
     }
 
-    /// The bonds in this block, in ascending order.
-    pub fn bonds(&self) -> &[BondId] {
-        &self.bonds
+    /// Returns `true` if `bond` lies in this block.
+    pub fn contains_bond(&self, bond: BondId) -> bool {
+        self.bonds.binary_search(&bond).is_ok()
+    }
+
+    /// Number of sites in this block.
+    pub fn site_count(&self) -> usize {
+        self.sites.len()
+    }
+
+    /// Number of bonds in this block.
+    pub fn bond_count(&self) -> usize {
+        self.bonds.len()
+    }
+
+    /// Iterates the sites in this block, in ascending order.
+    pub fn sites(&self) -> impl Iterator<Item = SiteId> + '_ {
+        self.sites.iter().copied()
+    }
+
+    /// Iterates the bonds in this block, in ascending order.
+    pub fn bonds(&self) -> impl Iterator<Item = BondId> + '_ {
+        self.bonds.iter().copied()
     }
 
     /// Returns `true` if the block contains a cycle, `false` if it is a
@@ -377,8 +397,8 @@ mod tests {
     fn single_bond_block_holds_its_sites_and_bond() {
         let bl = blocks(&edge());
         let block = bl.iter().next().unwrap();
-        assert_eq!(block.sites(), &[s(1), s(2)]);
-        assert_eq!(block.bonds(), &[b(1)]);
+        assert!(block.sites().eq([s(1), s(2)]));
+        assert!(block.bonds().eq([b(1)]));
     }
 
     #[test]
@@ -392,8 +412,26 @@ mod tests {
     fn block_lists_its_sites_and_bonds_in_ascending_order() {
         let bl = blocks(&triangle());
         let block = bl.iter().next().unwrap();
-        assert_eq!(block.sites(), &[s(1), s(2), s(3)]);
-        assert_eq!(block.bonds(), &[b(1), b(2), b(3)]);
+        assert!(block.sites().eq([s(1), s(2), s(3)]));
+        assert!(block.bonds().eq([b(1), b(2), b(3)]));
+    }
+
+    #[test]
+    fn block_reports_membership_of_its_sites_and_bonds() {
+        let bl = blocks(&triangle());
+        let block = bl.iter().next().unwrap();
+        assert!(block.contains_site(s(1)));
+        assert!(!block.contains_site(s(99)));
+        assert!(block.contains_bond(b(1)));
+        assert!(!block.contains_bond(b(99)));
+    }
+
+    #[test]
+    fn block_counts_its_sites_and_bonds() {
+        let bl = blocks(&triangle());
+        let block = bl.iter().next().unwrap();
+        assert_eq!(block.site_count(), 3);
+        assert_eq!(block.bond_count(), 3);
     }
 
     #[test]
@@ -478,7 +516,7 @@ mod tests {
     #[test]
     fn blocks_are_ordered_by_their_sites() {
         let bl = blocks(&dumbbell());
-        let sites: Vec<Vec<SiteId>> = bl.iter().map(|block| block.sites().to_vec()).collect();
+        let sites: Vec<Vec<SiteId>> = bl.iter().map(|block| block.sites().collect()).collect();
         assert_eq!(
             sites,
             vec![
@@ -509,10 +547,7 @@ mod tests {
     fn blocks_partition_every_bond() {
         let m = dumbbell();
         let bl = blocks(&m);
-        let mut via_blocks: Vec<BondId> = bl
-            .iter()
-            .flat_map(|block| block.bonds().iter().copied())
-            .collect();
+        let mut via_blocks: Vec<BondId> = bl.iter().flat_map(|block| block.bonds()).collect();
         via_blocks.sort_unstable();
         let mut all: Vec<BondId> = m.bonds().collect();
         all.sort_unstable();
@@ -524,7 +559,7 @@ mod tests {
         let shape = |m: &Mol| -> (Vec<Vec<SiteId>>, Vec<SiteId>, Vec<BondId>) {
             let bl = blocks(m);
             (
-                bl.iter().map(|block| block.sites().to_vec()).collect(),
+                bl.iter().map(|block| block.sites().collect()).collect(),
                 bl.cuts().collect(),
                 bl.bridges().collect(),
             )

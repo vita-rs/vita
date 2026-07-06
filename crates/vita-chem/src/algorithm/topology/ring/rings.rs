@@ -2,7 +2,7 @@ use std::collections::VecDeque;
 
 use vita_core::SiteId;
 
-use super::RingMembership;
+use super::{RingMembership, RingSystems};
 use crate::algorithm::utils::{
     AdjacencyList, BitSet, DisjointSet, FxHashMap, Gf2Basis, SortedMultimap,
 };
@@ -115,12 +115,11 @@ impl Rings {
         )
     }
 
-    /// Iterates the ring systems, each as its sorted set of sites.
+    /// The ring systems: maximal groups of rings connected through shared sites.
     ///
-    /// A ring system is a maximal group of rings connected through shared sites;
-    /// fused, bridged, and spiro rings all coalesce into one system. Systems are
-    /// yielded in ascending site order.
-    pub fn systems(&self) -> impl Iterator<Item = Vec<SiteId>> {
+    /// Fused, bridged, and spiro rings all coalesce into one system. Systems are
+    /// in ascending site order.
+    pub fn systems(&self) -> RingSystems {
         let mut components = DisjointSet::new(self.rings.len());
         for (_, members) in self.site_index.iter() {
             for pair in members.windows(2) {
@@ -142,7 +141,7 @@ impl Rings {
             })
             .collect();
         systems.sort_unstable();
-        systems.into_iter()
+        RingSystems::new(systems)
     }
 }
 
@@ -633,8 +632,8 @@ mod tests {
         let mol = triangle_and_square();
         let derived = rings(&mol).membership();
         let direct = membership(&mol);
-        assert_eq!(derived.sites(), direct.sites());
-        assert_eq!(derived.bonds(), direct.bonds());
+        assert!(derived.sites().eq(direct.sites()));
+        assert!(derived.bonds().eq(direct.bonds()));
     }
 
     #[test]
@@ -644,13 +643,17 @@ mod tests {
 
     #[test]
     fn systems_unite_fused_rings() {
-        let systems: Vec<Vec<SiteId>> = rings(&triangle_and_square()).systems().collect();
+        let r = rings(&triangle_and_square());
+        let systems: Vec<Vec<SiteId>> =
+            r.systems().iter().map(|sys| sys.iter().collect()).collect();
         assert_eq!(systems, vec![vec![s(1), s(2), s(3), s(4), s(5)]]);
     }
 
     #[test]
     fn systems_separate_disjoint_rings() {
-        let systems: Vec<Vec<SiteId>> = rings(&two_triangles()).systems().collect();
+        let r = rings(&two_triangles());
+        let systems: Vec<Vec<SiteId>> =
+            r.systems().iter().map(|sys| sys.iter().collect()).collect();
         assert_eq!(
             systems,
             vec![vec![s(1), s(2), s(3)], vec![s(4), s(5), s(6)]]
@@ -658,12 +661,28 @@ mod tests {
     }
 
     #[test]
+    fn a_ring_system_reports_and_counts_its_sites() {
+        let r = rings(&triangle_and_square());
+        let systems = r.systems();
+        let system = systems.iter().next().unwrap();
+        assert_eq!(system.len(), 5);
+        assert!(system.contains(s(1)));
+        assert!(!system.contains(s(99)));
+    }
+
+    #[test]
+    fn an_acyclic_molecule_has_no_ring_systems() {
+        assert!(rings(&chain()).systems().is_empty());
+    }
+
+    #[test]
     fn systems_partition_the_ring_sites() {
         let mol = spiro();
         let r = rings(&mol);
-        let mut from_systems: Vec<SiteId> = r.systems().flatten().collect();
+        let systems = r.systems();
+        let mut from_systems: Vec<SiteId> = systems.iter().flat_map(|sys| sys.iter()).collect();
         from_systems.sort_unstable();
-        let from_membership: Vec<SiteId> = r.membership().sites().to_vec();
+        let from_membership: Vec<SiteId> = r.membership().sites().collect();
         assert_eq!(from_systems, from_membership);
     }
 

@@ -3,6 +3,37 @@ use vita_core::SiteId;
 use crate::HasBonds;
 use crate::algorithm::utils::{FxHashSet, SortedMap};
 
+/// A connected component: a maximal set of sites mutually reachable through
+/// bonds.
+///
+/// Obtain from [`Components::iter`] or [`Components::get`].
+pub struct Component {
+    sites: Vec<SiteId>,
+}
+
+impl Component {
+    /// Number of sites in the component.
+    pub fn len(&self) -> usize {
+        self.sites.len()
+    }
+
+    /// Returns `true` if the component contains no sites. Always `false` — a
+    /// component is non-empty — but provided alongside [`len`](Self::len).
+    pub fn is_empty(&self) -> bool {
+        self.sites.is_empty()
+    }
+
+    /// Returns `true` if `site` lies in this component.
+    pub fn contains(&self, site: SiteId) -> bool {
+        self.sites.binary_search(&site).is_ok()
+    }
+
+    /// Iterates the component's sites in ascending order.
+    pub fn iter(&self) -> impl Iterator<Item = SiteId> + '_ {
+        self.sites.iter().copied()
+    }
+}
+
 /// The connected components of a molecule.
 ///
 /// Each component is a maximal set of sites mutually reachable through bonds.
@@ -10,7 +41,7 @@ use crate::algorithm::utils::{FxHashSet, SortedMap};
 ///
 /// Obtain via [`components`].
 pub struct Components {
-    groups: Vec<Vec<SiteId>>,
+    groups: Vec<Component>,
     index: SortedMap<SiteId, usize>,
 }
 
@@ -31,14 +62,14 @@ impl Components {
     }
 
     /// Iterates the components, ordered by their sites.
-    pub fn iter(&self) -> impl Iterator<Item = &[SiteId]> + '_ {
-        self.groups.iter().map(|group| group.as_slice())
+    pub fn iter(&self) -> impl Iterator<Item = &Component> + '_ {
+        self.groups.iter()
     }
 
     /// Returns the component containing `site`.
     ///
     /// Returns `None` if `site` is absent from the molecule.
-    pub fn get(&self, site: SiteId) -> Option<&[SiteId]> {
+    pub fn get(&self, site: SiteId) -> Option<&Component> {
         let &group = self.index.get(&site)?;
         Some(&self.groups[group])
     }
@@ -93,6 +124,10 @@ pub fn components<M: HasBonds>(mol: &M) -> Components {
             .enumerate()
             .flat_map(|(g, group)| group.iter().map(move |&site| (site, g))),
     );
+    let groups = groups
+        .into_iter()
+        .map(|sites| Component { sites })
+        .collect();
 
     Components { groups, index }
 }
@@ -244,19 +279,23 @@ mod tests {
     #[test]
     fn get_returns_the_component_containing_the_site() {
         let c = components(&two_components());
-        assert_eq!(c.get(s(1)), Some(&[s(1), s(2)][..]));
-        assert_eq!(c.get(s(3)), Some(&[s(3)][..]));
+        let pair = c.get(s(1)).unwrap();
+        assert_eq!(pair.len(), 2);
+        assert!(pair.contains(s(1)) && pair.contains(s(2)));
+        let lone = c.get(s(3)).unwrap();
+        assert_eq!(lone.len(), 1);
+        assert!(lone.contains(s(3)));
     }
 
     #[test]
     fn get_of_an_absent_site_is_none() {
-        assert_eq!(components(&chain()).get(s(99)), None);
+        assert!(components(&chain()).get(s(99)).is_none());
     }
 
     #[test]
     fn iter_yields_components_ordered_by_their_sites() {
         let c = components(&two_components());
-        let groups: Vec<Vec<SiteId>> = c.iter().map(|group| group.to_vec()).collect();
+        let groups: Vec<Vec<SiteId>> = c.iter().map(|group| group.iter().collect()).collect();
         assert_eq!(groups, vec![vec![s(1), s(2)], vec![s(3)]]);
     }
 
@@ -292,7 +331,10 @@ mod tests {
             endpoints: vec![(s(4), s(5)), (s(1), s(2)), (s(2), s(3))],
         };
         let groups = |m: &Mol| -> Vec<Vec<SiteId>> {
-            components(m).iter().map(|group| group.to_vec()).collect()
+            components(m)
+                .iter()
+                .map(|group| group.iter().collect())
+                .collect()
         };
         assert_eq!(groups(&canonical), groups(&shuffled));
     }

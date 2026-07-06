@@ -92,7 +92,7 @@ pub fn framework<M: HasBonds>(mol: &M) -> Framework {
     let peeled = peel_side_chains(&adjacency);
 
     let mut is_ring = vec![false; n];
-    for &site in rings.sites() {
+    for site in rings.sites() {
         is_ring[index[&site]] = true;
     }
 

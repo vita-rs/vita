@@ -25,6 +25,26 @@ impl CommonSubgraph {
         self.bonds.is_empty()
     }
 
+    /// The second molecule's site matched to `site` in the first.
+    ///
+    /// Returns `None` if `site` is absent from the common substructure.
+    pub fn site(&self, site: SiteId) -> Option<SiteId> {
+        self.sites
+            .binary_search_by(|(a, _)| a.cmp(&site))
+            .ok()
+            .map(|i| self.sites[i].1)
+    }
+
+    /// The second molecule's bond matched to `bond` in the first.
+    ///
+    /// Returns `None` if `bond` is absent from the common substructure.
+    pub fn bond(&self, bond: BondId) -> Option<BondId> {
+        self.bonds
+            .binary_search_by(|(a, _)| a.cmp(&bond))
+            .ok()
+            .map(|i| self.bonds[i].1)
+    }
+
     /// Iterates the matched `(first site, second site)` pairs, ordered by the
     /// first molecule's site.
     pub fn sites(&self) -> impl Iterator<Item = (SiteId, SiteId)> + '_ {
@@ -457,6 +477,24 @@ mod tests {
         for (p, q) in c.bonds() {
             assert_eq!(a.bond_order(p), b.bond_order(q));
         }
+    }
+
+    #[test]
+    fn each_matched_site_and_bond_maps_to_its_image() {
+        let c = common(&ethanol(), &propanol());
+        for (x, y) in c.sites() {
+            assert_eq!(c.site(x), Some(y));
+        }
+        for (p, q) in c.bonds() {
+            assert_eq!(c.bond(p), Some(q));
+        }
+    }
+
+    #[test]
+    fn an_unmatched_site_or_bond_has_no_image() {
+        let c = common(&carbon(), &oxygen());
+        assert!(c.site(s(1)).is_none());
+        assert!(c.bond(b(1)).is_none());
     }
 
     #[test]
