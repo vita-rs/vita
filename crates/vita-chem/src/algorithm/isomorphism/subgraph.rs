@@ -10,6 +10,7 @@ use crate::{BondId, HasBonds};
 /// Maps each pattern site to the target site it stands for.
 ///
 /// Obtain via [`matches`](matches()).
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Mapping {
     pairs: SortedMap<SiteId, SiteId>,
 }

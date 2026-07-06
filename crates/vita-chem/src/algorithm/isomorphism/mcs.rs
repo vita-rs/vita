@@ -8,7 +8,7 @@ use crate::{BondId, HasBonds};
 /// bonds shared by both, with the atom and bond correspondence it induces.
 ///
 /// Obtain via [`mcs`].
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CommonSubgraph {
     sites: Vec<(SiteId, SiteId)>,
     bonds: Vec<(BondId, BondId)>,

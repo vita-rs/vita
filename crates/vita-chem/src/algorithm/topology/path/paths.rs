@@ -13,6 +13,7 @@ use crate::algorithm::utils::FxHashMap;
 /// `start == end`. The paths are ordered ascending.
 ///
 /// Obtain via [`paths`].
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Paths {
     paths: Vec<Vec<SiteId>>,
 }

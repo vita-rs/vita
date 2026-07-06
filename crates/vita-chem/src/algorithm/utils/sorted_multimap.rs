@@ -8,6 +8,7 @@
 /// while staying allocation-light, fully deterministic, and free of any hashing.
 ///
 /// Obtain via [`from_pairs`](Self::from_pairs).
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SortedMultimap<K, V> {
     keys: Vec<K>,
     offsets: Vec<usize>,

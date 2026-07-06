@@ -5,6 +5,7 @@
 /// Neither depends on the order the vertices were given in.
 ///
 /// Obtain via [`labeling`].
+#[derive(Debug)]
 pub struct Labeling {
     ranks: Vec<usize>,
     orbits: Vec<usize>,

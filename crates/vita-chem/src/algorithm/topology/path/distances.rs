@@ -18,6 +18,7 @@ const UNREACHABLE: u32 = u32::MAX;
 /// index.
 ///
 /// Obtain via [`distances`].
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DistanceMatrix {
     sites: Vec<SiteId>,
     matrix: Vec<u32>,

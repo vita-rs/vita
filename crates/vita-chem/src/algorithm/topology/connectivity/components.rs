@@ -7,6 +7,7 @@ use crate::algorithm::utils::{FxHashSet, SortedMap};
 /// bonds.
 ///
 /// Obtain from [`Components::iter`] or [`Components::get`].
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Component {
     sites: Vec<SiteId>,
 }
@@ -40,6 +41,7 @@ impl Component {
 /// Sites with no bonds form singleton components; an empty molecule has none.
 ///
 /// Obtain via [`components`].
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Components {
     groups: Vec<Component>,
     index: SortedMap<SiteId, usize>,

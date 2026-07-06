@@ -6,7 +6,7 @@
 /// vector spaces.
 ///
 /// Obtain via [`zeros`](Self::zeros).
-#[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct BitSet {
     words: Vec<u64>,
     len: usize,

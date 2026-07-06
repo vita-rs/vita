@@ -18,6 +18,7 @@ use crate::{BondId, HasBonds};
 /// holds several interchangeable rings.
 ///
 /// Obtain via [`RingFamilies`].
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RingFamily {
     ring_size: usize,
     sites: Vec<SiteId>,
@@ -75,6 +76,7 @@ impl RingFamily {
 /// [`of_bond`](Self::of_bond) yield iterators.
 ///
 /// Obtain via [`families`].
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RingFamilies {
     families: Vec<RingFamily>,
     site_index: SortedMultimap<SiteId, usize>,

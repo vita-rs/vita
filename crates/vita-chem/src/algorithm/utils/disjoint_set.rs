@@ -10,6 +10,7 @@
 /// to be less than [`len`](Self::len).
 ///
 /// Obtain via [`new`](Self::new).
+#[derive(Debug)]
 pub struct DisjointSet {
     parent: Vec<usize>,
     size: Vec<usize>,

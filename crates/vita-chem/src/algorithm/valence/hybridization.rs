@@ -59,6 +59,14 @@ pub struct WithHybridizations<'a, M> {
     mol: &'a M,
 }
 
+impl<M> Copy for WithHybridizations<'_, M> {}
+
+impl<M> Clone for WithHybridizations<'_, M> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
 impl<'a, M: HasBondOrders + HasElements + HasFormalCharges + HasRadicalElectrons>
     WithHybridizations<'a, M>
 {

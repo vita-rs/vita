@@ -12,6 +12,7 @@ use crate::algorithm::utils::{FxHashMap, SortedMap, labeling};
 /// Obtain from [`Orbits`] (skeleton symmetry) or from a
 /// [`Canonical`](crate::canonical::Canonical) labeling (colour-preserving
 /// symmetry).
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Orbit {
     sites: Vec<SiteId>,
 }
@@ -52,6 +53,7 @@ impl Orbit {
 /// sites. An empty molecule has no classes.
 ///
 /// Obtain via [`orbits`].
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Orbits {
     groups: Vec<Orbit>,
     index: SortedMap<SiteId, usize>,

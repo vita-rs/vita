@@ -12,7 +12,7 @@ const MULTIPLIER: u64 = 0x51_7c_c1_b7_27_22_0a_95;
 /// keys hash equally across runs.
 ///
 /// Use through [`FxHashSet`] and [`FxHashMap`] rather than directly.
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct FxHasher {
     hash: u64,
 }

@@ -11,6 +11,7 @@ use crate::{BondId, BondOrder, HasBondOrders, HasFormalCharges, HasRadicalElectr
 /// stands in for it. Bonds that were already localised are absent and unchanged.
 ///
 /// Obtain via [`kekulize`].
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Kekule {
     orders: SortedMap<BondId, BondOrder>,
 }
@@ -63,6 +64,14 @@ impl Kekule {
 pub struct WithKekule<'a, M> {
     mol: &'a M,
     kekule: &'a Kekule,
+}
+
+impl<M> Copy for WithKekule<'_, M> {}
+
+impl<M> Clone for WithKekule<'_, M> {
+    fn clone(&self) -> Self {
+        *self
+    }
 }
 
 forward_capabilities!(

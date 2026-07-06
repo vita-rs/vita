@@ -16,6 +16,7 @@ use crate::{BondId, HasBonds};
 /// neighbour — so the same ring always reads the same way.
 ///
 /// Obtain via [`Rings`].
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Ring {
     sites: Vec<SiteId>,
     bonds: Vec<BondId>,
@@ -43,6 +44,7 @@ impl Ring {
 /// cubane), the candidates' canonical order fixes one deterministically.
 ///
 /// Obtain via [`rings`].
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Rings {
     rings: Vec<Ring>,
     site_index: SortedMultimap<SiteId, usize>,

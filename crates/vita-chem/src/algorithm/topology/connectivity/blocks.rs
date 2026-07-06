@@ -10,6 +10,7 @@ use crate::{BondId, HasBonds};
 /// 2-connected subgraph holding at least one cycle.
 ///
 /// Obtain via [`Blocks::iter`], [`Blocks::of_site`], or [`Blocks::of_bond`].
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Block {
     sites: Vec<SiteId>,
     bonds: Vec<BondId>,
@@ -62,6 +63,7 @@ impl Block {
 /// bridge.
 ///
 /// Obtain via [`blocks`].
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Blocks {
     blocks: Vec<Block>,
     site_index: SortedMultimap<SiteId, usize>,

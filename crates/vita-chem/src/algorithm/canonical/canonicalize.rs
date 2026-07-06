@@ -23,6 +23,7 @@ use crate::{BondId, HasBonds};
 /// and with it the identity, is the same however they fall.
 ///
 /// Obtain via [`canonicalize`].
+#[derive(Clone, Debug)]
 pub struct Canonical<VK, EK> {
     order: Vec<SiteId>,
     ranks: SortedMap<SiteId, usize>,

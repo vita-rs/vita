@@ -5,7 +5,7 @@
 /// node `a` records `(edge, b)` and node `b` records `(edge, a)`.
 ///
 /// Obtain via [`build`](Self::build).
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct AdjacencyList {
     adj: Vec<Vec<(usize, usize)>>,
 }

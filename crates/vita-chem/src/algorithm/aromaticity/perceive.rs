@@ -16,6 +16,7 @@ use crate::{
 /// by the central bond are aromatic while that bond is not.
 ///
 /// Obtain via [`perceive`].
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Aromaticity {
     sites: Vec<SiteId>,
     bonds: Vec<BondId>,
@@ -89,6 +90,14 @@ impl Aromaticity {
 pub struct WithAromaticity<'a, M> {
     mol: &'a M,
     aromaticity: &'a Aromaticity,
+}
+
+impl<M> Copy for WithAromaticity<'_, M> {}
+
+impl<M> Clone for WithAromaticity<'_, M> {
+    fn clone(&self) -> Self {
+        *self
+    }
 }
 
 forward_capabilities!(

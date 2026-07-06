@@ -9,6 +9,7 @@
 /// returns the value of an unspecified one.
 ///
 /// Obtain via [`from_pairs`](Self::from_pairs).
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SortedMap<K, V> {
     entries: Vec<(K, V)>,
 }

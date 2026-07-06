@@ -18,6 +18,7 @@ use vita_core::SiteId;
 /// Fused, bridged, and spiro rings all coalesce into one system.
 ///
 /// Obtain from [`RingSystems`].
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RingSystem {
     sites: Vec<SiteId>,
 }
@@ -51,6 +52,7 @@ impl RingSystem {
 /// molecule has none.
 ///
 /// Obtain via [`Rings::systems`] or [`RingFamilies::systems`].
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RingSystems {
     systems: Vec<RingSystem>,
 }

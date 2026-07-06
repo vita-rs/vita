@@ -23,6 +23,7 @@ pub enum Role {
 /// once the side chains are stripped; an acyclic molecule has none.
 ///
 /// Obtain via [`framework`].
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Framework {
     roles: SortedMap<SiteId, Role>,
 }

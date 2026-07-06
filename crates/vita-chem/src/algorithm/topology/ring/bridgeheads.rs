@@ -15,6 +15,7 @@ use crate::{BondId, HasBonds};
 /// bicyclo[2.2.2]octane yields two.
 ///
 /// Obtain via [`bridgeheads`].
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Bridgeheads {
     sites: Vec<SiteId>,
 }

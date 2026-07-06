@@ -12,6 +12,7 @@ use super::BitSet;
 /// Vectors span the same `dimension` coordinates, fixed at construction.
 ///
 /// Obtain via [`new`](Self::new).
+#[derive(Debug)]
 pub struct Gf2Basis {
     rows: Vec<Option<BitSet>>,
     rank: usize,

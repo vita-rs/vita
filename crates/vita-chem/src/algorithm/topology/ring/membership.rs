@@ -11,6 +11,7 @@ use crate::{BondId, HasBonds};
 /// bonds are each held in ascending order.
 ///
 /// Obtain via [`membership`].
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RingMembership {
     sites: Vec<SiteId>,
     bonds: Vec<BondId>,
