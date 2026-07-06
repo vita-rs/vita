@@ -1,7 +1,7 @@
 use core::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign};
 
+use super::Vector3;
 use crate::Scalar;
-use crate::tensor::Vector3;
 
 /// A 3×3 matrix stored as three column vectors.
 pub struct Matrix3<T> {

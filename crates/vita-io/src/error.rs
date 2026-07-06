@@ -1,5 +1,4 @@
-use std::fmt;
-use std::io;
+use std::{fmt, io};
 
 /// Position in a data source where a parse error was detected.
 ///

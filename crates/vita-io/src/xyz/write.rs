@@ -3,7 +3,7 @@ use std::io::{self, Write};
 use vita_core::units::length::LengthUnit;
 use vita_core::{HasElements, HasPositions, Scalar};
 
-use super::error::Error;
+use super::Error;
 
 /// Configuration for writing a system as XYZ.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

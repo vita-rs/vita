@@ -5,8 +5,7 @@ use vita_core::tensor::Point3;
 use vita_core::units::length::{Angstrom, Length};
 use vita_core::{Element, Scalar};
 
-use super::error::{Error, ErrorKind, ParseError};
-use super::system::System;
+use super::{Error, ErrorKind, ParseError, System};
 use crate::Location;
 
 /// Begins reading XYZ data from `reader`.

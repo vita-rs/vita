@@ -9,8 +9,4 @@ pub use capability::{
     HasPartialCharges, HasRadicalElectrons,
 };
 
-pub use algorithm::aromaticity;
-pub use algorithm::canonical;
-pub use algorithm::isomorphism;
-pub use algorithm::topology;
-pub use algorithm::valence;
+pub use algorithm::{aromaticity, canonical, isomorphism, topology, valence};

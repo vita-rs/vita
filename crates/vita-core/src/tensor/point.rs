@@ -1,7 +1,7 @@
 use core::ops::{Add, AddAssign, Index, IndexMut, Mul, Sub, SubAssign};
 
+use super::Vector3;
 use crate::Scalar;
-use crate::tensor::Vector3;
 
 /// A point with three coordinates `x`, `y`, and `z`.
 pub struct Point3<T> {
