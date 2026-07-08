@@ -2,7 +2,7 @@ mod algorithm;
 mod capability;
 mod primitive;
 
-pub use primitive::{BondId, BondOrder, Hybridization};
+pub use primitive::{BondId, BondOrder, Hybridization, StereoKind, StereoLocus};
 
 pub use capability::{
     HasAromaticity, HasBondOrders, HasBonds, HasFormalCharges, HasHybridizations,
