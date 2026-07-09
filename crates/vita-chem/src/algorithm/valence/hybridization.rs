@@ -99,6 +99,7 @@ forward_capabilities!(
     HasFormalCharges,
     HasPartialCharges,
     HasRadicalElectrons,
+    HasStereoConfigurations,
 );
 
 impl<M: HasBondOrders + HasElements + HasFormalCharges + HasRadicalElectrons> HasHybridizations

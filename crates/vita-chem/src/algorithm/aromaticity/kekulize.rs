@@ -92,6 +92,7 @@ forward_capabilities!(
     HasHybridizations,
     HasPartialCharges,
     HasRadicalElectrons,
+    HasStereoConfigurations,
 );
 
 impl<M: HasBondOrders> HasBondOrders for WithKekule<'_, M> {

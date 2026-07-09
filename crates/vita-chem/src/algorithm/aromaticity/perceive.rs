@@ -118,6 +118,7 @@ forward_capabilities!(
     HasHybridizations,
     HasPartialCharges,
     HasRadicalElectrons,
+    HasStereoConfigurations,
 );
 
 impl<M: HasBonds> HasAromaticity for WithAromaticity<'_, M> {

@@ -8,7 +8,7 @@ pub use primitive::{
 
 pub use capability::{
     HasAromaticity, HasBondOrders, HasBonds, HasFormalCharges, HasHybridizations,
-    HasPartialCharges, HasRadicalElectrons,
+    HasPartialCharges, HasRadicalElectrons, HasStereoConfigurations,
 };
 
 pub use algorithm::{aromaticity, canonical, isomorphism, topology, valence};

@@ -252,6 +252,25 @@ macro_rules! forward_capabilities {
             }
         }
     };
+
+    (@one $wrapper:ident, $field:ident, HasStereoConfigurations) => {
+        impl<M: $crate::HasStereoConfigurations> $crate::HasStereoConfigurations for $wrapper<'_, M> {
+            fn stereo_configurations(
+                &self,
+            ) -> impl Iterator<Item = $crate::StereoConfiguration> + '_ {
+                self.$field.stereo_configurations()
+            }
+            fn stereo_configuration_count(&self) -> usize {
+                self.$field.stereo_configuration_count()
+            }
+            fn stereo_configuration(
+                &self,
+                locus: $crate::StereoLocus,
+            ) -> Option<$crate::StereoConfiguration> {
+                self.$field.stereo_configuration(locus)
+            }
+        }
+    };
 }
 
 pub(crate) use forward_capabilities;
