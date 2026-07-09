@@ -185,3 +185,280 @@ impl StereoConfiguration {
         &self.neighbors
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use vita_core::SiteId;
+
+    use crate::BondId;
+
+    fn s(n: u32) -> SiteId {
+        SiteId::new(n).unwrap()
+    }
+
+    fn b(n: u32) -> BondId {
+        BondId::new(n).unwrap()
+    }
+
+    fn neighbors(count: usize) -> Vec<SiteId> {
+        (1..=count as u32).map(s).collect()
+    }
+
+    #[test]
+    fn slot_count_is_the_neighbor_count_of_the_geometry() {
+        assert_eq!(StereoKind::Tetrahedral.slot_count(), 4);
+        assert_eq!(StereoKind::CisTrans.slot_count(), 4);
+        assert_eq!(StereoKind::Allene.slot_count(), 4);
+        assert_eq!(StereoKind::SquarePlanar.slot_count(), 4);
+        assert_eq!(StereoKind::TrigonalBipyramidal.slot_count(), 5);
+        assert_eq!(StereoKind::SquarePyramidal.slot_count(), 5);
+        assert_eq!(StereoKind::Octahedral.slot_count(), 6);
+        assert_eq!(StereoKind::TrigonalPrismatic.slot_count(), 6);
+    }
+
+    #[test]
+    fn configuration_count_is_the_number_of_distinct_stereoisomers() {
+        assert_eq!(StereoKind::Tetrahedral.configuration_count(), 2);
+        assert_eq!(StereoKind::CisTrans.configuration_count(), 2);
+        assert_eq!(StereoKind::Allene.configuration_count(), 2);
+        assert_eq!(StereoKind::SquarePlanar.configuration_count(), 3);
+        assert_eq!(StereoKind::TrigonalBipyramidal.configuration_count(), 20);
+        assert_eq!(StereoKind::SquarePyramidal.configuration_count(), 30);
+        assert_eq!(StereoKind::Octahedral.configuration_count(), 30);
+        assert_eq!(StereoKind::TrigonalPrismatic.configuration_count(), 120);
+    }
+
+    #[test]
+    fn chiral_geometries_are_chiral() {
+        assert!(StereoKind::Tetrahedral.is_chiral());
+        assert!(StereoKind::Allene.is_chiral());
+        assert!(StereoKind::TrigonalBipyramidal.is_chiral());
+        assert!(StereoKind::SquarePyramidal.is_chiral());
+        assert!(StereoKind::Octahedral.is_chiral());
+        assert!(StereoKind::TrigonalPrismatic.is_chiral());
+    }
+
+    #[test]
+    fn a_site_anchors_every_coordination_center() {
+        for kind in [
+            StereoKind::Tetrahedral,
+            StereoKind::SquarePlanar,
+            StereoKind::TrigonalBipyramidal,
+            StereoKind::SquarePyramidal,
+            StereoKind::Octahedral,
+            StereoKind::TrigonalPrismatic,
+        ] {
+            assert!(
+                StereoConfiguration::new(
+                    StereoLocus::Site(s(1)),
+                    kind,
+                    neighbors(kind.slot_count())
+                )
+                .is_some()
+            );
+        }
+    }
+
+    #[test]
+    fn a_bond_anchors_a_double_bond() {
+        assert!(
+            StereoConfiguration::new(StereoLocus::Bond(b(1)), StereoKind::CisTrans, neighbors(4),)
+                .is_some(),
+        );
+    }
+
+    #[test]
+    fn an_axis_anchors_an_allene() {
+        assert!(
+            StereoConfiguration::new(StereoLocus::Axis(s(1)), StereoKind::Allene, neighbors(4),)
+                .is_some(),
+        );
+    }
+
+    #[test]
+    fn locus_returns_the_anchor() {
+        let config = StereoConfiguration::new(
+            StereoLocus::Site(s(7)),
+            StereoKind::Tetrahedral,
+            neighbors(4),
+        )
+        .unwrap();
+        assert_eq!(config.locus(), StereoLocus::Site(s(7)));
+    }
+
+    #[test]
+    fn kind_returns_the_geometry() {
+        let config = StereoConfiguration::new(
+            StereoLocus::Site(s(1)),
+            StereoKind::Tetrahedral,
+            neighbors(4),
+        )
+        .unwrap();
+        assert_eq!(config.kind(), StereoKind::Tetrahedral);
+    }
+
+    #[test]
+    fn neighbors_are_returned_in_the_given_order() {
+        let order = [s(4), s(2), s(3), s(1)];
+        let config =
+            StereoConfiguration::new(StereoLocus::Site(s(9)), StereoKind::Tetrahedral, order)
+                .unwrap();
+        assert_eq!(config.neighbors(), order.as_slice());
+    }
+
+    #[test]
+    fn cis_trans_and_square_planar_are_not_chiral() {
+        assert!(!StereoKind::CisTrans.is_chiral());
+        assert!(!StereoKind::SquarePlanar.is_chiral());
+    }
+
+    #[test]
+    fn only_a_site_anchors_a_coordination_center() {
+        assert!(
+            StereoConfiguration::new(
+                StereoLocus::Bond(b(1)),
+                StereoKind::Tetrahedral,
+                neighbors(4)
+            )
+            .is_none()
+        );
+        assert!(
+            StereoConfiguration::new(
+                StereoLocus::Axis(s(1)),
+                StereoKind::Tetrahedral,
+                neighbors(4)
+            )
+            .is_none()
+        );
+    }
+
+    #[test]
+    fn only_a_bond_anchors_a_double_bond() {
+        assert!(
+            StereoConfiguration::new(StereoLocus::Site(s(1)), StereoKind::CisTrans, neighbors(4))
+                .is_none()
+        );
+        assert!(
+            StereoConfiguration::new(StereoLocus::Axis(s(1)), StereoKind::CisTrans, neighbors(4))
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn only_an_axis_anchors_an_allene() {
+        assert!(
+            StereoConfiguration::new(StereoLocus::Site(s(1)), StereoKind::Allene, neighbors(4))
+                .is_none()
+        );
+        assert!(
+            StereoConfiguration::new(StereoLocus::Bond(b(1)), StereoKind::Allene, neighbors(4))
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn new_rejects_an_empty_neighbor_list() {
+        assert!(
+            StereoConfiguration::new(
+                StereoLocus::Site(s(1)),
+                StereoKind::Tetrahedral,
+                neighbors(0)
+            )
+            .is_none()
+        );
+    }
+
+    #[test]
+    fn new_rejects_more_neighbors_than_the_slot_count() {
+        assert!(
+            StereoConfiguration::new(
+                StereoLocus::Site(s(1)),
+                StereoKind::Tetrahedral,
+                neighbors(5)
+            )
+            .is_none()
+        );
+    }
+
+    #[test]
+    fn loci_order_by_anchor_then_by_identifier() {
+        assert!(StereoLocus::Site(s(9)) < StereoLocus::Bond(b(1)));
+        assert!(StereoLocus::Bond(b(9)) < StereoLocus::Axis(s(1)));
+        assert!(StereoLocus::Site(s(1)) < StereoLocus::Site(s(2)));
+    }
+
+    #[test]
+    fn kinds_order_by_neighbor_count_then_configuration_count_then_locus() {
+        assert!(StereoKind::SquarePlanar < StereoKind::TrigonalBipyramidal);
+        assert!(StereoKind::SquarePyramidal < StereoKind::Octahedral);
+        assert!(StereoKind::TrigonalBipyramidal < StereoKind::SquarePyramidal);
+        assert!(StereoKind::Octahedral < StereoKind::TrigonalPrismatic);
+        assert!(StereoKind::Tetrahedral < StereoKind::CisTrans);
+        assert!(StereoKind::CisTrans < StereoKind::Allene);
+    }
+
+    #[test]
+    fn configurations_are_equal_exactly_when_their_parts_match() {
+        let base = StereoConfiguration::new(
+            StereoLocus::Site(s(1)),
+            StereoKind::Tetrahedral,
+            neighbors(4),
+        )
+        .unwrap();
+        assert_eq!(
+            base,
+            StereoConfiguration::new(
+                StereoLocus::Site(s(1)),
+                StereoKind::Tetrahedral,
+                neighbors(4),
+            )
+            .unwrap(),
+        );
+        assert_ne!(
+            base,
+            StereoConfiguration::new(
+                StereoLocus::Site(s(2)),
+                StereoKind::Tetrahedral,
+                neighbors(4),
+            )
+            .unwrap(),
+        );
+        assert_ne!(
+            base,
+            StereoConfiguration::new(
+                StereoLocus::Site(s(1)),
+                StereoKind::SquarePlanar,
+                neighbors(4),
+            )
+            .unwrap(),
+        );
+        assert_ne!(
+            base,
+            StereoConfiguration::new(
+                StereoLocus::Site(s(1)),
+                StereoKind::Tetrahedral,
+                [s(1), s(2), s(3), s(5)],
+            )
+            .unwrap(),
+        );
+    }
+
+    #[test]
+    fn reordering_the_neighbors_yields_a_different_configuration() {
+        let forward = StereoConfiguration::new(
+            StereoLocus::Site(s(1)),
+            StereoKind::Tetrahedral,
+            [s(1), s(2), s(3), s(4)],
+        )
+        .unwrap();
+        let swapped = StereoConfiguration::new(
+            StereoLocus::Site(s(1)),
+            StereoKind::Tetrahedral,
+            [s(2), s(1), s(3), s(4)],
+        )
+        .unwrap();
+        assert_ne!(forward, swapped);
+    }
+}
