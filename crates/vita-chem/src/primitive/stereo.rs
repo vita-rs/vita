@@ -51,3 +51,43 @@ pub enum StereoKind {
     /// A trigonal-prismatic centre (6 neighbours, 120 configurations).
     TrigonalPrismatic,
 }
+
+impl StereoKind {
+    /// Returns the number of neighbour slots the geometry arranges.
+    #[inline]
+    pub const fn slot_count(self) -> usize {
+        match self {
+            Self::Tetrahedral | Self::CisTrans | Self::Allene | Self::SquarePlanar => 4,
+            Self::TrigonalBipyramidal | Self::SquarePyramidal => 5,
+            Self::Octahedral | Self::TrigonalPrismatic => 6,
+        }
+    }
+
+    /// Returns the number of distinct configurations the geometry admits — the
+    /// stereoisomers its slots realise when every substituent differs.
+    #[inline]
+    pub const fn configuration_count(self) -> usize {
+        match self {
+            Self::Tetrahedral | Self::CisTrans | Self::Allene => 2,
+            Self::SquarePlanar => 3,
+            Self::TrigonalBipyramidal => 20,
+            Self::SquarePyramidal | Self::Octahedral => 30,
+            Self::TrigonalPrismatic => 120,
+        }
+    }
+
+    /// Returns whether the geometry is chiral — whether a configuration and its
+    /// mirror image are distinct, no rotation carrying one onto the other.
+    #[inline]
+    pub const fn is_chiral(self) -> bool {
+        match self {
+            Self::CisTrans | Self::SquarePlanar => false,
+            Self::Tetrahedral
+            | Self::Allene
+            | Self::TrigonalBipyramidal
+            | Self::SquarePyramidal
+            | Self::Octahedral
+            | Self::TrigonalPrismatic => true,
+        }
+    }
+}
