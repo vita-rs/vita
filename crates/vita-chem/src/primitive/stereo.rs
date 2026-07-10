@@ -23,6 +23,27 @@ pub enum StereoLocus {
     Axis(SiteId),
 }
 
+impl StereoLocus {
+    /// Whether this locus is the anchor `kind` lives on: a site for a coordination
+    /// centre, a bond for a double bond, an axis for an allene.
+    #[inline]
+    pub const fn anchors(self, kind: StereoKind) -> bool {
+        matches!(
+            (self, kind),
+            (
+                Self::Site(_),
+                StereoKind::Tetrahedral
+                    | StereoKind::SquarePlanar
+                    | StereoKind::TrigonalBipyramidal
+                    | StereoKind::SquarePyramidal
+                    | StereoKind::Octahedral
+                    | StereoKind::TrigonalPrismatic,
+            ) | (Self::Bond(_), StereoKind::CisTrans)
+                | (Self::Axis(_), StereoKind::Allene)
+        )
+    }
+}
+
 /// The kind of a stereogenic unit: the idealised local geometry whose rotation
 /// group fixes which of its neighbour orderings are equivalent.
 ///
@@ -137,9 +158,8 @@ impl StereoConfiguration {
     /// Builds a configuration at `locus` of `kind` from its `neighbors`, given in the
     /// order the kind's contract prescribes.
     ///
-    /// Returns `None` unless `locus` is the anchor `kind` lives on — a site for a
-    /// centre, a bond for a double bond, an axis for an allene — and the neighbour
-    /// count is the kind's [`StereoKind::slot_count`].
+    /// Returns `None` unless `locus` [anchors](StereoLocus::anchors) `kind` and its
+    /// neighbour count is the kind's [`StereoKind::slot_count`].
     #[inline]
     pub fn new(
         locus: StereoLocus,
@@ -147,20 +167,7 @@ impl StereoConfiguration {
         neighbors: impl IntoIterator<Item = SiteId>,
     ) -> Option<Self> {
         let neighbors: Vec<SiteId> = neighbors.into_iter().collect();
-        let anchored = matches!(
-            (locus, kind),
-            (
-                StereoLocus::Site(_),
-                StereoKind::Tetrahedral
-                    | StereoKind::SquarePlanar
-                    | StereoKind::TrigonalBipyramidal
-                    | StereoKind::SquarePyramidal
-                    | StereoKind::Octahedral
-                    | StereoKind::TrigonalPrismatic,
-            ) | (StereoLocus::Bond(_), StereoKind::CisTrans)
-                | (StereoLocus::Axis(_), StereoKind::Allene)
-        );
-        (anchored && neighbors.len() == kind.slot_count()).then_some(Self {
+        (locus.anchors(kind) && neighbors.len() == kind.slot_count()).then_some(Self {
             locus,
             kind,
             neighbors,
@@ -250,31 +257,18 @@ mod tests {
             StereoKind::Octahedral,
             StereoKind::TrigonalPrismatic,
         ] {
-            assert!(
-                StereoConfiguration::new(
-                    StereoLocus::Site(s(1)),
-                    kind,
-                    neighbors(kind.slot_count())
-                )
-                .is_some()
-            );
+            assert!(StereoLocus::Site(s(1)).anchors(kind), "{kind:?}");
         }
     }
 
     #[test]
     fn a_bond_anchors_a_double_bond() {
-        assert!(
-            StereoConfiguration::new(StereoLocus::Bond(b(1)), StereoKind::CisTrans, neighbors(4),)
-                .is_some(),
-        );
+        assert!(StereoLocus::Bond(b(1)).anchors(StereoKind::CisTrans));
     }
 
     #[test]
     fn an_axis_anchors_an_allene() {
-        assert!(
-            StereoConfiguration::new(StereoLocus::Axis(s(1)), StereoKind::Allene, neighbors(4),)
-                .is_some(),
-        );
+        assert!(StereoLocus::Axis(s(1)).anchors(StereoKind::Allene));
     }
 
     #[test]
@@ -316,6 +310,24 @@ mod tests {
 
     #[test]
     fn only_a_site_anchors_a_coordination_center() {
+        assert!(!StereoLocus::Bond(b(1)).anchors(StereoKind::Tetrahedral));
+        assert!(!StereoLocus::Axis(s(1)).anchors(StereoKind::Tetrahedral));
+    }
+
+    #[test]
+    fn only_a_bond_anchors_a_double_bond() {
+        assert!(!StereoLocus::Site(s(1)).anchors(StereoKind::CisTrans));
+        assert!(!StereoLocus::Axis(s(1)).anchors(StereoKind::CisTrans));
+    }
+
+    #[test]
+    fn only_an_axis_anchors_an_allene() {
+        assert!(!StereoLocus::Site(s(1)).anchors(StereoKind::Allene));
+        assert!(!StereoLocus::Bond(b(1)).anchors(StereoKind::Allene));
+    }
+
+    #[test]
+    fn new_rejects_a_kind_off_its_anchor() {
         assert!(
             StereoConfiguration::new(
                 StereoLocus::Bond(b(1)),
@@ -323,38 +335,6 @@ mod tests {
                 neighbors(4)
             )
             .is_none()
-        );
-        assert!(
-            StereoConfiguration::new(
-                StereoLocus::Axis(s(1)),
-                StereoKind::Tetrahedral,
-                neighbors(4)
-            )
-            .is_none()
-        );
-    }
-
-    #[test]
-    fn only_a_bond_anchors_a_double_bond() {
-        assert!(
-            StereoConfiguration::new(StereoLocus::Site(s(1)), StereoKind::CisTrans, neighbors(4))
-                .is_none()
-        );
-        assert!(
-            StereoConfiguration::new(StereoLocus::Axis(s(1)), StereoKind::CisTrans, neighbors(4))
-                .is_none()
-        );
-    }
-
-    #[test]
-    fn only_an_axis_anchors_an_allene() {
-        assert!(
-            StereoConfiguration::new(StereoLocus::Site(s(1)), StereoKind::Allene, neighbors(4))
-                .is_none()
-        );
-        assert!(
-            StereoConfiguration::new(StereoLocus::Bond(b(1)), StereoKind::Allene, neighbors(4))
-                .is_none()
         );
     }
 
