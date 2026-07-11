@@ -247,15 +247,12 @@ mod tests {
     }
 
     #[test]
-    fn output_is_independent_of_input_order() {
+    fn paths_are_independent_of_input_order() {
         let reordered = Mol {
             sites: vec![s(4), s(3), s(2), s(1)],
             bonds: vec![b(4), b(3), b(2), b(1)],
             endpoints: vec![(s(1), s(4)), (s(3), s(4)), (s(2), s(3)), (s(1), s(2))],
         };
-        assert_eq!(
-            listed(&paths(&square(), s(1), s(3))),
-            listed(&paths(&reordered, s(1), s(3)))
-        );
+        assert_eq!(paths(&square(), s(1), s(3)), paths(&reordered, s(1), s(3)));
     }
 }

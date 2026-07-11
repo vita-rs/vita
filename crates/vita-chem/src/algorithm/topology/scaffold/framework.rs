@@ -368,14 +368,6 @@ mod tests {
                 (s(1), s(2)),
             ],
         };
-        let profile = |m: &Mol| {
-            let fw = framework(m);
-            (
-                fw.sites().collect::<Vec<_>>(),
-                fw.linkers().collect::<Vec<_>>(),
-                fw.side_chains().collect::<Vec<_>>(),
-            )
-        };
-        assert_eq!(profile(&decorated()), profile(&shuffled));
+        assert_eq!(framework(&decorated()), framework(&shuffled));
     }
 }

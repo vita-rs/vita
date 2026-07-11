@@ -184,9 +184,6 @@ mod tests {
     fn lookup_is_independent_of_input_order() {
         let a = SortedMultimap::from_pairs([(3, 'c'), (1, 'd'), (2, 'b'), (1, 'a')]);
         let b = SortedMultimap::from_pairs([(1, 'a'), (2, 'b'), (1, 'd'), (3, 'c')]);
-        assert_eq!(a.iter().collect::<Vec<_>>(), b.iter().collect::<Vec<_>>());
-        for key in [1, 2, 3] {
-            assert_eq!(a.get(&key), b.get(&key), "values for {key} differ");
-        }
+        assert_eq!(a, b);
     }
 }

@@ -1066,14 +1066,8 @@ mod tests {
 
     #[test]
     fn families_are_independent_of_input_order() {
-        let shape = |m: &Mol| -> Vec<(usize, Vec<SiteId>)> {
-            families(m)
-                .iter()
-                .map(|f| (f.ring_size(), f.sites().collect::<Vec<_>>()))
-                .collect()
-        };
         for m in [fused(), bridged_square(), cube()] {
-            assert_eq!(shape(&m), shape(&reversed(&m)));
+            assert_eq!(families(&m), families(&reversed(&m)));
         }
     }
 

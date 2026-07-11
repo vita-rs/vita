@@ -333,7 +333,7 @@ mod tests {
     }
 
     #[test]
-    fn output_is_independent_of_input_order() {
+    fn bridgeheads_are_independent_of_input_order() {
         let reordered = Mol {
             sites: (1..=8).rev().map(s).collect(),
             bonds: (1..=9).rev().map(b).collect(),
@@ -349,9 +349,6 @@ mod tests {
                 (s(1), s(2)),
             ],
         };
-        assert_eq!(
-            bridgeheads(&bicyclo222()).iter().collect::<Vec<_>>(),
-            bridgeheads(&reordered).iter().collect::<Vec<_>>()
-        );
+        assert_eq!(bridgeheads(&bicyclo222()), bridgeheads(&reordered));
     }
 }

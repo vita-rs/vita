@@ -557,15 +557,7 @@ mod tests {
     }
 
     #[test]
-    fn output_is_independent_of_input_order() {
-        let shape = |m: &Mol| -> (Vec<Vec<SiteId>>, Vec<SiteId>, Vec<BondId>) {
-            let bl = blocks(m);
-            (
-                bl.iter().map(|block| block.sites().collect()).collect(),
-                bl.cuts().collect(),
-                bl.bridges().collect(),
-            )
-        };
-        assert_eq!(shape(&dumbbell()), shape(&reversed(&dumbbell())));
+    fn blocks_are_independent_of_input_order() {
+        assert_eq!(blocks(&dumbbell()), blocks(&reversed(&dumbbell())));
     }
 }

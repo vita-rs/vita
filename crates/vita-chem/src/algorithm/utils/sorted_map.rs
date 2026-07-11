@@ -171,13 +171,6 @@ mod tests {
     fn lookup_is_independent_of_insertion_order() {
         let a = SortedMap::from_pairs([(3, 'c'), (1, 'a'), (2, 'b')]);
         let b = SortedMap::from_pairs([(2, 'b'), (3, 'c'), (1, 'a')]);
-        assert_eq!(
-            a.iter().collect::<Vec<_>>(),
-            b.iter().collect::<Vec<_>>(),
-            "iteration order differs",
-        );
-        for k in [1, 2, 3] {
-            assert_eq!(a.get(&k), b.get(&k), "lookup of {k} differs");
-        }
+        assert_eq!(a, b);
     }
 }

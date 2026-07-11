@@ -321,7 +321,7 @@ mod tests {
     }
 
     #[test]
-    fn output_is_independent_of_input_order() {
+    fn components_are_independent_of_input_order() {
         let canonical = Mol {
             sites: vec![s(1), s(2), s(3), s(4), s(5)],
             bonds: vec![b(1), b(2), b(3)],
@@ -332,12 +332,6 @@ mod tests {
             bonds: vec![b(3), b(1), b(2)],
             endpoints: vec![(s(4), s(5)), (s(1), s(2)), (s(2), s(3))],
         };
-        let groups = |m: &Mol| -> Vec<Vec<SiteId>> {
-            components(m)
-                .iter()
-                .map(|group| group.iter().collect())
-                .collect()
-        };
-        assert_eq!(groups(&canonical), groups(&shuffled));
+        assert_eq!(components(&canonical), components(&shuffled));
     }
 }

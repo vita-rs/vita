@@ -438,17 +438,7 @@ mod tests {
 
     #[test]
     fn metrics_are_independent_of_input_order() {
-        let profile = |m: &Mol| {
-            let d = distances(m);
-            (
-                d.diameter(),
-                d.radius(),
-                d.center().collect::<Vec<_>>(),
-                d.peripheral().collect::<Vec<_>>(),
-                d.wiener(),
-            )
-        };
-        assert_eq!(profile(&star()), profile(&reversed(&star())));
-        assert_eq!(profile(&path()), profile(&reversed(&path())));
+        assert_eq!(distances(&star()), distances(&reversed(&star())));
+        assert_eq!(distances(&path()), distances(&reversed(&path())));
     }
 }

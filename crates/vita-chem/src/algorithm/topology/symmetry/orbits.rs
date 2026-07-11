@@ -322,12 +322,6 @@ mod tests {
             bonds: vec![b(2), b(1)],
             endpoints: vec![(s(2), s(3)), (s(1), s(2))],
         };
-        let classes = |mol: &Mol| -> Vec<Vec<SiteId>> {
-            orbits(mol)
-                .iter()
-                .map(|class| class.iter().collect())
-                .collect()
-        };
-        assert_eq!(classes(&path()), classes(&reordered));
+        assert_eq!(orbits(&path()), orbits(&reordered));
     }
 }

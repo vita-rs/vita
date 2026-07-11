@@ -374,10 +374,6 @@ mod tests {
                 (s(1), s(3)),
             ],
         };
-        let parts = |mol: &Mol| {
-            let m = membership(mol);
-            (m.sites().collect::<Vec<_>>(), m.bonds().collect::<Vec<_>>())
-        };
-        assert_eq!(parts(&dumbbell()), parts(&shuffled));
+        assert_eq!(membership(&dumbbell()), membership(&shuffled));
     }
 }

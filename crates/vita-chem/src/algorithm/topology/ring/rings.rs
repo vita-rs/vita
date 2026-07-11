@@ -709,12 +709,6 @@ mod tests {
                 (s(1), s(3)),
             ],
         };
-        let sites = |mol: &Mol| -> Vec<Vec<SiteId>> {
-            rings(mol)
-                .iter()
-                .map(|ring| ring.sites().to_vec())
-                .collect()
-        };
-        assert_eq!(sites(&triangle_and_square()), sites(&shuffled));
+        assert_eq!(rings(&triangle_and_square()), rings(&shuffled));
     }
 }
