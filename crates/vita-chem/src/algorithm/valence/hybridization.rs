@@ -303,7 +303,7 @@ mod tests {
     }
 
     #[test]
-    fn view_forwards_other_capabilities() {
+    fn view_forwards_the_skeleton() {
         let mol = atom("C", 0, 0, &[BondOrder::Double]);
         let view = WithHybridizations::new(&mol);
         assert_eq!(view.element(s(1)), elem("C"));

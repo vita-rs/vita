@@ -176,8 +176,6 @@ mod tests {
 
     use vita_core::HasSites;
 
-    use crate::BondId;
-
     fn s(n: u32) -> SiteId {
         SiteId::new(n).unwrap()
     }

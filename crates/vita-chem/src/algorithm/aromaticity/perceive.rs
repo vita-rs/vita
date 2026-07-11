@@ -383,7 +383,6 @@ mod tests {
     use vita_core::{Element, HasSites};
 
     use crate::BondOrder::{Aromatic, Double, Single};
-    use crate::{BondId, HasAromaticity};
 
     fn s(n: u32) -> SiteId {
         SiteId::new(n).unwrap()
@@ -1176,13 +1175,6 @@ mod tests {
     }
 
     #[test]
-    fn perception_is_independent_of_input_order() {
-        let forward: Vec<BondId> = perceive(&benzene()).bonds().collect();
-        let backward: Vec<BondId> = perceive(&reversed(&benzene())).bonds().collect();
-        assert_eq!(forward, backward);
-    }
-
-    #[test]
     fn bound_view_answers_the_aromaticity_capability() {
         let mol = benzene();
         let aromaticity = perceive(&mol);
@@ -1201,5 +1193,10 @@ mod tests {
         assert_eq!(view.element(s(1)), Element::from_symbol("C").unwrap());
         assert_eq!(view.bond_endpoints(b(1)), mol.bond_endpoints(b(1)));
         assert_eq!(view.bond_count(), mol.bond_count());
+    }
+
+    #[test]
+    fn perception_is_independent_of_input_order() {
+        assert_eq!(perceive(&benzene()), perceive(&reversed(&benzene())));
     }
 }

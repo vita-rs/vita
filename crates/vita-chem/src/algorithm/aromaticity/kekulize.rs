@@ -239,7 +239,7 @@ mod tests {
     use vita_core::{Element, HasSites};
 
     use crate::BondOrder::{Aromatic, Double, Single};
-    use crate::{BondId, HasBonds};
+    use crate::HasBonds;
 
     fn s(n: u32) -> SiteId {
         SiteId::new(n).unwrap()
@@ -875,18 +875,6 @@ mod tests {
     }
 
     #[test]
-    fn resolution_is_independent_of_input_order() {
-        let resolved = |m: &Mol| -> Vec<BondId> {
-            kekulize(m)
-                .unwrap()
-                .orders()
-                .map(|(bond, _)| bond)
-                .collect()
-        };
-        assert_eq!(resolved(&benzene()), resolved(&reversed(&benzene())));
-    }
-
-    #[test]
     fn bound_view_answers_the_bond_order_capability() {
         let mol = benzene();
         let kekule = kekulize(&mol).unwrap();
@@ -902,5 +890,17 @@ mod tests {
         let view = kekule.bind(&mol);
         assert_eq!(view.bond_count(), mol.bond_count());
         assert_eq!(view.bond_endpoints(b(1)), mol.bond_endpoints(b(1)));
+    }
+
+    #[test]
+    fn resolution_is_independent_of_input_order() {
+        let resolved = |m: &Mol| -> Vec<BondId> {
+            kekulize(m)
+                .unwrap()
+                .orders()
+                .map(|(bond, _)| bond)
+                .collect()
+        };
+        assert_eq!(resolved(&benzene()), resolved(&reversed(&benzene())));
     }
 }

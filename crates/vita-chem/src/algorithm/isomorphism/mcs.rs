@@ -421,7 +421,7 @@ mod tests {
     }
 
     #[test]
-    fn an_empty_molecule_shares_nothing() {
+    fn empty_molecule_shares_nothing() {
         let c = common(&empty(), &ethanol());
         assert_eq!(c.len(), 0);
         assert!(c.is_empty());

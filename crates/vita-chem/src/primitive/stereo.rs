@@ -197,10 +197,6 @@ impl StereoConfiguration {
 mod tests {
     use super::*;
 
-    use vita_core::SiteId;
-
-    use crate::BondId;
-
     fn s(n: u32) -> SiteId {
         SiteId::new(n).unwrap()
     }

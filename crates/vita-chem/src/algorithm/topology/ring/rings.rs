@@ -339,7 +339,6 @@ mod tests {
 
     use vita_core::HasSites;
 
-    use crate::BondId;
     use crate::topology::ring::membership;
 
     fn s(n: u32) -> SiteId {
