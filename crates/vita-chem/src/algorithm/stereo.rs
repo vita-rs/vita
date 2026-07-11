@@ -405,8 +405,14 @@ fn apply(permutation: &[u8], order: [u8; MAX_SLOTS]) -> [u8; MAX_SLOTS] {
     image
 }
 
-/// The neighbours' ranks relabelled to their relative order `0..k`, stable under
-/// ties so the mapping is a total function of the ranks alone.
+/// The neighbours' ranks relabelled to their relative order — each slot the count
+/// of neighbours of strictly lower rank.
+///
+/// Ties collapse: equal ranks share a slot value, so the result is a function of
+/// the ranks alone, blind to the order the neighbours were given in. Ranks a
+/// symmetry cannot yet tell apart therefore reduce alike, which is what lets the
+/// order refine a coloring — where the ranks are the current symmetry classes,
+/// not a total labeling — without depending on that labeling.
 fn relative_order(neighbors: &[SiteId], rank: impl Fn(SiteId) -> usize) -> [u8; MAX_SLOTS] {
     let mut ranks = [0usize; MAX_SLOTS];
     for (slot, &neighbor) in neighbors.iter().enumerate() {
@@ -414,10 +420,9 @@ fn relative_order(neighbors: &[SiteId], rank: impl Fn(SiteId) -> usize) -> [u8; 
     }
     let mut order = [0u8; MAX_SLOTS];
     for slot in 0..neighbors.len() {
-        let smaller = (0..neighbors.len())
-            .filter(|&other| (ranks[other], other) < (ranks[slot], slot))
-            .count();
-        order[slot] = smaller as u8;
+        order[slot] = (0..neighbors.len())
+            .filter(|&other| ranks[other] < ranks[slot])
+            .count() as u8;
     }
     order
 }
@@ -738,7 +743,7 @@ mod tests {
     }
 
     #[test]
-    fn relative_order_ranks_the_neighbors_by_magnitude() {
+    fn relative_order_ranks_the_neighbors_by_magnitude_collapsing_ties() {
         let neighbors = [s(1), s(2), s(3), s(4)];
         let rank = |site| {
             if site == s(2) || site == s(4) {
@@ -749,7 +754,7 @@ mod tests {
                 30
             }
         };
-        assert_eq!(relative_order(&neighbors, rank), [3, 0, 2, 1, 0, 0]);
+        assert_eq!(relative_order(&neighbors, rank), [3, 0, 2, 0, 0, 0]);
     }
 
     #[test]

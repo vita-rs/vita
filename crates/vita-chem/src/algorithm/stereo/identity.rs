@@ -1,90 +1,119 @@
 use std::cmp::Ordering;
+use std::hash::{Hash, Hasher};
 
 use vita_core::SiteId;
 
 use super::{Token, geometry};
 use crate::algorithm::canonical::{Canonical, canonicalize};
+use crate::algorithm::utils::FxHashMap;
 use crate::{BondId, HasStereoConfigurations, StereoKind, StereoLocus};
 
-/// A configuration reduced to an arrangement-invariant fact: the orbit its locus
-/// anchors, its kind, and its class token.
-type Entry = (OrbitKey, StereoKind, Token);
+/// The stereo the configurations anchored at a site carry, each a `(kind, token)`
+/// pair kept sorted — a set that colors the site during refinement and appears in
+/// the canonical form.
+type Signal = Vec<(StereoKind, Token)>;
 
-/// The canonical ranks of the orbits a locus anchors — the key under which
-/// symmetry-equivalent configurations are pooled, so which of two equivalent centres
-/// takes which rank cannot change the identity.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-struct OrbitKey(u64);
+/// A canonical labeling refined by stereochemistry: the graph and the caller's
+/// coloring, further split by the configurations laid over it.
+type Configured<VK, EK> = Canonical<(VK, Signal), EK>;
 
-/// The stereochemistry of a molecule, reduced against a canonical labeling.
+/// The stereo-refined canonical form of a molecule.
 ///
-/// Each configuration becomes an [`Entry`] keyed on the orbit it anchors; pooling
-/// symmetry-equivalent loci into a sorted set makes the layer invariant to the atom
-/// order and to the arrangement of an orbit's shared ranks — which is what lets a
-/// meso form register as its own mirror image.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-struct StereoLayer {
-    entries: Vec<Entry>,
+/// Constitution and stereochemistry are canonicalized together: each
+/// configuration reduces to a token relative to the current symmetry classes, the
+/// tokens color their anchors, and the labeling is recomputed until the classes
+/// settle — a fixpoint that resolves even a pseudo-asymmetric center, whose
+/// stereogenicity turns on the configurations of its neighbors. `reflect` folds
+/// in each configuration's mirror image instead, giving the enantiomer's form.
+///
+/// The tokens sit in the coloring, so the form tells apart stereoisomers a bare
+/// constitution cannot; being a canonical form, it is blind to the order the
+/// atoms arrived in.
+fn refined<M, VK, EK>(
+    mol: &M,
+    site_key: &impl Fn(SiteId) -> VK,
+    bond_key: &impl Fn(BondId) -> EK,
+    reflect: bool,
+) -> Configured<VK, EK>
+where
+    M: HasStereoConfigurations,
+    VK: Ord,
+    EK: Ord,
+{
+    let mut signal: FxHashMap<SiteId, Signal> = FxHashMap::default();
+    let mut classes = 0;
+    loop {
+        let canon = canonicalize(
+            mol,
+            |site| {
+                (
+                    site_key(site),
+                    signal.get(&site).cloned().unwrap_or_default(),
+                )
+            },
+            bond_key,
+        );
+        let count = canon.orbits().count();
+        if count == classes {
+            return canon;
+        }
+        classes = count;
+        signal = signals(mol, &canon, reflect);
+    }
 }
 
-impl StereoLayer {
-    /// Reduces `mol`'s configurations against `canon`.
-    fn of<M, VK, EK>(mol: &M, canon: &Canonical<VK, EK>) -> Self
-    where
-        M: HasStereoConfigurations,
-    {
-        let rank = |site: SiteId| {
-            canon
-                .rank(site)
-                .expect("a configuration's site is in the molecule")
-        };
-        let orbit_rank = |site: SiteId| {
-            canon
-                .orbit(site)
-                .expect("a configuration's site is in the molecule")
-                .iter()
-                .map(rank)
-                .min()
-                .expect("an orbit is non-empty") as u64
-        };
-        let key = |locus: StereoLocus| match locus {
-            StereoLocus::Site(site) | StereoLocus::Axis(site) => OrbitKey(orbit_rank(site)),
+/// The stereo signal every anchor carries under a labeling: each configuration's
+/// token, mirrored when `reflect`, filed against the atoms its locus pins.
+fn signals<M, VK, EK>(
+    mol: &M,
+    canon: &Configured<VK, EK>,
+    reflect: bool,
+) -> FxHashMap<SiteId, Signal>
+where
+    M: HasStereoConfigurations,
+{
+    let class = |site: SiteId| {
+        canon
+            .orbit(site)
+            .expect("a configuration's site is in the molecule")
+            .iter()
+            .map(|member| {
+                canon
+                    .rank(member)
+                    .expect("an orbit member is in the molecule")
+            })
+            .min()
+            .expect("an orbit is non-empty")
+    };
+
+    let mut signal: FxHashMap<SiteId, Signal> = FxHashMap::default();
+    let mut file = |anchor: SiteId, entry: (StereoKind, Token)| {
+        signal.entry(anchor).or_default().push(entry);
+    };
+    for config in mol.stereo_configurations() {
+        let geometry = geometry(config.kind());
+        let token = geometry.token(config.neighbors(), class);
+        let entry = (
+            config.kind(),
+            if reflect {
+                geometry.mirror(token)
+            } else {
+                token
+            },
+        );
+        match config.locus() {
+            StereoLocus::Site(site) | StereoLocus::Axis(site) => file(site, entry),
             StereoLocus::Bond(bond) => {
                 let (a, b) = mol.bond_endpoints(bond);
-                let (lo, hi) = (
-                    orbit_rank(a).min(orbit_rank(b)),
-                    orbit_rank(a).max(orbit_rank(b)),
-                );
-                OrbitKey(lo << 32 | hi)
+                file(a, entry);
+                file(b, entry);
             }
-        };
-
-        let mut entries: Vec<Entry> = mol
-            .stereo_configurations()
-            .map(|config| {
-                let class = geometry(config.kind()).token(config.neighbors(), rank);
-                (key(config.locus()), config.kind(), class)
-            })
-            .collect();
-        entries.sort_unstable();
-        StereoLayer { entries }
+        }
     }
-
-    /// The layer of the mirror image: every token reflected, then re-sorted.
-    fn mirror(&self) -> Self {
-        let mut entries: Vec<Entry> = self
-            .entries
-            .iter()
-            .map(|&(key, kind, class)| (key, kind, geometry(kind).mirror(class)))
-            .collect();
-        entries.sort_unstable();
-        StereoLayer { entries }
+    for tokens in signal.values_mut() {
+        tokens.sort_unstable();
     }
-
-    /// Returns `true` if the molecule is chiral.
-    fn is_chiral(&self) -> bool {
-        self.entries != self.mirror().entries
-    }
+    signal
 }
 
 /// How two molecules relate stereochemically.
@@ -100,20 +129,71 @@ pub enum StereoRelationship {
     Unrelated,
 }
 
-/// The stereo-aware identity of a molecule: its canonical constitution together with
-/// the stereochemistry laid over it.
+/// The stereo-aware identity of a molecule: its constitution and the
+/// stereochemistry laid over it, canonicalized as one.
 ///
-/// Two molecules a coloring makes isomorphic share a form exactly when they are the
-/// same stereoisomer, so a `StereoForm` compares, orders, and hashes as a portable
-/// identity — key a registry by it — and answers the questions the constitution
-/// alone cannot: whether the molecule is chiral, and how it relates to another.
+/// Two molecules a coloring makes isomorphic share a form exactly when they are
+/// the same stereoisomer — pseudo-asymmetric centers and all — so a `StereoForm`
+/// compares, orders, and hashes as a portable identity, and answers the questions
+/// the constitution alone cannot: whether the molecule is chiral, and how it
+/// relates to another.
 ///
 /// Obtain via [`form`].
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug)]
 pub struct StereoForm<VK, EK> {
-    canonical: Canonical<VK, EK>,
-    layer: StereoLayer,
+    constitution: Canonical<VK, EK>,
+    // The stereo-aware canonical form: the identity molecules of the same
+    // stereoisomer share, and the basis of `Eq`, `Ord`, and `Hash`. The
+    // constitution and mirror are functions of it, kept only for `constitution`,
+    // `is_chiral`, and `relate`.
+    configured: Configured<VK, EK>,
+    mirror: Configured<VK, EK>,
 }
+
+impl<VK, EK> StereoForm<VK, EK> {
+    /// Returns `true` if the molecule is chiral: not superimposable on its mirror
+    /// image. A molecule with no stereocenters, or a meso form whose centers
+    /// cancel, is achiral.
+    pub fn is_chiral(&self) -> bool
+    where
+        VK: PartialEq,
+        EK: PartialEq,
+    {
+        self.configured != self.mirror
+    }
+
+    /// The canonical constitution underlying this form — its identity blind to
+    /// stereochemistry, which enantiomers share.
+    pub fn constitution(&self) -> &Canonical<VK, EK> {
+        &self.constitution
+    }
+
+    /// How this molecule relates to `other`: the same stereoisomer, its
+    /// enantiomer, a diastereomer, or — if their constitutions differ — unrelated.
+    pub fn relate(&self, other: &StereoForm<VK, EK>) -> StereoRelationship
+    where
+        VK: PartialEq,
+        EK: PartialEq,
+    {
+        if self.constitution != other.constitution {
+            StereoRelationship::Unrelated
+        } else if self.configured == other.configured {
+            StereoRelationship::Identical
+        } else if self.configured == other.mirror {
+            StereoRelationship::Enantiomers
+        } else {
+            StereoRelationship::Diastereomers
+        }
+    }
+}
+
+impl<VK: PartialEq, EK: PartialEq> PartialEq for StereoForm<VK, EK> {
+    fn eq(&self, other: &Self) -> bool {
+        self.configured == other.configured
+    }
+}
+
+impl<VK: Eq, EK: Eq> Eq for StereoForm<VK, EK> {}
 
 impl<VK: Ord, EK: Ord> PartialOrd for StereoForm<VK, EK> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
@@ -123,52 +203,28 @@ impl<VK: Ord, EK: Ord> PartialOrd for StereoForm<VK, EK> {
 
 impl<VK: Ord, EK: Ord> Ord for StereoForm<VK, EK> {
     fn cmp(&self, other: &Self) -> Ordering {
-        self.canonical
-            .cmp(&other.canonical)
-            .then_with(|| self.layer.cmp(&other.layer))
+        self.configured.cmp(&other.configured)
     }
 }
 
-impl<VK, EK> StereoForm<VK, EK> {
-    /// Returns `true` if the molecule is chiral: not superimposable on its mirror
-    /// image. A molecule with no stereocentres, or a meso form whose centres cancel,
-    /// is achiral.
-    pub fn is_chiral(&self) -> bool {
-        self.layer.is_chiral()
-    }
-
-    /// The canonical constitution underlying this form.
-    pub fn constitution(&self) -> &Canonical<VK, EK> {
-        &self.canonical
-    }
-}
-
-impl<VK: PartialEq, EK: PartialEq> StereoForm<VK, EK> {
-    /// How this molecule relates to `other`: the same stereoisomer, its enantiomer, a
-    /// diastereomer, or — if their constitutions differ — unrelated.
-    pub fn relate(&self, other: &StereoForm<VK, EK>) -> StereoRelationship {
-        if self.canonical != other.canonical {
-            StereoRelationship::Unrelated
-        } else if self.layer == other.layer {
-            StereoRelationship::Identical
-        } else if self.layer == other.layer.mirror() {
-            StereoRelationship::Enantiomers
-        } else {
-            StereoRelationship::Diastereomers
-        }
+impl<VK: Hash, EK: Hash> Hash for StereoForm<VK, EK> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.configured.hash(state);
     }
 }
 
 /// The stereo-aware identity of a molecule under the caller's coloring.
 ///
-/// Canonically labels the constitution (as [`canonicalize`]) and reduces the
-/// declared configurations against it. `site_key` and `bond_key` define identity
-/// exactly as they do for the constitution.
+/// Canonically labels the constitution (as [`canonicalize`]) and, over it, the
+/// declared configurations — refined to a fixpoint so stereochemistry that breaks
+/// a constitutional symmetry is resolved. `site_key` and `bond_key` define
+/// identity exactly as they do for the constitution.
 ///
 /// # Complexity
 ///
-/// One canonical labeling, O(V · (V + E) · log V) time and O(V + E) space, over the
-/// molecule's `V` sites and `E` bonds.
+/// A bounded number of canonical labelings, each O(V · (V + E) · log V) time and
+/// O(V + E) space, over the molecule's `V` sites and `E` bonds — one refinement
+/// per constitutional symmetry stereochemistry breaks, at most `V`.
 pub fn form<M, VK, EK>(
     mol: &M,
     site_key: impl Fn(SiteId) -> VK,
@@ -179,9 +235,11 @@ where
     VK: Ord,
     EK: Ord,
 {
-    let canonical = canonicalize(mol, site_key, bond_key);
-    let layer = StereoLayer::of(mol, &canonical);
-    StereoForm { canonical, layer }
+    StereoForm {
+        constitution: canonicalize(mol, &site_key, &bond_key),
+        configured: refined(mol, &site_key, &bond_key, false),
+        mirror: refined(mol, &site_key, &bond_key, true),
+    }
 }
 
 #[cfg(test)]
@@ -189,7 +247,6 @@ mod tests {
     use super::*;
 
     use std::collections::hash_map::DefaultHasher;
-    use std::hash::{Hash, Hasher};
 
     use vita_core::HasSites;
 
@@ -283,14 +340,6 @@ mod tests {
         }
     }
 
-    fn plain() -> Mol {
-        mol(
-            &[(1, 0), (2, 1), (3, 2), (4, 3), (5, 4)],
-            &[(1, 1, 2), (2, 1, 3), (3, 1, 4), (4, 1, 5)],
-            Vec::new(),
-        )
-    }
-
     fn single(order: [u32; 4]) -> Mol {
         mol(
             &[(1, 0), (2, 1), (3, 2), (4, 3), (5, 4)],
@@ -307,7 +356,7 @@ mod tests {
         )
     }
 
-    fn paired(first: [u32; 4], second: [u32; 4]) -> Mol {
+    fn tartaric(first: [u32; 4], second: [u32; 4]) -> Mol {
         mol(
             &[
                 (1, 0),
@@ -332,34 +381,58 @@ mod tests {
         )
     }
 
-    fn distinct_pair(first: [u32; 4], second: [u32; 4]) -> Mol {
+    fn trihydroxyglutaric(first: [u32; 4], middle: [u32; 4], third: [u32; 4]) -> Mol {
         mol(
             &[
                 (1, 0),
-                (2, 1),
-                (3, 2),
-                (4, 3),
-                (5, 0),
-                (6, 4),
-                (7, 5),
-                (8, 6),
+                (2, 0),
+                (3, 0),
+                (4, 1),
+                (5, 2),
+                (6, 1),
+                (7, 2),
+                (8, 1),
+                (9, 2),
+                (10, 3),
+                (11, 3),
             ],
             &[
                 (1, 1, 2),
-                (2, 1, 3),
+                (2, 2, 3),
                 (3, 1, 4),
                 (4, 1, 5),
-                (5, 5, 6),
-                (6, 5, 7),
-                (7, 5, 8),
+                (5, 1, 10),
+                (6, 2, 6),
+                (7, 2, 7),
+                (8, 3, 8),
+                (9, 3, 9),
+                (10, 3, 11),
             ],
-            vec![config(1, first), config(5, second)],
+            vec![config(1, first), config(2, middle), config(3, third)],
+        )
+    }
+
+    fn cis_trans(bond: u32, order: [u32; 4]) -> StereoConfiguration {
+        StereoConfiguration::new(
+            StereoLocus::Bond(b(bond)),
+            StereoKind::CisTrans,
+            order.map(s),
+        )
+        .unwrap()
+    }
+
+    fn butene(order: [u32; 4]) -> Mol {
+        mol(
+            &[(1, 1), (2, 0), (3, 0), (4, 1), (5, 2), (6, 2)],
+            &[(1, 2, 3), (2, 1, 2), (3, 3, 4), (4, 2, 5), (5, 3, 6)],
+            vec![cis_trans(1, order)],
         )
     }
 
     #[test]
     fn a_molecule_without_configurations_is_achiral() {
-        assert!(!stereo_form(&plain()).is_chiral());
+        let plain = mol(&[(1, 0), (2, 1)], &[(1, 1, 2)], Vec::new());
+        assert!(!stereo_form(&plain).is_chiral());
     }
 
     #[test]
@@ -369,12 +442,47 @@ mod tests {
 
     #[test]
     fn a_meso_form_is_achiral() {
-        assert!(!stereo_form(&paired([2, 3, 4, 5], [6, 1, 7, 8])).is_chiral());
+        assert!(!stereo_form(&tartaric([2, 3, 4, 5], [6, 1, 7, 8])).is_chiral());
     }
 
     #[test]
-    fn a_form_of_matched_centers_is_chiral() {
-        assert!(stereo_form(&paired([2, 3, 4, 5], [1, 6, 7, 8])).is_chiral());
+    fn a_homochiral_form_is_chiral() {
+        assert!(stereo_form(&tartaric([2, 3, 4, 5], [1, 6, 7, 8])).is_chiral());
+    }
+
+    #[test]
+    fn a_double_bond_geometry_is_achiral() {
+        assert!(!stereo_form(&butene([1, 5, 4, 6])).is_chiral());
+    }
+
+    #[test]
+    fn a_pseudo_asymmetric_center_distinguishes_its_diastereomers() {
+        let r = stereo_form(&trihydroxyglutaric(
+            [2, 4, 5, 10],
+            [1, 6, 7, 3],
+            [8, 2, 9, 11],
+        ));
+        let t = stereo_form(&trihydroxyglutaric(
+            [2, 4, 5, 10],
+            [3, 6, 7, 1],
+            [8, 2, 9, 11],
+        ));
+        assert_ne!(r, t);
+    }
+
+    #[test]
+    fn a_dormant_pseudo_center_does_not_split_its_diastereomers() {
+        let a = stereo_form(&trihydroxyglutaric(
+            [2, 4, 5, 10],
+            [1, 6, 7, 3],
+            [2, 8, 9, 11],
+        ));
+        let c = stereo_form(&trihydroxyglutaric(
+            [2, 4, 5, 10],
+            [3, 6, 7, 1],
+            [2, 8, 9, 11],
+        ));
+        assert_eq!(a, c);
     }
 
     #[test]
@@ -391,24 +499,24 @@ mod tests {
     }
 
     #[test]
-    fn a_pair_flipped_at_one_center_are_diastereomers() {
-        let a = stereo_form(&distinct_pair([2, 3, 4, 5], [1, 6, 7, 8]));
-        let b = stereo_form(&distinct_pair([2, 3, 4, 5], [6, 1, 7, 8]));
-        assert_eq!(a.relate(&b), StereoRelationship::Diastereomers);
+    fn the_homochiral_and_meso_forms_are_diastereomers() {
+        let homochiral = stereo_form(&tartaric([2, 3, 4, 5], [1, 6, 7, 8]));
+        let meso = stereo_form(&tartaric([2, 3, 4, 5], [6, 1, 7, 8]));
+        assert_eq!(homochiral.relate(&meso), StereoRelationship::Diastereomers);
     }
 
     #[test]
-    fn a_pair_flipped_at_both_centers_are_enantiomers() {
-        let a = stereo_form(&distinct_pair([2, 3, 4, 5], [1, 6, 7, 8]));
-        let b = stereo_form(&distinct_pair([3, 2, 4, 5], [6, 1, 7, 8]));
-        assert_eq!(a.relate(&b), StereoRelationship::Enantiomers);
+    fn the_double_bond_isomers_are_diastereomers() {
+        let cis = stereo_form(&butene([1, 5, 4, 6]));
+        let trans = stereo_form(&butene([1, 5, 6, 4]));
+        assert_eq!(cis.relate(&trans), StereoRelationship::Diastereomers);
     }
 
     #[test]
     fn molecules_of_different_constitution_are_unrelated() {
         let a = stereo_form(&single([2, 3, 4, 5]));
-        let b = stereo_form(&recolored([2, 3, 4, 5]));
-        assert_eq!(a.relate(&b), StereoRelationship::Unrelated);
+        let c = stereo_form(&recolored([2, 3, 4, 5]));
+        assert_eq!(a.relate(&c), StereoRelationship::Unrelated);
     }
 
     #[test]
@@ -452,7 +560,13 @@ mod tests {
 
     #[test]
     fn the_form_is_independent_of_input_order() {
-        let molecule = single([2, 3, 4, 5]);
+        let molecule = tartaric([2, 3, 4, 5], [1, 6, 7, 8]);
+        assert_eq!(stereo_form(&molecule), stereo_form(&reversed(&molecule)));
+    }
+
+    #[test]
+    fn the_pseudo_asymmetric_form_is_independent_of_input_order() {
+        let molecule = trihydroxyglutaric([2, 4, 5, 10], [1, 6, 7, 3], [8, 2, 9, 11]);
         assert_eq!(stereo_form(&molecule), stereo_form(&reversed(&molecule)));
     }
 }
