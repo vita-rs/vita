@@ -94,3 +94,233 @@ where
         overspecified: declared.difference(&detected).copied().collect(),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use vita_core::HasSites;
+
+    use crate::BondOrder::Single;
+    use crate::{BondOrder, HasBonds, StereoConfiguration};
+
+    fn s(n: u32) -> SiteId {
+        SiteId::new(n).unwrap()
+    }
+
+    fn b(n: u32) -> BondId {
+        BondId::new(n).unwrap()
+    }
+
+    fn centers_at(sites: &'static [u32]) -> impl Fn(StereoLocus) -> Option<StereoKind> {
+        move |locus| match locus {
+            StereoLocus::Site(site) if sites.contains(&site.get()) => Some(StereoKind::Tetrahedral),
+            _ => None,
+        }
+    }
+
+    fn config(site: u32, order: [u32; 4]) -> StereoConfiguration {
+        StereoConfiguration::new(
+            StereoLocus::Site(s(site)),
+            StereoKind::Tetrahedral,
+            order.map(s),
+        )
+        .unwrap()
+    }
+
+    struct Mol {
+        sites: Vec<SiteId>,
+        colors: Vec<u32>,
+        bonds: Vec<BondId>,
+        endpoints: Vec<(SiteId, SiteId)>,
+        orders: Vec<BondOrder>,
+        configs: Vec<StereoConfiguration>,
+    }
+
+    impl Mol {
+        fn color(&self, site: SiteId) -> u32 {
+            self.colors[self.sites.iter().position(|&x| x == site).unwrap()]
+        }
+    }
+
+    impl HasSites for Mol {
+        fn sites(&self) -> impl Iterator<Item = SiteId> + '_ {
+            self.sites.iter().copied()
+        }
+    }
+
+    impl HasBonds for Mol {
+        fn bonds(&self) -> impl Iterator<Item = BondId> + '_ {
+            self.bonds.iter().copied()
+        }
+
+        fn bond_endpoints(&self, bond: BondId) -> (SiteId, SiteId) {
+            let i = self.bonds.iter().position(|&x| x == bond).unwrap();
+            self.endpoints[i]
+        }
+    }
+
+    impl HasBondOrders for Mol {
+        fn bond_order(&self, bond: BondId) -> BondOrder {
+            let i = self.bonds.iter().position(|&x| x == bond).unwrap();
+            self.orders[i]
+        }
+    }
+
+    impl HasStereoConfigurations for Mol {
+        fn stereo_configurations(&self) -> impl Iterator<Item = StereoConfiguration> + '_ {
+            self.configs.iter().cloned()
+        }
+    }
+
+    fn reconcile(
+        mol: &Mol,
+        candidate: impl Fn(StereoLocus) -> Option<StereoKind>,
+    ) -> StereoConsistency {
+        consistency(mol, |site| mol.color(site), |_| 0u32, candidate)
+    }
+
+    fn mol(
+        atoms: &[(u32, u32)],
+        bonds: &[(u32, u32, u32)],
+        configs: Vec<StereoConfiguration>,
+    ) -> Mol {
+        Mol {
+            sites: atoms.iter().map(|&(id, _)| s(id)).collect(),
+            colors: atoms.iter().map(|&(_, color)| color).collect(),
+            bonds: bonds.iter().map(|&(id, ..)| b(id)).collect(),
+            endpoints: bonds.iter().map(|&(_, a, c)| (s(a), s(c))).collect(),
+            orders: bonds.iter().map(|_| Single).collect(),
+            configs,
+        }
+    }
+
+    fn reversed(m: &Mol) -> Mol {
+        Mol {
+            sites: m.sites.iter().rev().copied().collect(),
+            colors: m.colors.iter().rev().copied().collect(),
+            bonds: m.bonds.iter().rev().copied().collect(),
+            endpoints: m.endpoints.iter().rev().copied().collect(),
+            orders: m.orders.iter().rev().copied().collect(),
+            configs: m.configs.iter().rev().cloned().collect(),
+        }
+    }
+
+    fn empty() -> Mol {
+        mol(&[], &[], Vec::new())
+    }
+
+    fn specified() -> Mol {
+        mol(
+            &[(1, 0), (2, 1), (3, 2), (4, 3), (5, 4)],
+            &[(1, 1, 2), (2, 1, 3), (3, 1, 4), (4, 1, 5)],
+            vec![config(1, [2, 3, 4, 5])],
+        )
+    }
+
+    fn unspecified() -> Mol {
+        mol(
+            &[(1, 0), (2, 1), (3, 2), (4, 3), (5, 4)],
+            &[(1, 1, 2), (2, 1, 3), (3, 1, 4), (4, 1, 5)],
+            Vec::new(),
+        )
+    }
+
+    fn overspecified() -> Mol {
+        mol(
+            &[(1, 0), (2, 1), (3, 1), (4, 2), (5, 3)],
+            &[(1, 1, 2), (2, 1, 3), (3, 1, 4), (4, 1, 5)],
+            vec![config(1, [2, 3, 4, 5])],
+        )
+    }
+
+    fn mixed() -> Mol {
+        mol(
+            &[
+                (1, 0),
+                (2, 1),
+                (3, 2),
+                (4, 3),
+                (5, 4),
+                (6, 0),
+                (7, 5),
+                (8, 5),
+                (9, 6),
+                (10, 7),
+            ],
+            &[
+                (1, 1, 2),
+                (2, 1, 3),
+                (3, 1, 4),
+                (4, 1, 5),
+                (5, 6, 7),
+                (6, 6, 8),
+                (7, 6, 9),
+                (8, 6, 10),
+            ],
+            vec![config(6, [7, 8, 9, 10])],
+        )
+    }
+
+    #[test]
+    fn empty_molecule_is_consistent() {
+        let report = reconcile(&empty(), centers_at(&[1]));
+        assert!(report.is_consistent());
+        assert_eq!(report.unspecified_count(), 0);
+        assert_eq!(report.overspecified_count(), 0);
+    }
+
+    #[test]
+    fn a_configured_stereocenter_is_consistent() {
+        assert!(reconcile(&specified(), centers_at(&[1])).is_consistent());
+    }
+
+    #[test]
+    fn a_stereocenter_without_a_configuration_is_unspecified() {
+        let report = reconcile(&unspecified(), centers_at(&[1]));
+        assert!(report.contains_unspecified(StereoLocus::Site(s(1))));
+        assert!(!report.contains_overspecified(StereoLocus::Site(s(1))));
+        assert_eq!(report.unspecified_count(), 1);
+        assert!(!report.is_consistent());
+    }
+
+    #[test]
+    fn a_configuration_off_a_stereocenter_is_overspecified() {
+        let report = reconcile(&overspecified(), centers_at(&[1]));
+        assert!(report.contains_overspecified(StereoLocus::Site(s(1))));
+        assert!(!report.contains_unspecified(StereoLocus::Site(s(1))));
+        assert_eq!(report.overspecified_count(), 1);
+        assert!(!report.is_consistent());
+    }
+
+    #[test]
+    fn unspecified_lists_the_stereocenters_without_a_configuration() {
+        let report = reconcile(&unspecified(), centers_at(&[1]));
+        let loci: Vec<StereoLocus> = report.unspecified().collect();
+        assert_eq!(loci, vec![StereoLocus::Site(s(1))]);
+    }
+
+    #[test]
+    fn overspecified_lists_the_configurations_off_a_stereocenter() {
+        let report = reconcile(&overspecified(), centers_at(&[1]));
+        let loci: Vec<StereoLocus> = report.overspecified().collect();
+        assert_eq!(loci, vec![StereoLocus::Site(s(1))]);
+    }
+
+    #[test]
+    fn both_kinds_of_disagreement_are_reported_together() {
+        let report = reconcile(&mixed(), centers_at(&[1, 6]));
+        assert!(report.contains_unspecified(StereoLocus::Site(s(1))));
+        assert!(report.contains_overspecified(StereoLocus::Site(s(6))));
+        assert!(!report.is_consistent());
+    }
+
+    #[test]
+    fn reconciliation_is_independent_of_input_order() {
+        let molecule = mixed();
+        assert_eq!(
+            reconcile(&molecule, centers_at(&[1, 6])),
+            reconcile(&reversed(&molecule), centers_at(&[1, 6])),
+        );
+    }
+}

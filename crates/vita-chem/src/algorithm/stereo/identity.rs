@@ -183,3 +183,276 @@ where
     let layer = StereoLayer::of(mol, &canonical);
     StereoForm { canonical, layer }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+
+    use vita_core::HasSites;
+
+    use crate::{HasBonds, StereoConfiguration};
+
+    fn s(n: u32) -> SiteId {
+        SiteId::new(n).unwrap()
+    }
+
+    fn b(n: u32) -> BondId {
+        BondId::new(n).unwrap()
+    }
+
+    fn config(site: u32, order: [u32; 4]) -> StereoConfiguration {
+        StereoConfiguration::new(
+            StereoLocus::Site(s(site)),
+            StereoKind::Tetrahedral,
+            order.map(s),
+        )
+        .unwrap()
+    }
+
+    struct Mol {
+        sites: Vec<SiteId>,
+        colors: Vec<u32>,
+        bonds: Vec<BondId>,
+        endpoints: Vec<(SiteId, SiteId)>,
+        configs: Vec<StereoConfiguration>,
+    }
+
+    impl Mol {
+        fn color(&self, site: SiteId) -> u32 {
+            self.colors[self.sites.iter().position(|&x| x == site).unwrap()]
+        }
+    }
+
+    impl HasSites for Mol {
+        fn sites(&self) -> impl Iterator<Item = SiteId> + '_ {
+            self.sites.iter().copied()
+        }
+    }
+
+    impl HasBonds for Mol {
+        fn bonds(&self) -> impl Iterator<Item = BondId> + '_ {
+            self.bonds.iter().copied()
+        }
+
+        fn bond_endpoints(&self, bond: BondId) -> (SiteId, SiteId) {
+            let i = self.bonds.iter().position(|&x| x == bond).unwrap();
+            self.endpoints[i]
+        }
+    }
+
+    impl HasStereoConfigurations for Mol {
+        fn stereo_configurations(&self) -> impl Iterator<Item = StereoConfiguration> + '_ {
+            self.configs.iter().cloned()
+        }
+    }
+
+    fn mol(
+        atoms: &[(u32, u32)],
+        bonds: &[(u32, u32, u32)],
+        configs: Vec<StereoConfiguration>,
+    ) -> Mol {
+        Mol {
+            sites: atoms.iter().map(|&(id, _)| s(id)).collect(),
+            colors: atoms.iter().map(|&(_, color)| color).collect(),
+            bonds: bonds.iter().map(|&(id, ..)| b(id)).collect(),
+            endpoints: bonds.iter().map(|&(_, a, c)| (s(a), s(c))).collect(),
+            configs,
+        }
+    }
+
+    fn stereo_form(mol: &Mol) -> StereoForm<u32, u32> {
+        form(mol, |site| mol.color(site), |_| 0u32)
+    }
+
+    fn hash_of(form: &StereoForm<u32, u32>) -> u64 {
+        let mut hasher = DefaultHasher::new();
+        form.hash(&mut hasher);
+        hasher.finish()
+    }
+
+    fn reversed(m: &Mol) -> Mol {
+        Mol {
+            sites: m.sites.iter().rev().copied().collect(),
+            colors: m.colors.iter().rev().copied().collect(),
+            bonds: m.bonds.iter().rev().copied().collect(),
+            endpoints: m.endpoints.iter().rev().copied().collect(),
+            configs: m.configs.iter().rev().cloned().collect(),
+        }
+    }
+
+    fn plain() -> Mol {
+        mol(
+            &[(1, 0), (2, 1), (3, 2), (4, 3), (5, 4)],
+            &[(1, 1, 2), (2, 1, 3), (3, 1, 4), (4, 1, 5)],
+            Vec::new(),
+        )
+    }
+
+    fn single(order: [u32; 4]) -> Mol {
+        mol(
+            &[(1, 0), (2, 1), (3, 2), (4, 3), (5, 4)],
+            &[(1, 1, 2), (2, 1, 3), (3, 1, 4), (4, 1, 5)],
+            vec![config(1, order)],
+        )
+    }
+
+    fn recolored(order: [u32; 4]) -> Mol {
+        mol(
+            &[(1, 0), (2, 5), (3, 6), (4, 7), (5, 8)],
+            &[(1, 1, 2), (2, 1, 3), (3, 1, 4), (4, 1, 5)],
+            vec![config(1, order)],
+        )
+    }
+
+    fn paired(first: [u32; 4], second: [u32; 4]) -> Mol {
+        mol(
+            &[
+                (1, 0),
+                (2, 0),
+                (3, 1),
+                (4, 2),
+                (5, 3),
+                (6, 1),
+                (7, 2),
+                (8, 3),
+            ],
+            &[
+                (1, 1, 2),
+                (2, 1, 3),
+                (3, 1, 4),
+                (4, 1, 5),
+                (5, 2, 6),
+                (6, 2, 7),
+                (7, 2, 8),
+            ],
+            vec![config(1, first), config(2, second)],
+        )
+    }
+
+    fn distinct_pair(first: [u32; 4], second: [u32; 4]) -> Mol {
+        mol(
+            &[
+                (1, 0),
+                (2, 1),
+                (3, 2),
+                (4, 3),
+                (5, 0),
+                (6, 4),
+                (7, 5),
+                (8, 6),
+            ],
+            &[
+                (1, 1, 2),
+                (2, 1, 3),
+                (3, 1, 4),
+                (4, 1, 5),
+                (5, 5, 6),
+                (6, 5, 7),
+                (7, 5, 8),
+            ],
+            vec![config(1, first), config(5, second)],
+        )
+    }
+
+    #[test]
+    fn a_molecule_without_configurations_is_achiral() {
+        assert!(!stereo_form(&plain()).is_chiral());
+    }
+
+    #[test]
+    fn a_single_stereocenter_is_chiral() {
+        assert!(stereo_form(&single([2, 3, 4, 5])).is_chiral());
+    }
+
+    #[test]
+    fn a_meso_form_is_achiral() {
+        assert!(!stereo_form(&paired([2, 3, 4, 5], [6, 1, 7, 8])).is_chiral());
+    }
+
+    #[test]
+    fn a_form_of_matched_centers_is_chiral() {
+        assert!(stereo_form(&paired([2, 3, 4, 5], [1, 6, 7, 8])).is_chiral());
+    }
+
+    #[test]
+    fn a_form_relates_to_itself_as_identical() {
+        let form = stereo_form(&single([2, 3, 4, 5]));
+        assert_eq!(form.relate(&form), StereoRelationship::Identical);
+    }
+
+    #[test]
+    fn opposite_configurations_are_enantiomers() {
+        let right = stereo_form(&single([2, 3, 4, 5]));
+        let left = stereo_form(&single([3, 2, 4, 5]));
+        assert_eq!(right.relate(&left), StereoRelationship::Enantiomers);
+    }
+
+    #[test]
+    fn a_pair_flipped_at_one_center_are_diastereomers() {
+        let a = stereo_form(&distinct_pair([2, 3, 4, 5], [1, 6, 7, 8]));
+        let b = stereo_form(&distinct_pair([2, 3, 4, 5], [6, 1, 7, 8]));
+        assert_eq!(a.relate(&b), StereoRelationship::Diastereomers);
+    }
+
+    #[test]
+    fn a_pair_flipped_at_both_centers_are_enantiomers() {
+        let a = stereo_form(&distinct_pair([2, 3, 4, 5], [1, 6, 7, 8]));
+        let b = stereo_form(&distinct_pair([3, 2, 4, 5], [6, 1, 7, 8]));
+        assert_eq!(a.relate(&b), StereoRelationship::Enantiomers);
+    }
+
+    #[test]
+    fn molecules_of_different_constitution_are_unrelated() {
+        let a = stereo_form(&single([2, 3, 4, 5]));
+        let b = stereo_form(&recolored([2, 3, 4, 5]));
+        assert_eq!(a.relate(&b), StereoRelationship::Unrelated);
+    }
+
+    #[test]
+    fn enantiomers_share_a_constitution() {
+        let right = stereo_form(&single([2, 3, 4, 5]));
+        let left = stereo_form(&single([3, 2, 4, 5]));
+        assert_eq!(right.constitution(), left.constitution());
+    }
+
+    #[test]
+    fn the_same_stereoisomer_has_equal_forms() {
+        assert_eq!(
+            stereo_form(&single([2, 3, 4, 5])),
+            stereo_form(&single([2, 3, 4, 5])),
+        );
+    }
+
+    #[test]
+    fn enantiomers_have_distinct_forms() {
+        assert_ne!(
+            stereo_form(&single([2, 3, 4, 5])),
+            stereo_form(&single([3, 2, 4, 5])),
+        );
+    }
+
+    #[test]
+    fn equal_forms_hash_equally() {
+        assert_eq!(
+            hash_of(&stereo_form(&single([2, 3, 4, 5]))),
+            hash_of(&stereo_form(&single([2, 3, 4, 5]))),
+        );
+    }
+
+    #[test]
+    fn ordering_agrees_with_equality() {
+        let right = stereo_form(&single([2, 3, 4, 5]));
+        let left = stereo_form(&single([3, 2, 4, 5]));
+        assert_eq!(right.cmp(&right), Ordering::Equal);
+        assert_ne!(right.cmp(&left), Ordering::Equal);
+    }
+
+    #[test]
+    fn the_form_is_independent_of_input_order() {
+        let molecule = single([2, 3, 4, 5]);
+        assert_eq!(stereo_form(&molecule), stereo_form(&reversed(&molecule)));
+    }
+}

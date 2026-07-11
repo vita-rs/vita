@@ -328,3 +328,517 @@ where
     };
     StereoConfiguration::new(locus, StereoKind::Allene, ordered)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use vita_core::HasSites;
+    use vita_core::units::length::{Length, LengthUnit};
+
+    use crate::BondOrder::{Double, Single};
+    use crate::{BondId, BondOrder};
+
+    fn s(n: u32) -> SiteId {
+        SiteId::new(n).unwrap()
+    }
+
+    fn b(n: u32) -> BondId {
+        BondId::new(n).unwrap()
+    }
+
+    fn only(target: StereoLocus, kind: StereoKind) -> impl Fn(StereoLocus) -> Option<StereoKind> {
+        move |locus| (locus == target).then_some(kind)
+    }
+
+    fn same_configuration(a: &StereoConfiguration, b: &StereoConfiguration) -> bool {
+        a.locus() == b.locus()
+            && a.kind() == b.kind()
+            && geometry(a.kind()).group.iter().any(|permutation| {
+                let rotated: Vec<SiteId> = permutation
+                    .iter()
+                    .map(|&i| a.neighbors()[i as usize])
+                    .collect();
+                rotated == b.neighbors()
+            })
+    }
+
+    fn difference(a: [f64; 3], b: [f64; 3]) -> [f64; 3] {
+        [a[0] - b[0], a[1] - b[1], a[2] - b[2]]
+    }
+
+    fn signed_volume(a: [f64; 3], b: [f64; 3], c: [f64; 3]) -> f64 {
+        a[0] * (b[1] * c[2] - b[2] * c[1])
+            + a[1] * (b[2] * c[0] - b[0] * c[2])
+            + a[2] * (b[0] * c[1] - b[1] * c[0])
+    }
+
+    struct Mol {
+        sites: Vec<SiteId>,
+        coords: Vec<[f64; 3]>,
+        bonds: Vec<BondId>,
+        endpoints: Vec<(SiteId, SiteId)>,
+        orders: Vec<BondOrder>,
+    }
+
+    impl Mol {
+        fn at(&self, site: SiteId) -> [f64; 3] {
+            self.coords[self.sites.iter().position(|&x| x == site).unwrap()]
+        }
+    }
+
+    impl HasSites for Mol {
+        fn sites(&self) -> impl Iterator<Item = SiteId> + '_ {
+            self.sites.iter().copied()
+        }
+    }
+
+    impl HasPositions<f64> for Mol {
+        fn position<U: LengthUnit>(&self, site: SiteId) -> Point3<Length<f64, U>> {
+            let [x, y, z] = self.at(site);
+            Point3::new(Length::new(x), Length::new(y), Length::new(z))
+        }
+    }
+
+    impl HasBonds for Mol {
+        fn bonds(&self) -> impl Iterator<Item = BondId> + '_ {
+            self.bonds.iter().copied()
+        }
+
+        fn bond_endpoints(&self, bond: BondId) -> (SiteId, SiteId) {
+            let i = self.bonds.iter().position(|&x| x == bond).unwrap();
+            self.endpoints[i]
+        }
+    }
+
+    impl HasBondOrders for Mol {
+        fn bond_order(&self, bond: BondId) -> BondOrder {
+            let i = self.bonds.iter().position(|&x| x == bond).unwrap();
+            self.orders[i]
+        }
+    }
+
+    fn mol(atoms: &[(u32, [f64; 3])], bonds: &[(u32, u32, u32, BondOrder)]) -> Mol {
+        Mol {
+            sites: atoms.iter().map(|&(id, _)| s(id)).collect(),
+            coords: atoms.iter().map(|&(_, xyz)| xyz).collect(),
+            bonds: bonds.iter().map(|&(id, ..)| b(id)).collect(),
+            endpoints: bonds.iter().map(|&(_, a, c, _)| (s(a), s(c))).collect(),
+            orders: bonds.iter().map(|&(_, _, _, order)| order).collect(),
+        }
+    }
+
+    fn mirrored(m: &Mol) -> Mol {
+        Mol {
+            sites: m.sites.clone(),
+            coords: m.coords.iter().map(|&[x, y, z]| [-x, y, z]).collect(),
+            bonds: m.bonds.clone(),
+            endpoints: m.endpoints.clone(),
+            orders: m.orders.clone(),
+        }
+    }
+
+    fn reversed(m: &Mol) -> Mol {
+        Mol {
+            sites: m.sites.iter().rev().copied().collect(),
+            coords: m.coords.iter().rev().copied().collect(),
+            bonds: m.bonds.iter().rev().copied().collect(),
+            endpoints: m.endpoints.iter().rev().copied().collect(),
+            orders: m.orders.iter().rev().copied().collect(),
+        }
+    }
+
+    fn empty() -> Mol {
+        mol(&[], &[])
+    }
+
+    fn tetrahedral() -> Mol {
+        mol(
+            &[
+                (1, [0.0, 0.0, 0.0]),
+                (2, [1.0, 1.0, 1.0]),
+                (3, [1.0, -1.0, -1.0]),
+                (4, [-1.0, -1.0, 1.0]),
+                (5, [-1.0, 1.0, -1.0]),
+            ],
+            &[
+                (1, 1, 2, Single),
+                (2, 1, 3, Single),
+                (3, 1, 4, Single),
+                (4, 1, 5, Single),
+            ],
+        )
+    }
+
+    fn planar_center() -> Mol {
+        mol(
+            &[
+                (1, [0.0, 0.0, 0.0]),
+                (2, [1.0, 0.0, 0.0]),
+                (3, [0.0, 1.0, 0.0]),
+                (4, [-1.0, 0.0, 0.0]),
+                (5, [0.0, -1.0, 0.0]),
+            ],
+            &[
+                (1, 1, 2, Single),
+                (2, 1, 3, Single),
+                (3, 1, 4, Single),
+                (4, 1, 5, Single),
+            ],
+        )
+    }
+
+    fn octahedral() -> Mol {
+        mol(
+            &[
+                (1, [0.0, 0.0, 0.0]),
+                (2, [1.0, 0.0, 0.0]),
+                (3, [-1.0, 0.0, 0.0]),
+                (4, [0.0, 1.0, 0.0]),
+                (5, [0.0, -1.0, 0.0]),
+                (6, [0.0, 0.0, 1.0]),
+                (7, [0.0, 0.0, -1.0]),
+            ],
+            &[
+                (1, 1, 2, Single),
+                (2, 1, 3, Single),
+                (3, 1, 4, Single),
+                (4, 1, 5, Single),
+                (5, 1, 6, Single),
+                (6, 1, 7, Single),
+            ],
+        )
+    }
+
+    fn square_planar() -> Mol {
+        mol(
+            &[
+                (1, [0.0, 0.0, 0.0]),
+                (2, [1.0, 0.0, 0.0]),
+                (3, [0.0, 1.0, 0.0]),
+                (4, [-1.0, 0.0, 0.0]),
+                (5, [0.0, -1.0, 0.0]),
+            ],
+            &[
+                (1, 1, 2, Single),
+                (2, 1, 3, Single),
+                (3, 1, 4, Single),
+                (4, 1, 5, Single),
+            ],
+        )
+    }
+
+    fn cis_alkene() -> Mol {
+        mol(
+            &[
+                (1, [0.0, 0.0, 0.0]),
+                (2, [1.0, 0.0, 0.0]),
+                (3, [-0.5, 1.0, 0.0]),
+                (4, [-0.5, -1.0, 0.0]),
+                (5, [1.5, 1.0, 0.0]),
+                (6, [1.5, -1.0, 0.0]),
+            ],
+            &[
+                (1, 1, 2, Double),
+                (2, 1, 3, Single),
+                (3, 1, 4, Single),
+                (4, 2, 5, Single),
+                (5, 2, 6, Single),
+            ],
+        )
+    }
+
+    fn trans_alkene() -> Mol {
+        mol(
+            &[
+                (1, [0.0, 0.0, 0.0]),
+                (2, [1.0, 0.0, 0.0]),
+                (3, [-0.5, 1.0, 0.0]),
+                (4, [-0.5, -1.0, 0.0]),
+                (5, [1.5, -1.0, 0.0]),
+                (6, [1.5, 1.0, 0.0]),
+            ],
+            &[
+                (1, 1, 2, Double),
+                (2, 1, 3, Single),
+                (3, 1, 4, Single),
+                (4, 2, 5, Single),
+                (5, 2, 6, Single),
+            ],
+        )
+    }
+
+    fn degenerate_double_bond() -> Mol {
+        mol(
+            &[
+                (1, [0.0, 0.0, 0.0]),
+                (2, [1.0, 0.0, 0.0]),
+                (3, [-1.0, 0.0, 0.0]),
+                (4, [-0.5, -1.0, 0.0]),
+                (5, [1.5, 1.0, 0.0]),
+                (6, [1.5, -1.0, 0.0]),
+            ],
+            &[
+                (1, 1, 2, Double),
+                (2, 1, 3, Single),
+                (3, 1, 4, Single),
+                (4, 2, 5, Single),
+                (5, 2, 6, Single),
+            ],
+        )
+    }
+
+    fn allene() -> Mol {
+        mol(
+            &[
+                (1, [0.0, 0.0, 0.0]),
+                (2, [1.0, 0.0, 0.0]),
+                (3, [2.0, 0.0, 0.0]),
+                (4, [-0.5, 1.0, 0.0]),
+                (5, [-0.5, -1.0, 0.0]),
+                (6, [2.5, 0.0, 1.0]),
+                (7, [2.5, 0.0, -1.0]),
+            ],
+            &[
+                (1, 1, 2, Double),
+                (2, 2, 3, Double),
+                (3, 1, 4, Single),
+                (4, 1, 5, Single),
+                (5, 3, 6, Single),
+                (6, 3, 7, Single),
+            ],
+        )
+    }
+
+    fn planar_allene() -> Mol {
+        mol(
+            &[
+                (1, [0.0, 0.0, 0.0]),
+                (2, [1.0, 0.0, 0.0]),
+                (3, [2.0, 0.0, 0.0]),
+                (4, [-0.5, 1.0, 0.0]),
+                (5, [-0.5, -1.0, 0.0]),
+                (6, [2.5, 1.0, 0.0]),
+                (7, [2.5, -1.0, 0.0]),
+            ],
+            &[
+                (1, 1, 2, Double),
+                (2, 2, 3, Double),
+                (3, 1, 4, Single),
+                (4, 1, 5, Single),
+                (5, 3, 6, Single),
+                (6, 3, 7, Single),
+            ],
+        )
+    }
+
+    #[test]
+    fn empty_molecule_has_no_configurations() {
+        let perceived = perceive(&empty(), |_| Some(StereoKind::Tetrahedral));
+        assert_eq!(perceived.len(), 0);
+        assert!(perceived.is_empty());
+    }
+
+    #[test]
+    fn a_molecule_the_candidate_rejects_has_no_configurations() {
+        assert!(perceive(&tetrahedral(), |_| None).is_empty());
+    }
+
+    #[test]
+    fn a_tetrahedral_configuration_is_perceived_in_positive_orientation() {
+        let molecule = tetrahedral();
+        let perceived = perceive(
+            &molecule,
+            only(StereoLocus::Site(s(1)), StereoKind::Tetrahedral),
+        );
+        let n = perceived.get(StereoLocus::Site(s(1))).unwrap().neighbors();
+        let volume = signed_volume(
+            difference(molecule.at(n[1]), molecule.at(n[0])),
+            difference(molecule.at(n[2]), molecule.at(n[0])),
+            difference(molecule.at(n[3]), molecule.at(n[0])),
+        );
+        assert!(volume > 0.0);
+    }
+
+    #[test]
+    fn enantiomeric_coordinates_are_perceived_as_distinct_configurations() {
+        let candidate = only(StereoLocus::Site(s(1)), StereoKind::Tetrahedral);
+        let right = perceive(&tetrahedral(), &candidate);
+        let left = perceive(&mirrored(&tetrahedral()), &candidate);
+        assert_ne!(
+            right.get(StereoLocus::Site(s(1))),
+            left.get(StereoLocus::Site(s(1))),
+        );
+    }
+
+    #[test]
+    fn a_coplanar_center_fixes_no_configuration() {
+        let perceived = perceive(
+            &planar_center(),
+            only(StereoLocus::Site(s(1)), StereoKind::Tetrahedral),
+        );
+        assert!(perceived.is_empty());
+    }
+
+    #[test]
+    fn an_octahedral_configuration_is_perceived_in_positive_orientation() {
+        let molecule = octahedral();
+        let perceived = perceive(
+            &molecule,
+            only(StereoLocus::Site(s(1)), StereoKind::Octahedral),
+        );
+        let n = perceived.get(StereoLocus::Site(s(1))).unwrap().neighbors();
+        let volume = signed_volume(
+            difference(molecule.at(n[0]), molecule.at(n[1])),
+            difference(molecule.at(n[2]), molecule.at(n[3])),
+            difference(molecule.at(n[4]), molecule.at(n[5])),
+        );
+        assert!(volume > 0.0);
+    }
+
+    #[test]
+    fn a_square_planar_configuration_is_perceived() {
+        let perceived = perceive(
+            &square_planar(),
+            only(StereoLocus::Site(s(1)), StereoKind::SquarePlanar),
+        );
+        let config = perceived.get(StereoLocus::Site(s(1))).unwrap();
+        assert_eq!(config.kind(), StereoKind::SquarePlanar);
+        assert_eq!(config.neighbors().len(), 4);
+    }
+
+    #[test]
+    fn a_cis_double_bond_is_perceived_in_reference_order() {
+        let perceived = perceive(
+            &cis_alkene(),
+            only(StereoLocus::Bond(b(1)), StereoKind::CisTrans),
+        );
+        let config = perceived.get(StereoLocus::Bond(b(1))).unwrap();
+        assert_eq!(config.neighbors(), [s(3), s(4), s(5), s(6)].as_slice());
+    }
+
+    #[test]
+    fn a_trans_double_bond_reverses_the_far_end() {
+        let perceived = perceive(
+            &trans_alkene(),
+            only(StereoLocus::Bond(b(1)), StereoKind::CisTrans),
+        );
+        let config = perceived.get(StereoLocus::Bond(b(1))).unwrap();
+        assert_eq!(config.neighbors(), [s(3), s(4), s(6), s(5)].as_slice());
+    }
+
+    #[test]
+    fn a_degenerate_double_bond_fixes_no_configuration() {
+        let perceived = perceive(
+            &degenerate_double_bond(),
+            only(StereoLocus::Bond(b(1)), StereoKind::CisTrans),
+        );
+        assert!(perceived.is_empty());
+    }
+
+    #[test]
+    fn an_allene_is_perceived_in_reference_order() {
+        let perceived = perceive(&allene(), only(StereoLocus::Axis(s(2)), StereoKind::Allene));
+        let config = perceived.get(StereoLocus::Axis(s(2))).unwrap();
+        assert_eq!(config.neighbors(), [s(4), s(5), s(6), s(7)].as_slice());
+    }
+
+    #[test]
+    fn the_opposite_allene_twist_swaps_the_first_terminus() {
+        let perceived = perceive(
+            &mirrored(&allene()),
+            only(StereoLocus::Axis(s(2)), StereoKind::Allene),
+        );
+        let config = perceived.get(StereoLocus::Axis(s(2))).unwrap();
+        assert_eq!(config.neighbors(), [s(5), s(4), s(6), s(7)].as_slice());
+    }
+
+    #[test]
+    fn a_planar_allene_fixes_no_configuration() {
+        let perceived = perceive(
+            &planar_allene(),
+            only(StereoLocus::Axis(s(2)), StereoKind::Allene),
+        );
+        assert!(perceived.is_empty());
+    }
+
+    #[test]
+    fn count_reports_the_number_of_configurations() {
+        let perceived = perceive(
+            &tetrahedral(),
+            only(StereoLocus::Site(s(1)), StereoKind::Tetrahedral),
+        );
+        assert_eq!(perceived.len(), 1);
+        assert!(!perceived.is_empty());
+    }
+
+    #[test]
+    fn iter_yields_the_perceived_configurations() {
+        let perceived = perceive(
+            &tetrahedral(),
+            only(StereoLocus::Site(s(1)), StereoKind::Tetrahedral),
+        );
+        let configs: Vec<&StereoConfiguration> = perceived.iter().collect();
+        assert_eq!(configs.len(), 1);
+        assert_eq!(configs[0].locus(), StereoLocus::Site(s(1)));
+    }
+
+    #[test]
+    fn get_returns_the_configuration_at_a_locus() {
+        let perceived = perceive(
+            &tetrahedral(),
+            only(StereoLocus::Site(s(1)), StereoKind::Tetrahedral),
+        );
+        let config = perceived.get(StereoLocus::Site(s(1))).unwrap();
+        assert_eq!(config.kind(), StereoKind::Tetrahedral);
+    }
+
+    #[test]
+    fn get_is_none_for_a_locus_without_a_configuration() {
+        let perceived = perceive(
+            &tetrahedral(),
+            only(StereoLocus::Site(s(1)), StereoKind::Tetrahedral),
+        );
+        assert!(perceived.get(StereoLocus::Site(s(99))).is_none());
+    }
+
+    #[test]
+    fn bound_view_answers_the_stereo_configuration_capability() {
+        let molecule = tetrahedral();
+        let perceived = perceive(
+            &molecule,
+            only(StereoLocus::Site(s(1)), StereoKind::Tetrahedral),
+        );
+        let view = perceived.bind(&molecule);
+        assert_eq!(view.stereo_configuration_count(), 1);
+        assert!(view.stereo_configuration(StereoLocus::Site(s(1))).is_some());
+    }
+
+    #[test]
+    fn bound_view_forwards_the_skeleton() {
+        let molecule = tetrahedral();
+        let perceived = perceive(
+            &molecule,
+            only(StereoLocus::Site(s(1)), StereoKind::Tetrahedral),
+        );
+        let view = perceived.bind(&molecule);
+        assert_eq!(view.bond_endpoints(b(1)), molecule.bond_endpoints(b(1)));
+        assert_eq!(view.bond_count(), molecule.bond_count());
+    }
+
+    #[test]
+    fn perception_is_independent_of_input_order() {
+        let candidate = only(StereoLocus::Bond(b(1)), StereoKind::CisTrans);
+        let forward = perceive(&cis_alkene(), &candidate);
+        let backward = perceive(&reversed(&cis_alkene()), &candidate);
+        let forward: Vec<&StereoConfiguration> = forward.iter().collect();
+        let backward: Vec<&StereoConfiguration> = backward.iter().collect();
+        assert_eq!(forward.len(), backward.len());
+        assert!(
+            forward
+                .iter()
+                .zip(&backward)
+                .all(|(a, b)| same_configuration(a, b))
+        );
+    }
+}

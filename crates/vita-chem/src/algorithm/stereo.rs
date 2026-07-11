@@ -447,3 +447,539 @@ fn next_permutation(slice: &mut [u8]) -> bool {
     slice[pivot..].reverse();
     true
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use vita_core::HasSites;
+
+    use crate::BondOrder::{Double, Single};
+    use crate::{BondId, HasBonds};
+
+    fn s(n: u32) -> SiteId {
+        SiteId::new(n).unwrap()
+    }
+
+    fn b(n: u32) -> BondId {
+        BondId::new(n).unwrap()
+    }
+
+    const KINDS: [StereoKind; 8] = [
+        StereoKind::Tetrahedral,
+        StereoKind::CisTrans,
+        StereoKind::Allene,
+        StereoKind::SquarePlanar,
+        StereoKind::TrigonalBipyramidal,
+        StereoKind::SquarePyramidal,
+        StereoKind::Octahedral,
+        StereoKind::TrigonalPrismatic,
+    ];
+
+    fn identity(n: usize) -> Vec<u8> {
+        (0..n as u8).collect()
+    }
+
+    fn is_permutation(perm: &[u8], n: usize) -> bool {
+        let mut sorted = perm.to_vec();
+        sorted.sort_unstable();
+        sorted == identity(n)
+    }
+
+    fn compose(after: &[u8], before: &[u8]) -> Vec<u8> {
+        before.iter().map(|&i| after[i as usize]).collect()
+    }
+
+    fn permutations(n: usize) -> Vec<Vec<u8>> {
+        let mut result = Vec::new();
+        permute(&mut identity(n), 0, &mut result);
+        result
+    }
+
+    fn permute(slice: &mut [u8], start: usize, out: &mut Vec<Vec<u8>>) {
+        if start == slice.len() {
+            out.push(slice.to_vec());
+            return;
+        }
+        for i in start..slice.len() {
+            slice.swap(start, i);
+            permute(slice, start + 1, out);
+            slice.swap(start, i);
+        }
+    }
+
+    fn dot(a: [f64; 3], b: [f64; 3]) -> f64 {
+        a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
+    }
+
+    fn signed_volume(a: [f64; 3], b: [f64; 3], c: [f64; 3]) -> f64 {
+        dot(
+            a,
+            [
+                b[1] * c[2] - b[2] * c[1],
+                b[2] * c[0] - b[0] * c[2],
+                b[0] * c[1] - b[1] * c[0],
+            ],
+        )
+    }
+
+    fn preserves_angles(directions: &[[f64; 3]], perm: &[u8]) -> bool {
+        let n = directions.len();
+        (0..n).all(|i| {
+            (0..n).all(|j| {
+                let moved = dot(directions[perm[i] as usize], directions[perm[j] as usize]);
+                (moved - dot(directions[i], directions[j])).abs() < 1e-9
+            })
+        })
+    }
+
+    fn spanning_triple(directions: &[[f64; 3]]) -> Option<(usize, usize, usize)> {
+        let n = directions.len();
+        (0..n)
+            .flat_map(|a| (a + 1..n).flat_map(move |b| (b + 1..n).map(move |c| (a, b, c))))
+            .find(|&(a, b, c)| {
+                signed_volume(directions[a], directions[b], directions[c]).abs() > 1e-9
+            })
+    }
+
+    fn is_rotation(directions: &[[f64; 3]], perm: &[u8]) -> bool {
+        if !preserves_angles(directions, perm) {
+            return false;
+        }
+        match spanning_triple(directions) {
+            None => true,
+            Some((a, b, c)) => {
+                let before = signed_volume(directions[a], directions[b], directions[c]);
+                let after = signed_volume(
+                    directions[perm[a] as usize],
+                    directions[perm[b] as usize],
+                    directions[perm[c] as usize],
+                );
+                (before > 0.0) == (after > 0.0)
+            }
+        }
+    }
+
+    fn ranked(neighbors: &[SiteId]) -> impl Fn(SiteId) -> usize + '_ {
+        move |site| neighbors.iter().position(|&s| s == site).unwrap()
+    }
+
+    fn distinct_token(kind: StereoKind) -> Token {
+        let neighbors: Vec<SiteId> = (1..=kind.slot_count() as u32).map(s).collect();
+        geometry(kind).token(&neighbors, ranked(&neighbors))
+    }
+
+    struct Mol {
+        sites: Vec<SiteId>,
+        bonds: Vec<BondId>,
+        endpoints: Vec<(SiteId, SiteId)>,
+        orders: Vec<BondOrder>,
+    }
+
+    impl HasSites for Mol {
+        fn sites(&self) -> impl Iterator<Item = SiteId> + '_ {
+            self.sites.iter().copied()
+        }
+    }
+
+    impl HasBonds for Mol {
+        fn bonds(&self) -> impl Iterator<Item = BondId> + '_ {
+            self.bonds.iter().copied()
+        }
+
+        fn bond_endpoints(&self, bond: BondId) -> (SiteId, SiteId) {
+            let i = self.bonds.iter().position(|&x| x == bond).unwrap();
+            self.endpoints[i]
+        }
+    }
+
+    impl HasBondOrders for Mol {
+        fn bond_order(&self, bond: BondId) -> BondOrder {
+            let i = self.bonds.iter().position(|&x| x == bond).unwrap();
+            self.orders[i]
+        }
+    }
+
+    fn mol(sites: &[u32], bonds: &[(u32, u32, u32, BondOrder)]) -> Mol {
+        Mol {
+            sites: sites.iter().map(|&id| s(id)).collect(),
+            bonds: bonds.iter().map(|&(id, ..)| b(id)).collect(),
+            endpoints: bonds.iter().map(|&(_, a, c, _)| (s(a), s(c))).collect(),
+            orders: bonds.iter().map(|&(_, _, _, order)| order).collect(),
+        }
+    }
+
+    fn center() -> Mol {
+        mol(
+            &[1, 2, 3, 4, 5],
+            &[
+                (1, 1, 2, Single),
+                (2, 1, 3, Single),
+                (3, 1, 4, Single),
+                (4, 1, 5, Single),
+            ],
+        )
+    }
+
+    fn alkene() -> Mol {
+        mol(
+            &[1, 2, 3, 4, 5, 6],
+            &[
+                (1, 1, 2, Double),
+                (2, 1, 3, Single),
+                (3, 1, 4, Single),
+                (4, 2, 5, Single),
+                (5, 2, 6, Single),
+            ],
+        )
+    }
+
+    fn short_alkene() -> Mol {
+        mol(
+            &[1, 2, 3, 4, 5],
+            &[
+                (1, 1, 2, Double),
+                (2, 1, 3, Single),
+                (3, 2, 4, Single),
+                (4, 2, 5, Single),
+            ],
+        )
+    }
+
+    fn butatriene() -> Mol {
+        mol(
+            &[1, 2, 3, 4, 5, 6, 7, 8],
+            &[
+                (1, 1, 2, Double),
+                (2, 2, 3, Double),
+                (3, 3, 4, Double),
+                (4, 1, 5, Single),
+                (5, 1, 6, Single),
+                (6, 4, 7, Single),
+                (7, 4, 8, Single),
+            ],
+        )
+    }
+
+    fn branched() -> Mol {
+        mol(
+            &[1, 2, 3, 4, 5, 6],
+            &[
+                (1, 1, 2, Double),
+                (2, 2, 3, Double),
+                (3, 2, 4, Double),
+                (4, 1, 5, Single),
+                (5, 1, 6, Single),
+            ],
+        )
+    }
+
+    fn allene() -> Mol {
+        mol(
+            &[1, 2, 3, 4, 5, 6, 7],
+            &[
+                (1, 1, 2, Double),
+                (2, 2, 3, Double),
+                (3, 1, 4, Single),
+                (4, 1, 5, Single),
+                (5, 3, 6, Single),
+                (6, 3, 7, Single),
+            ],
+        )
+    }
+
+    #[test]
+    fn a_single_element_has_no_next_permutation() {
+        assert!(!next_permutation(&mut [0u8]));
+    }
+
+    #[test]
+    fn next_permutation_walks_every_permutation_in_lexicographic_order() {
+        let mut slice = [0u8, 1, 2];
+        let mut seen = vec![slice.to_vec()];
+        while next_permutation(&mut slice) {
+            seen.push(slice.to_vec());
+        }
+        assert_eq!(
+            seen,
+            vec![
+                vec![0, 1, 2],
+                vec![0, 2, 1],
+                vec![1, 0, 2],
+                vec![1, 2, 0],
+                vec![2, 0, 1],
+                vec![2, 1, 0],
+            ],
+        );
+    }
+
+    #[test]
+    fn next_permutation_skips_the_repeats_of_a_multiset() {
+        let mut slice = [0u8, 0, 1];
+        let mut seen = vec![slice.to_vec()];
+        while next_permutation(&mut slice) {
+            seen.push(slice.to_vec());
+        }
+        assert_eq!(seen, vec![vec![0, 0, 1], vec![0, 1, 0], vec![1, 0, 0]]);
+    }
+
+    #[test]
+    fn applying_the_identity_leaves_the_order_unchanged() {
+        let order = [3, 1, 4, 1, 5, 9];
+        assert_eq!(apply(&[0, 1, 2, 3, 4, 5], order), order);
+    }
+
+    #[test]
+    fn apply_reads_each_slot_through_the_permutation() {
+        assert_eq!(
+            apply(&[1, 0, 2, 3, 4, 5], [3, 1, 4, 1, 5, 9]),
+            [1, 3, 4, 1, 5, 9]
+        );
+    }
+
+    #[test]
+    fn relative_order_ranks_the_neighbors_by_magnitude() {
+        let neighbors = [s(1), s(2), s(3), s(4)];
+        let rank = |site| {
+            if site == s(2) || site == s(4) {
+                10
+            } else if site == s(3) {
+                20
+            } else {
+                30
+            }
+        };
+        assert_eq!(relative_order(&neighbors, rank), [3, 0, 2, 1, 0, 0]);
+    }
+
+    #[test]
+    fn relative_order_depends_only_on_the_relative_ranks() {
+        let neighbors = [s(1), s(2), s(3), s(4)];
+        let compact = |site| neighbors.iter().position(|&x| x == site).unwrap();
+        let spread = |site| 100 * neighbors.iter().position(|&x| x == site).unwrap();
+        assert_eq!(
+            relative_order(&neighbors, compact),
+            relative_order(&neighbors, spread),
+        );
+    }
+
+    #[test]
+    fn relabel_maps_classes_to_dense_labels_in_sorted_order() {
+        assert_eq!(relabel(&[7, 3, 7, 9]), vec![1, 0, 1, 2]);
+    }
+
+    #[test]
+    fn relabel_gives_identical_classes_one_label() {
+        assert_eq!(relabel(&[5, 5, 5]), vec![0, 0, 0]);
+    }
+
+    #[test]
+    fn every_geometry_group_permutes_its_slots() {
+        for kind in KINDS {
+            for &element in geometry(kind).group {
+                assert!(is_permutation(element, kind.slot_count()));
+            }
+        }
+    }
+
+    #[test]
+    fn every_geometry_group_contains_the_identity() {
+        for kind in KINDS {
+            let identity = identity(kind.slot_count());
+            assert!(geometry(kind).group.contains(&identity.as_slice()));
+        }
+    }
+
+    #[test]
+    fn every_geometry_group_is_closed_under_composition() {
+        for kind in KINDS {
+            let group = geometry(kind).group;
+            for &g in group {
+                for &h in group {
+                    let product = compose(g, h);
+                    assert!(group.contains(&product.as_slice()));
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn every_geometry_group_is_the_rotation_group_of_its_directions() {
+        for kind in KINDS {
+            let directions = geometry(kind).directions;
+            if directions.is_empty() {
+                continue;
+            }
+            let mut rotations: Vec<Vec<u8>> = permutations(directions.len())
+                .into_iter()
+                .filter(|perm| is_rotation(directions, perm))
+                .collect();
+            rotations.sort_unstable();
+            let mut group: Vec<Vec<u8>> = geometry(kind).group.iter().map(|g| g.to_vec()).collect();
+            group.sort_unstable();
+            assert_eq!(group, rotations);
+        }
+    }
+
+    #[test]
+    fn every_geometry_admits_the_kinds_configuration_count() {
+        for kind in KINDS {
+            let all_distinct: Vec<usize> = (0..kind.slot_count()).collect();
+            assert_eq!(
+                geometry(kind).configuration_count(&all_distinct),
+                kind.configuration_count(),
+            );
+        }
+    }
+
+    #[test]
+    fn a_repeated_substituent_leaves_a_tetrahedron_with_one_configuration() {
+        assert_eq!(
+            geometry(StereoKind::Tetrahedral).configuration_count(&[0, 0, 1, 2]),
+            1,
+        );
+    }
+
+    #[test]
+    fn an_octahedral_m_a4_b2_has_a_cis_and_a_trans_configuration() {
+        assert_eq!(
+            geometry(StereoKind::Octahedral).configuration_count(&[0, 0, 0, 0, 1, 1]),
+            2,
+        );
+    }
+
+    #[test]
+    fn every_geometry_reflection_permutes_its_slots() {
+        for kind in KINDS {
+            assert!(is_permutation(geometry(kind).reflection, kind.slot_count()));
+        }
+    }
+
+    #[test]
+    fn a_geometry_reflection_lies_in_its_group_exactly_when_the_kind_is_achiral() {
+        for kind in KINDS {
+            let reflection = geometry(kind).reflection;
+            let in_group = geometry(kind).group.contains(&reflection);
+            assert_eq!(in_group, !kind.is_chiral());
+        }
+    }
+
+    #[test]
+    fn every_spatial_reflection_preserves_the_pairwise_angles() {
+        for kind in KINDS {
+            let directions = geometry(kind).directions;
+            if !directions.is_empty() {
+                assert!(preserves_angles(directions, geometry(kind).reflection));
+            }
+        }
+    }
+
+    #[test]
+    fn only_the_edge_geometries_are_bipartite() {
+        for kind in KINDS {
+            let expected = matches!(kind, StereoKind::CisTrans | StereoKind::Allene);
+            assert_eq!(geometry(kind).bipartite, expected);
+        }
+    }
+
+    #[test]
+    fn a_geometry_has_reference_directions_exactly_when_it_is_not_bipartite() {
+        for kind in KINDS {
+            assert_eq!(
+                geometry(kind).directions.is_empty(),
+                geometry(kind).bipartite
+            );
+        }
+    }
+
+    #[test]
+    fn present_directions_number_the_slots() {
+        for kind in KINDS {
+            let geometry = geometry(kind);
+            if !geometry.directions.is_empty() {
+                assert_eq!(geometry.directions.len(), kind.slot_count());
+            }
+        }
+    }
+
+    #[test]
+    fn a_rotation_of_the_neighbors_preserves_the_token() {
+        for kind in KINDS {
+            let neighbors: Vec<SiteId> = (1..=kind.slot_count() as u32).map(s).collect();
+            let token = geometry(kind).token(&neighbors, ranked(&neighbors));
+            for &element in geometry(kind).group {
+                let rotated: Vec<SiteId> = element.iter().map(|&i| neighbors[i as usize]).collect();
+                assert_eq!(geometry(kind).token(&rotated, ranked(&neighbors)), token);
+            }
+        }
+    }
+
+    #[test]
+    fn a_reflection_returns_a_token_to_itself() {
+        for kind in KINDS {
+            let token = distinct_token(kind);
+            assert_eq!(geometry(kind).mirror(geometry(kind).mirror(token)), token);
+        }
+    }
+
+    #[test]
+    fn an_achiral_geometry_mirror_fixes_every_token() {
+        for kind in [StereoKind::CisTrans, StereoKind::SquarePlanar] {
+            let token = distinct_token(kind);
+            assert_eq!(geometry(kind).mirror(token), token);
+        }
+    }
+
+    #[test]
+    fn a_chiral_geometry_mirror_alters_a_distinct_token() {
+        for kind in KINDS {
+            if kind.is_chiral() {
+                let token = distinct_token(kind);
+                assert_ne!(geometry(kind).mirror(token), token);
+            }
+        }
+    }
+
+    #[test]
+    fn a_site_frame_is_the_atom_and_its_neighbors() {
+        let located = frame(&center(), StereoLocus::Site(s(1))).unwrap();
+        assert_eq!(located.anchors, vec![s(1)]);
+        assert_eq!(located.substituents, vec![s(2), s(3), s(4), s(5)]);
+    }
+
+    #[test]
+    fn a_double_bond_frame_pairs_each_terminus_with_its_substituents() {
+        let located = frame(&alkene(), StereoLocus::Bond(b(1))).unwrap();
+        assert_eq!(located.anchors, vec![s(1), s(2)]);
+        assert_eq!(located.substituents, vec![s(3), s(4), s(5), s(6)]);
+    }
+
+    #[test]
+    fn a_double_bond_frame_is_none_when_a_terminus_lacks_two_substituents() {
+        assert!(frame(&short_alkene(), StereoLocus::Bond(b(1))).is_none());
+    }
+
+    #[test]
+    fn a_cumulene_bond_frame_walks_out_to_the_chain_termini() {
+        let located = frame(&butatriene(), StereoLocus::Bond(b(2))).unwrap();
+        assert_eq!(located.anchors, vec![s(1), s(4)]);
+        assert_eq!(located.substituents, vec![s(5), s(6), s(7), s(8)]);
+    }
+
+    #[test]
+    fn a_branched_double_bond_chain_has_no_frame() {
+        assert!(frame(&branched(), StereoLocus::Bond(b(1))).is_none());
+    }
+
+    #[test]
+    fn an_allene_axis_frame_is_the_two_termini_and_their_substituents() {
+        let located = frame(&allene(), StereoLocus::Axis(s(2))).unwrap();
+        assert_eq!(located.anchors, vec![s(1), s(3)]);
+        assert_eq!(located.substituents, vec![s(4), s(5), s(6), s(7)]);
+    }
+
+    #[test]
+    fn an_axis_frame_is_none_off_a_cumulene_center() {
+        assert!(frame(&alkene(), StereoLocus::Axis(s(1))).is_none());
+    }
+}
