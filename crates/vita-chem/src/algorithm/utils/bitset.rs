@@ -1,9 +1,10 @@
-/// A fixed-length bit vector with GF(2) arithmetic.
+/// A fixed-length bit vector with set and GF(2) algebra.
 ///
 /// Stores `n` bits packed into 64-bit words. All bit positions start at zero.
-/// Supports in-place XOR (`^=`) as GF(2) addition (symmetric difference),
-/// which is the fundamental row operation for Gaussian elimination over GF(2)
-/// vector spaces.
+/// In-place XOR (`^=`) is GF(2) addition — the symmetric difference, and the row
+/// operation for Gaussian elimination over GF(2) vector spaces; in-place OR (`|=`)
+/// is set union, and [`count_and`](Self::count_and) sizes the intersection without
+/// materialising it.
 ///
 /// Obtain via [`zeros`](Self::zeros).
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -57,6 +58,16 @@ impl BitSet {
         self.words.iter().map(|w| w.count_ones() as usize).sum()
     }
 
+    /// Number of positions set in both this bit set and `other`.
+    #[allow(dead_code)]
+    pub fn count_and(&self, other: &BitSet) -> usize {
+        self.words
+            .iter()
+            .zip(&other.words)
+            .map(|(a, b)| (a & b).count_ones() as usize)
+            .sum()
+    }
+
     /// Index of the lowest set bit, or `None` if all bits are zero.
     pub fn lowest_set(&self) -> Option<usize> {
         self.words
@@ -70,6 +81,14 @@ impl std::ops::BitXorAssign<&BitSet> for BitSet {
     fn bitxor_assign(&mut self, other: &BitSet) {
         for (a, b) in self.words.iter_mut().zip(&other.words) {
             *a ^= b;
+        }
+    }
+}
+
+impl std::ops::BitOrAssign<&BitSet> for BitSet {
+    fn bitor_assign(&mut self, other: &BitSet) {
+        for (a, b) in self.words.iter_mut().zip(&other.words) {
+            *a |= b;
         }
     }
 }
@@ -147,6 +166,15 @@ mod tests {
     }
 
     #[test]
+    fn set_is_idempotent() {
+        let mut b = zero(8);
+        b.set(4);
+        b.set(4);
+        assert_eq!(b.count_ones(), 1);
+        assert!(b.test(4));
+    }
+
+    #[test]
     fn toggle_on_zero_sets_bit() {
         let mut b = zero(8);
         b.toggle(5);
@@ -216,6 +244,47 @@ mod tests {
     }
 
     #[test]
+    fn count_and_is_the_intersection_size() {
+        let mut a = zero(8);
+        a.set(1);
+        a.set(2);
+        let mut b = zero(8);
+        b.set(2);
+        b.set(3);
+        assert_eq!(a.count_and(&b), 1);
+    }
+
+    #[test]
+    fn count_and_of_disjoint_sets_is_zero() {
+        let mut a = zero(8);
+        a.set(1);
+        let mut b = zero(8);
+        b.set(2);
+        assert_eq!(a.count_and(&b), 0);
+    }
+
+    #[test]
+    fn count_and_with_self_is_count_ones() {
+        let mut a = zero(8);
+        a.set(1);
+        a.set(3);
+        let copy = a.clone();
+        assert_eq!(a.count_and(&copy), a.count_ones());
+    }
+
+    #[test]
+    fn count_and_spans_multiple_words() {
+        let mut a = zero(130);
+        a.set(3);
+        a.set(65);
+        a.set(129);
+        let mut b = zero(130);
+        b.set(65);
+        b.set(129);
+        assert_eq!(a.count_and(&b), 2);
+    }
+
+    #[test]
     fn lowest_set_returns_minimum_index() {
         let mut b = zero(8);
         b.set(7);
@@ -249,15 +318,6 @@ mod tests {
     }
 
     #[test]
-    fn set_is_idempotent() {
-        let mut b = zero(8);
-        b.set(4);
-        b.set(4);
-        assert_eq!(b.count_ones(), 1);
-        assert!(b.test(4));
-    }
-
-    #[test]
     fn xor_assign_is_commutative() {
         let mut a = zero(8);
         a.set(1);
@@ -273,5 +333,47 @@ mod tests {
         b_xor_a ^= &a;
 
         assert_eq!(a_xor_b, b_xor_a);
+    }
+
+    #[test]
+    fn or_assign_is_union() {
+        let mut a = zero(8);
+        a.set(1);
+        a.set(2);
+        let mut b = zero(8);
+        b.set(2);
+        b.set(3);
+        a |= &b;
+        assert!(a.test(1));
+        assert!(a.test(2));
+        assert!(a.test(3));
+    }
+
+    #[test]
+    fn or_assign_with_self_leaves_it_unchanged() {
+        let mut a = zero(80);
+        a.set(5);
+        a.set(70);
+        let copy = a.clone();
+        a |= &copy;
+        assert_eq!(a, copy);
+    }
+
+    #[test]
+    fn or_assign_is_commutative() {
+        let mut a = zero(8);
+        a.set(1);
+        a.set(3);
+        let mut b = zero(8);
+        b.set(3);
+        b.set(5);
+
+        let mut a_or_b = a.clone();
+        a_or_b |= &b;
+
+        let mut b_or_a = b;
+        b_or_a |= &a;
+
+        assert_eq!(a_or_b, b_or_a);
     }
 }
