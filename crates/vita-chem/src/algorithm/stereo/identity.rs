@@ -3,118 +3,9 @@ use std::hash::{Hash, Hasher};
 
 use vita_core::SiteId;
 
-use super::{Token, geometry};
+use super::{Configured, refined};
 use crate::algorithm::canonical::{Canonical, canonicalize};
-use crate::algorithm::utils::FxHashMap;
-use crate::{BondId, HasStereoConfigurations, StereoKind, StereoLocus};
-
-/// The stereo the configurations anchored at a site carry, each a `(kind, token)`
-/// pair kept sorted — a set that colors the site during refinement and appears in
-/// the canonical form.
-type Signal = Vec<(StereoKind, Token)>;
-
-/// A canonical labeling refined by stereochemistry: the graph and the caller's
-/// coloring, further split by the configurations laid over it.
-type Configured<VK, EK> = Canonical<(VK, Signal), EK>;
-
-/// The stereo-refined canonical form of a molecule.
-///
-/// Constitution and stereochemistry are canonicalized together: each
-/// configuration reduces to a token relative to the current symmetry classes, the
-/// tokens color their anchors, and the labeling is recomputed until the classes
-/// settle — a fixpoint that resolves even a pseudo-asymmetric center, whose
-/// stereogenicity turns on the configurations of its neighbors. `reflect` folds
-/// in each configuration's mirror image instead, giving the enantiomer's form.
-///
-/// The tokens sit in the coloring, so the form tells apart stereoisomers a bare
-/// constitution cannot; being a canonical form, it is blind to the order the
-/// atoms arrived in.
-fn refined<M, VK, EK>(
-    mol: &M,
-    site_key: &impl Fn(SiteId) -> VK,
-    bond_key: &impl Fn(BondId) -> EK,
-    reflect: bool,
-) -> Configured<VK, EK>
-where
-    M: HasStereoConfigurations,
-    VK: Ord,
-    EK: Ord,
-{
-    let mut signal: FxHashMap<SiteId, Signal> = FxHashMap::default();
-    let mut classes = 0;
-    loop {
-        let canon = canonicalize(
-            mol,
-            |site| {
-                (
-                    site_key(site),
-                    signal.get(&site).cloned().unwrap_or_default(),
-                )
-            },
-            bond_key,
-        );
-        let count = canon.orbits().count();
-        if count == classes {
-            return canon;
-        }
-        classes = count;
-        signal = signals(mol, &canon, reflect);
-    }
-}
-
-/// The stereo signal every anchor carries under a labeling: each configuration's
-/// token, mirrored when `reflect`, filed against the atoms its locus pins.
-fn signals<M, VK, EK>(
-    mol: &M,
-    canon: &Configured<VK, EK>,
-    reflect: bool,
-) -> FxHashMap<SiteId, Signal>
-where
-    M: HasStereoConfigurations,
-{
-    let class = |site: SiteId| {
-        canon
-            .orbit(site)
-            .expect("a configuration's site is in the molecule")
-            .iter()
-            .map(|member| {
-                canon
-                    .rank(member)
-                    .expect("an orbit member is in the molecule")
-            })
-            .min()
-            .expect("an orbit is non-empty")
-    };
-
-    let mut signal: FxHashMap<SiteId, Signal> = FxHashMap::default();
-    let mut file = |anchor: SiteId, entry: (StereoKind, Token)| {
-        signal.entry(anchor).or_default().push(entry);
-    };
-    for config in mol.stereo_configurations() {
-        let geometry = geometry(config.kind());
-        let token = geometry.token(config.neighbors(), class);
-        let entry = (
-            config.kind(),
-            if reflect {
-                geometry.mirror(token)
-            } else {
-                token
-            },
-        );
-        match config.locus() {
-            StereoLocus::Site(site) | StereoLocus::Axis(site) => file(site, entry),
-            StereoLocus::Bond(bond) => {
-                let (a, b) = mol.bond_endpoints(bond);
-                file(a, entry);
-                file(b, entry);
-            }
-        }
-    }
-    for tokens in signal.values_mut() {
-        tokens.sort_unstable();
-    }
-    signal
-}
+use crate::{BondId, HasStereoConfigurations};
 
 /// How two molecules relate stereochemically.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -250,7 +141,7 @@ mod tests {
 
     use vita_core::HasSites;
 
-    use crate::{HasBonds, StereoConfiguration};
+    use crate::{HasBonds, StereoConfiguration, StereoKind, StereoLocus};
 
     fn s(n: u32) -> SiteId {
         SiteId::new(n).unwrap()

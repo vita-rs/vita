@@ -10,11 +10,12 @@ pub use validate::{StereoConsistency, consistency};
 
 use vita_core::SiteId;
 
-use crate::{BondOrder, HasBondOrders, StereoKind, StereoLocus};
-
-/// The largest neighbour count of any geometry — six, the octahedron or trigonal
-/// prism. Every arrangement buffers this many slots; unused ones stay zero.
-const MAX_SLOTS: usize = 6;
+use crate::algorithm::canonical::{Canonical, canonicalize};
+use crate::algorithm::utils::{FxHashMap, FxHashSet};
+use crate::{
+    BondId, BondOrder, HasBondOrders, HasBonds, HasStereoConfigurations, StereoConfiguration,
+    StereoDescriptor, StereoKind, StereoLocus,
+};
 
 /// A stereogenic frame located in the graph: the atoms that pin it, and the
 /// substituents its geometry arranges.
@@ -22,7 +23,7 @@ const MAX_SLOTS: usize = 6;
 /// A site's frame is the atom and its neighbours. An edge's or axis's is the two
 /// termini of its rigid double-bond chain and the two substituents each bears,
 /// walked out from the anchor — so a plain double bond and a long cumulene resolve
-/// alike. The substituents of a bipartite frame are grouped by end.
+/// alike. The substituents of a two-ended frame are grouped by end.
 struct Frame {
     anchors: Vec<SiteId>,
     substituents: Vec<SiteId>,
@@ -101,356 +102,256 @@ fn terminal_substituents<M: HasBondOrders>(mol: &M, terminus: SiteId) -> Vec<Sit
         .collect()
 }
 
-/// The canonical class of a neighbour arrangement under a geometry's rotation
-/// group.
-///
-/// A configuration's neighbours, ranked and relabelled to their relative order,
-/// reduce under the group to the lexicographically least image — a coset
-/// representative. Two configurations a ranking cannot tell apart share a token; it
-/// is `Copy`, ordered, and hashed, and never leaves the module.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-struct Token([u8; MAX_SLOTS]);
-
-/// The idealised local geometry a [`StereoKind`] denotes, looked up once by
-/// [`geometry`]: the proper-rotation group over its neighbour slots, the reflection
-/// that mirrors it, the reference directions coordinates align onto, and whether its
-/// slots split into two ends. The reduction, mirror, and count that consume it never
-/// branch on the kind — a further geometry is new data here, not new logic.
-struct Geometry {
-    /// The proper-rotation group over the slots — the orderings a configuration
-    /// treats as equivalent, the closure of the geometry's rotation generators.
-    group: &'static [&'static [u8]],
-    /// The slot permutation a reflection induces, carrying a configuration onto its
-    /// mirror image: outside [`group`](Self::group) for a chiral geometry, inside it
-    /// for an achiral one, so the mirror is well defined on cosets.
-    reflection: &'static [u8],
-    /// The reference unit directions, slot by slot, a centre's coordinates align
-    /// onto; empty for a geometry read from a dihedral instead — a double bond or an
-    /// allene.
-    directions: &'static [[f64; 3]],
-    /// Whether the slots split into two independent ends — a double bond, an allene —
-    /// whose substituents cannot cross, as against one freely permuted centre.
-    bipartite: bool,
+/// Every locus a molecule could bear stereochemistry at — each site as a coordination
+/// centre and as an allene axis, each bond as a double bond. The caller's `candidate`
+/// then says which the geometry admits.
+fn candidate_loci<M: HasBonds>(mol: &M) -> impl Iterator<Item = StereoLocus> + '_ {
+    mol.sites()
+        .map(StereoLocus::Site)
+        .chain(mol.sites().map(StereoLocus::Axis))
+        .chain(mol.bonds().map(StereoLocus::Bond))
 }
 
-impl Geometry {
-    /// The token of a configuration whose `neighbors` are ranked by `rank`.
-    ///
-    /// Reduces the neighbours' *relative* order — their ranks relabelled to `0..k` by
-    /// magnitude, not the ranks themselves — so symmetry-equivalent centres, whose
-    /// neighbours carry different ranks in the same pattern, reduce alike.
-    fn token(&self, neighbors: &[SiteId], rank: impl Fn(SiteId) -> usize) -> Token {
-        Token(reduce(relative_order(neighbors, rank), self.group))
-    }
+/// The stereo an atom carries under a labeling: the sorted descriptors of the
+/// configurations anchored on it, a coloring that refines the labeling and appears
+/// in the canonical form.
+type Signal = Vec<StereoDescriptor>;
 
-    /// The token of the mirror image of the configuration `token` names.
-    ///
-    /// Applies the reflection and re-reduces: a chiral geometry's token flips to
-    /// another class, an achiral one's stays put.
-    fn mirror(&self, token: Token) -> Token {
-        Token(reduce(apply(self.reflection, token.0), self.group))
-    }
+/// A canonical labeling refined by stereochemistry: the graph and the caller's
+/// coloring, further split by the configurations laid over it.
+type Configured<VK, EK> = Canonical<(VK, Signal), EK>;
 
-    /// The number of distinct configurations the geometry realises given the symmetry
-    /// `classes` of its substituents, one per slot — a locus is stereogenic exactly
-    /// when this exceeds one, the all-distinct case being [`StereoKind::configuration_count`].
-    fn configuration_count(&self, classes: &[usize]) -> usize {
-        let mut cosets: Vec<[u8; MAX_SLOTS]> = self
-            .arrangements(classes)
-            .into_iter()
-            .map(|arrangement| reduce(arrangement, self.group))
-            .collect();
-        cosets.sort_unstable();
-        cosets.dedup();
-        cosets.len()
-    }
+/// A site's symmetry class under a labeling: the least canonical rank in its orbit,
+/// so interchangeable atoms share a class.
+fn class<VK, EK>(canon: &Canonical<VK, EK>, site: SiteId) -> usize {
+    canon
+        .orbit(site)
+        .expect("the site is in the molecule")
+        .iter()
+        .map(|member| {
+            canon
+                .rank(member)
+                .expect("an orbit member is in the molecule")
+        })
+        .min()
+        .expect("an orbit is non-empty")
+}
 
-    /// Every arrangement of the substituent `classes` the geometry admits: within
-    /// each end for a bipartite geometry, over all slots for a centre. Classes are
-    /// relabelled to `0..m` so the buffers compare directly.
-    fn arrangements(&self, classes: &[usize]) -> Vec<[u8; MAX_SLOTS]> {
-        let labels = relabel(classes);
-        if self.bipartite {
-            let mut result = Vec::with_capacity(4);
-            for first in [[labels[0], labels[1]], [labels[1], labels[0]]] {
-                for second in [[labels[2], labels[3]], [labels[3], labels[2]]] {
-                    let mut slots = [0u8; MAX_SLOTS];
-                    slots[..4].copy_from_slice(&[first[0], first[1], second[0], second[1]]);
-                    result.push(slots);
-                }
-            }
-            result
+/// The stereo signal every anchor carries under a labeling: each configuration's
+/// descriptor relative to the current symmetry classes, mirrored when `reflect`,
+/// filed against the atoms its locus pins.
+fn signals<M, VK, EK>(
+    mol: &M,
+    canon: &Configured<VK, EK>,
+    reflect: bool,
+) -> FxHashMap<SiteId, Signal>
+where
+    M: HasStereoConfigurations,
+{
+    let mut signal: FxHashMap<SiteId, Signal> = FxHashMap::default();
+    let mut file = |anchor: SiteId, descriptor: StereoDescriptor| {
+        signal.entry(anchor).or_default().push(descriptor);
+    };
+    for config in mol.stereo_configurations() {
+        let descriptor = config.descriptor(|site| class(canon, site));
+        let descriptor = if reflect {
+            descriptor.mirror()
         } else {
-            let n = labels.len();
-            let mut labels = labels;
-            labels.sort_unstable();
-            let mut result = Vec::new();
-            loop {
-                let mut slots = [0u8; MAX_SLOTS];
-                slots[..n].copy_from_slice(&labels);
-                result.push(slots);
-                if !next_permutation(&mut labels) {
-                    break;
-                }
+            descriptor
+        };
+        match config.locus() {
+            StereoLocus::Site(site) | StereoLocus::Axis(site) => file(site, descriptor),
+            StereoLocus::Bond(bond) => {
+                let (a, b) = mol.bond_endpoints(bond);
+                file(a, descriptor);
+                file(b, descriptor);
             }
-            result
         }
     }
+    for descriptors in signal.values_mut() {
+        descriptors.sort_unstable();
+    }
+    signal
 }
 
-/// The geometry each [`StereoKind`] denotes.
+/// The caller's colouring `site_key` refined by a stereo `signal` — each site keyed by
+/// its own colour and the descriptors filed on it, so stereochemistry splits the
+/// classes a bare constitution leaves merged.
+fn refined_key<'a, VK>(
+    signal: &'a FxHashMap<SiteId, Signal>,
+    site_key: &'a impl Fn(SiteId) -> VK,
+) -> impl Fn(SiteId) -> (VK, Signal) + 'a {
+    move |site| {
+        (
+            site_key(site),
+            signal.get(&site).cloned().unwrap_or_default(),
+        )
+    }
+}
+
+/// A canonical labeling with stereochemistry folded in, refined to a fixpoint.
 ///
-/// - `Tetrahedral` — A₄ (12), two configurations.
-/// - `CisTrans`, `Allene` — `{(), (0 1)(2 3)}` (2) over the two-plus-two ends, told
-///   apart by their reflection: the identity for a double bond, the end-swap for an
-///   allene.
-/// - `SquarePlanar` — D₄ (8), three configurations.
-/// - `TrigonalBipyramidal` — D₃ (6), twenty configurations.
-/// - `SquarePyramidal` — C₄ (4), thirty configurations.
-/// - `Octahedral` — O (24), thirty configurations.
-/// - `TrigonalPrismatic` — D₃ (6), one hundred and twenty configurations.
-fn geometry(kind: StereoKind) -> &'static Geometry {
-    match kind {
-        StereoKind::Tetrahedral => &TETRAHEDRAL,
-        StereoKind::CisTrans => &CIS_TRANS,
-        StereoKind::Allene => &ALLENE,
-        StereoKind::SquarePlanar => &SQUARE_PLANAR,
-        StereoKind::TrigonalBipyramidal => &TRIGONAL_BIPYRAMIDAL,
-        StereoKind::SquarePyramidal => &SQUARE_PYRAMIDAL,
-        StereoKind::Octahedral => &OCTAHEDRAL,
-        StereoKind::TrigonalPrismatic => &TRIGONAL_PRISMATIC,
+/// Each configuration reduces to a descriptor relative to the current symmetry
+/// classes, the descriptors colour their anchors, and the labeling is recomputed
+/// until the classes settle — a fixpoint that resolves even a pseudo-asymmetric
+/// centre, whose stereogenicity turns on the configurations of its neighbours.
+/// `reflect` folds in each configuration's mirror image instead, giving the
+/// enantiomer's labeling.
+fn refined<M, VK, EK>(
+    mol: &M,
+    site_key: &impl Fn(SiteId) -> VK,
+    bond_key: &impl Fn(BondId) -> EK,
+    reflect: bool,
+) -> Configured<VK, EK>
+where
+    M: HasStereoConfigurations,
+    VK: Ord,
+    EK: Ord,
+{
+    let mut signal: FxHashMap<SiteId, Signal> = FxHashMap::default();
+    let mut classes = 0;
+    loop {
+        let canon = canonicalize(mol, refined_key(&signal, site_key), bond_key);
+        let count = canon.orbits().count();
+        if count == classes {
+            return canon;
+        }
+        classes = count;
+        signal = signals(mol, &canon, reflect);
     }
 }
 
-/// The two-plus-two rotation group the bipartite edge geometries share: the identity
-/// and the simultaneous swap of both ends.
-const PAIRED: &[&[u8]] = &[&[0, 1, 2, 3], &[1, 0, 3, 2]];
-
-/// √3 / 2 — the in-plane offset of a trigonal vertex.
-const R: f64 = 0.866_025_403_784_438_6;
-
-static TETRAHEDRAL: Geometry = Geometry {
-    group: &[
-        &[0, 1, 2, 3],
-        &[0, 2, 3, 1],
-        &[0, 3, 1, 2],
-        &[1, 0, 3, 2],
-        &[1, 2, 0, 3],
-        &[1, 3, 2, 0],
-        &[2, 0, 1, 3],
-        &[2, 1, 3, 0],
-        &[2, 3, 0, 1],
-        &[3, 0, 2, 1],
-        &[3, 1, 0, 2],
-        &[3, 2, 1, 0],
-    ],
-    reflection: &[1, 0, 2, 3],
-    directions: &[
-        [1.0, 1.0, 1.0],
-        [1.0, -1.0, -1.0],
-        [-1.0, -1.0, 1.0],
-        [-1.0, 1.0, -1.0],
-    ],
-    bipartite: false,
-};
-
-static CIS_TRANS: Geometry = Geometry {
-    group: PAIRED,
-    reflection: &[0, 1, 2, 3],
-    directions: &[],
-    bipartite: true,
-};
-
-static ALLENE: Geometry = Geometry {
-    group: PAIRED,
-    reflection: &[1, 0, 2, 3],
-    directions: &[],
-    bipartite: true,
-};
-
-static SQUARE_PLANAR: Geometry = Geometry {
-    group: &[
-        &[0, 1, 2, 3],
-        &[0, 3, 2, 1],
-        &[1, 0, 3, 2],
-        &[1, 2, 3, 0],
-        &[2, 1, 0, 3],
-        &[2, 3, 0, 1],
-        &[3, 0, 1, 2],
-        &[3, 2, 1, 0],
-    ],
-    reflection: &[0, 1, 2, 3],
-    directions: &[
-        [1.0, 0.0, 0.0],
-        [0.0, 1.0, 0.0],
-        [-1.0, 0.0, 0.0],
-        [0.0, -1.0, 0.0],
-    ],
-    bipartite: false,
-};
-
-static TRIGONAL_BIPYRAMIDAL: Geometry = Geometry {
-    group: &[
-        &[0, 1, 2, 3, 4],
-        &[0, 1, 3, 4, 2],
-        &[0, 1, 4, 2, 3],
-        &[1, 0, 2, 4, 3],
-        &[1, 0, 3, 2, 4],
-        &[1, 0, 4, 3, 2],
-    ],
-    reflection: &[1, 0, 2, 3, 4],
-    directions: &[
-        [0.0, 0.0, 1.0],
-        [0.0, 0.0, -1.0],
-        [1.0, 0.0, 0.0],
-        [-0.5, R, 0.0],
-        [-0.5, -R, 0.0],
-    ],
-    bipartite: false,
-};
-
-static SQUARE_PYRAMIDAL: Geometry = Geometry {
-    group: &[
-        &[0, 1, 2, 3, 4],
-        &[0, 2, 3, 4, 1],
-        &[0, 3, 4, 1, 2],
-        &[0, 4, 1, 2, 3],
-    ],
-    reflection: &[0, 1, 4, 3, 2],
-    directions: &[
-        [0.0, 0.0, 1.0],
-        [1.0, 0.0, 0.0],
-        [0.0, 1.0, 0.0],
-        [-1.0, 0.0, 0.0],
-        [0.0, -1.0, 0.0],
-    ],
-    bipartite: false,
-};
-
-static OCTAHEDRAL: Geometry = Geometry {
-    group: &[
-        &[0, 1, 2, 3, 4, 5],
-        &[0, 1, 3, 2, 5, 4],
-        &[0, 1, 4, 5, 3, 2],
-        &[0, 1, 5, 4, 2, 3],
-        &[1, 0, 2, 3, 5, 4],
-        &[1, 0, 3, 2, 4, 5],
-        &[1, 0, 4, 5, 2, 3],
-        &[1, 0, 5, 4, 3, 2],
-        &[2, 3, 0, 1, 5, 4],
-        &[2, 3, 1, 0, 4, 5],
-        &[2, 3, 4, 5, 0, 1],
-        &[2, 3, 5, 4, 1, 0],
-        &[3, 2, 0, 1, 4, 5],
-        &[3, 2, 1, 0, 5, 4],
-        &[3, 2, 4, 5, 1, 0],
-        &[3, 2, 5, 4, 0, 1],
-        &[4, 5, 0, 1, 2, 3],
-        &[4, 5, 1, 0, 3, 2],
-        &[4, 5, 2, 3, 1, 0],
-        &[4, 5, 3, 2, 0, 1],
-        &[5, 4, 0, 1, 3, 2],
-        &[5, 4, 1, 0, 2, 3],
-        &[5, 4, 2, 3, 0, 1],
-        &[5, 4, 3, 2, 1, 0],
-    ],
-    reflection: &[1, 0, 3, 2, 5, 4],
-    directions: &[
-        [1.0, 0.0, 0.0],
-        [-1.0, 0.0, 0.0],
-        [0.0, 1.0, 0.0],
-        [0.0, -1.0, 0.0],
-        [0.0, 0.0, 1.0],
-        [0.0, 0.0, -1.0],
-    ],
-    bipartite: false,
-};
-
-static TRIGONAL_PRISMATIC: Geometry = Geometry {
-    group: &[
-        &[0, 1, 2, 3, 4, 5],
-        &[1, 2, 0, 4, 5, 3],
-        &[2, 0, 1, 5, 3, 4],
-        &[3, 5, 4, 0, 2, 1],
-        &[4, 3, 5, 1, 0, 2],
-        &[5, 4, 3, 2, 1, 0],
-    ],
-    reflection: &[0, 2, 1, 3, 5, 4],
-    directions: &[
-        [1.0, 0.0, 1.0],
-        [-0.5, R, 1.0],
-        [-0.5, -R, 1.0],
-        [1.0, 0.0, -1.0],
-        [-0.5, R, -1.0],
-        [-0.5, -R, -1.0],
-    ],
-    bipartite: false,
-};
-
-/// The least image of `order` over the geometry's rotation group.
-fn reduce(order: [u8; MAX_SLOTS], group: &[&[u8]]) -> [u8; MAX_SLOTS] {
-    group
-        .iter()
-        .map(|permutation| apply(permutation, order))
-        .min()
-        .expect("a group contains the identity")
+/// The settled stereo signal: each atom's descriptors under the symmetry classes the
+/// stereochemistry itself refines to. This is the coloring a stereogenic-unit
+/// detection must use, so a pseudo-asymmetric centre's inequivalent neighbours are
+/// told apart.
+fn settle<M, VK, EK>(
+    mol: &M,
+    site_key: &impl Fn(SiteId) -> VK,
+    bond_key: &impl Fn(BondId) -> EK,
+) -> FxHashMap<SiteId, Signal>
+where
+    M: HasStereoConfigurations,
+    VK: Ord,
+    EK: Ord,
+{
+    signals(mol, &refined(mol, site_key, bond_key, false), false)
 }
 
-/// `order` read through `permutation`: slot `i` takes `order[permutation[i]]`.
-fn apply(permutation: &[u8], order: [u8; MAX_SLOTS]) -> [u8; MAX_SLOTS] {
-    let mut image = [0u8; MAX_SLOTS];
-    for (slot, &source) in permutation.iter().enumerate() {
-        image[slot] = order[source as usize];
-    }
-    image
-}
-
-/// The neighbours' ranks relabelled to their relative order — each slot the count
-/// of neighbours of strictly lower rank.
+/// The distinct configurations `kind` realises at `locus` over `subs`, whose symmetry
+/// classes are given by `class`.
 ///
-/// Ties collapse: equal ranks share a slot value, so the result is a function of
-/// the ranks alone, blind to the order the neighbours were given in. Ranks a
-/// symmetry cannot yet tell apart therefore reduce alike, which is what lets the
-/// order refine a coloring — where the ranks are the current symmetry classes,
-/// not a total labeling — without depending on that labeling.
-fn relative_order(neighbors: &[SiteId], rank: impl Fn(SiteId) -> usize) -> [u8; MAX_SLOTS] {
-    let mut ranks = [0usize; MAX_SLOTS];
-    for (slot, &neighbor) in neighbors.iter().enumerate() {
-        ranks[slot] = rank(neighbor);
+/// Enumerates the neighbour orderings the geometry admits and keeps one per distinct
+/// [`StereoDescriptor`] under `class` — collapsing both the rotations a configuration
+/// treats as equivalent and the swaps of interchangeable substituents.
+fn configurations(
+    locus: StereoLocus,
+    kind: StereoKind,
+    subs: &[SiteId],
+    class: impl Fn(SiteId) -> usize,
+) -> Vec<StereoConfiguration> {
+    let mut seen: FxHashSet<StereoDescriptor> = FxHashSet::default();
+    let mut result = Vec::new();
+    for ordering in presentations(kind, subs) {
+        let Some(config) = StereoConfiguration::new(locus, kind, ordering) else {
+            continue;
+        };
+        if seen.insert(config.descriptor(&class)) {
+            result.push(config);
+        }
     }
-    let mut order = [0u8; MAX_SLOTS];
-    for slot in 0..neighbors.len() {
-        order[slot] = (0..neighbors.len())
-            .filter(|&other| ranks[other] < ranks[slot])
-            .count() as u8;
-    }
-    order
+    result
 }
 
-/// Relabels the substituent classes to `0..m` by first appearance in sorted order.
-fn relabel(classes: &[usize]) -> Vec<u8> {
-    let mut distinct: Vec<usize> = classes.to_vec();
-    distinct.sort_unstable();
-    distinct.dedup();
-    classes
-        .iter()
-        .map(|class| distinct.binary_search(class).expect("class is present") as u8)
-        .collect()
-}
-
-/// Advances `slice` to the next lexicographic permutation, `false` at the last.
-fn next_permutation(slice: &mut [u8]) -> bool {
-    let n = slice.len();
-    let Some(pivot) = (1..n).rev().find(|&i| slice[i - 1] < slice[i]) else {
-        return false;
+/// The distinct configurations `locus` of `kind` realises in a molecule, under a
+/// coloring `site_key` that already carries any stereo refinement.
+///
+/// Locates and individualises the frame, colours the graph so interchangeable
+/// substituents share a class, and returns one configuration per stereoisomer those
+/// classes admit — empty if the graph realises no frame of the right size. The locus
+/// is stereogenic exactly when more than one results; an enumeration branches over
+/// each.
+fn realisable<M, VK, EK>(
+    mol: &M,
+    locus: StereoLocus,
+    kind: StereoKind,
+    site_key: &impl Fn(SiteId) -> VK,
+    bond_key: &impl Fn(BondId) -> EK,
+) -> Vec<StereoConfiguration>
+where
+    M: HasBondOrders,
+    VK: Ord,
+    EK: Ord,
+{
+    if !locus.anchors(kind) {
+        return Vec::new();
+    }
+    let Some(frame) = frame(mol, locus) else {
+        return Vec::new();
     };
-    let successor = (pivot..n)
-        .rev()
-        .find(|&i| slice[i] > slice[pivot - 1])
-        .expect("a successor exists past the pivot");
-    slice.swap(pivot - 1, successor);
-    slice[pivot..].reverse();
-    true
+    if frame.substituents.len() != kind.slot_count() {
+        return Vec::new();
+    }
+    let canon = canonicalize(
+        mol,
+        |site| (frame_mark(site, &frame.anchors), site_key(site)),
+        bond_key,
+    );
+    configurations(locus, kind, &frame.substituents, |site| class(&canon, site))
+}
+
+/// A distinct individualisation mark for each anchor of a frame — its position in
+/// `anchors` plus one, or zero for a site outside it — so a canonical labeling holds
+/// the frame fixed and tells its members apart. A site marks itself, an edge or axis
+/// its two termini.
+fn frame_mark(site: SiteId, anchors: &[SiteId]) -> u8 {
+    anchors
+        .iter()
+        .position(|&anchor| anchor == site)
+        .map_or(0, |index| index as u8 + 1)
+}
+
+/// The neighbour orderings `kind` admits over `subs`: every ordering for a centre,
+/// only the within-end orderings for a two-ended edge — a substituent cannot cross
+/// from one end to the other.
+fn presentations(kind: StereoKind, subs: &[SiteId]) -> Vec<Vec<SiteId>> {
+    let per_end = subs.len() / kind.ends();
+    subs.chunks(per_end)
+        .fold(vec![Vec::new()], |orderings, end| {
+            let within = permutations(end);
+            orderings
+                .iter()
+                .flat_map(|prefix| {
+                    within.iter().map(move |ordering| {
+                        let mut next = prefix.clone();
+                        next.extend_from_slice(ordering);
+                        next
+                    })
+                })
+                .collect()
+        })
+}
+
+/// Every permutation of `items`.
+fn permutations<T: Clone>(items: &[T]) -> Vec<Vec<T>> {
+    let mut buffer = items.to_vec();
+    let mut result = Vec::new();
+    permute(&mut buffer, 0, &mut result);
+    result
+}
+
+/// Appends to `result` every permutation of `items` that holds its first `start`
+/// elements fixed.
+fn permute<T: Clone>(items: &mut [T], start: usize, result: &mut Vec<Vec<T>>) {
+    if start == items.len() {
+        result.push(items.to_vec());
+        return;
+    }
+    for i in start..items.len() {
+        items.swap(start, i);
+        permute(items, start + 1, result);
+        items.swap(start, i);
+    }
 }
 
 #[cfg(test)]
@@ -470,115 +371,19 @@ mod tests {
         BondId::new(n).unwrap()
     }
 
-    const KINDS: [StereoKind; 8] = [
-        StereoKind::Tetrahedral,
-        StereoKind::CisTrans,
-        StereoKind::Allene,
-        StereoKind::SquarePlanar,
-        StereoKind::TrigonalBipyramidal,
-        StereoKind::SquarePyramidal,
-        StereoKind::Octahedral,
-        StereoKind::TrigonalPrismatic,
-    ];
-
-    fn identity(n: usize) -> Vec<u8> {
-        (0..n as u8).collect()
-    }
-
-    fn is_permutation(perm: &[u8], n: usize) -> bool {
-        let mut sorted = perm.to_vec();
-        sorted.sort_unstable();
-        sorted == identity(n)
-    }
-
-    fn compose(after: &[u8], before: &[u8]) -> Vec<u8> {
-        before.iter().map(|&i| after[i as usize]).collect()
-    }
-
-    fn permutations(n: usize) -> Vec<Vec<u8>> {
-        let mut result = Vec::new();
-        permute(&mut identity(n), 0, &mut result);
-        result
-    }
-
-    fn permute(slice: &mut [u8], start: usize, out: &mut Vec<Vec<u8>>) {
-        if start == slice.len() {
-            out.push(slice.to_vec());
-            return;
-        }
-        for i in start..slice.len() {
-            slice.swap(start, i);
-            permute(slice, start + 1, out);
-            slice.swap(start, i);
-        }
-    }
-
-    fn dot(a: [f64; 3], b: [f64; 3]) -> f64 {
-        a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
-    }
-
-    fn signed_volume(a: [f64; 3], b: [f64; 3], c: [f64; 3]) -> f64 {
-        dot(
-            a,
-            [
-                b[1] * c[2] - b[2] * c[1],
-                b[2] * c[0] - b[0] * c[2],
-                b[0] * c[1] - b[1] * c[0],
-            ],
-        )
-    }
-
-    fn preserves_angles(directions: &[[f64; 3]], perm: &[u8]) -> bool {
-        let n = directions.len();
-        (0..n).all(|i| {
-            (0..n).all(|j| {
-                let moved = dot(directions[perm[i] as usize], directions[perm[j] as usize]);
-                (moved - dot(directions[i], directions[j])).abs() < 1e-9
-            })
-        })
-    }
-
-    fn spanning_triple(directions: &[[f64; 3]]) -> Option<(usize, usize, usize)> {
-        let n = directions.len();
-        (0..n)
-            .flat_map(|a| (a + 1..n).flat_map(move |b| (b + 1..n).map(move |c| (a, b, c))))
-            .find(|&(a, b, c)| {
-                signed_volume(directions[a], directions[b], directions[c]).abs() > 1e-9
-            })
-    }
-
-    fn is_rotation(directions: &[[f64; 3]], perm: &[u8]) -> bool {
-        if !preserves_angles(directions, perm) {
-            return false;
-        }
-        match spanning_triple(directions) {
-            None => true,
-            Some((a, b, c)) => {
-                let before = signed_volume(directions[a], directions[b], directions[c]);
-                let after = signed_volume(
-                    directions[perm[a] as usize],
-                    directions[perm[b] as usize],
-                    directions[perm[c] as usize],
-                );
-                (before > 0.0) == (after > 0.0)
-            }
-        }
-    }
-
-    fn ranked(neighbors: &[SiteId]) -> impl Fn(SiteId) -> usize + '_ {
-        move |site| neighbors.iter().position(|&s| s == site).unwrap()
-    }
-
-    fn distinct_token(kind: StereoKind) -> Token {
-        let neighbors: Vec<SiteId> = (1..=kind.slot_count() as u32).map(s).collect();
-        geometry(kind).token(&neighbors, ranked(&neighbors))
-    }
-
     struct Mol {
         sites: Vec<SiteId>,
         bonds: Vec<BondId>,
         endpoints: Vec<(SiteId, SiteId)>,
         orders: Vec<BondOrder>,
+        configs: Vec<StereoConfiguration>,
+    }
+
+    impl Mol {
+        fn with(mut self, configs: impl IntoIterator<Item = StereoConfiguration>) -> Self {
+            self.configs = configs.into_iter().collect();
+            self
+        }
     }
 
     impl HasSites for Mol {
@@ -605,12 +410,19 @@ mod tests {
         }
     }
 
+    impl HasStereoConfigurations for Mol {
+        fn stereo_configurations(&self) -> impl Iterator<Item = StereoConfiguration> + '_ {
+            self.configs.iter().cloned()
+        }
+    }
+
     fn mol(sites: &[u32], bonds: &[(u32, u32, u32, BondOrder)]) -> Mol {
         Mol {
             sites: sites.iter().map(|&id| s(id)).collect(),
             bonds: bonds.iter().map(|&(id, ..)| b(id)).collect(),
             endpoints: bonds.iter().map(|&(_, a, c, _)| (s(a), s(c))).collect(),
             orders: bonds.iter().map(|&(_, _, _, order)| order).collect(),
+            configs: Vec::new(),
         }
     }
 
@@ -623,6 +435,13 @@ mod tests {
                 (3, 1, 4, Single),
                 (4, 1, 5, Single),
             ],
+        )
+    }
+
+    fn trigonal() -> Mol {
+        mol(
+            &[1, 2, 3, 4],
+            &[(1, 1, 2, Single), (2, 1, 3, Single), (3, 1, 4, Single)],
         )
     }
 
@@ -693,256 +512,34 @@ mod tests {
         )
     }
 
-    #[test]
-    fn a_single_element_has_no_next_permutation() {
-        assert!(!next_permutation(&mut [0u8]));
-    }
-
-    #[test]
-    fn next_permutation_walks_every_permutation_in_lexicographic_order() {
-        let mut slice = [0u8, 1, 2];
-        let mut seen = vec![slice.to_vec()];
-        while next_permutation(&mut slice) {
-            seen.push(slice.to_vec());
-        }
-        assert_eq!(
-            seen,
-            vec![
-                vec![0, 1, 2],
-                vec![0, 2, 1],
-                vec![1, 0, 2],
-                vec![1, 2, 0],
-                vec![2, 0, 1],
-                vec![2, 1, 0],
+    fn pseudo_asymmetric() -> Mol {
+        mol(
+            &[1, 2, 3, 4, 5, 6, 7, 8, 9],
+            &[
+                (1, 1, 2, Single),
+                (2, 1, 3, Single),
+                (3, 2, 4, Single),
+                (4, 2, 5, Single),
+                (5, 2, 6, Single),
+                (6, 3, 7, Single),
+                (7, 3, 8, Single),
+                (8, 3, 9, Single),
             ],
-        );
-    }
-
-    #[test]
-    fn next_permutation_skips_the_repeats_of_a_multiset() {
-        let mut slice = [0u8, 0, 1];
-        let mut seen = vec![slice.to_vec()];
-        while next_permutation(&mut slice) {
-            seen.push(slice.to_vec());
-        }
-        assert_eq!(seen, vec![vec![0, 0, 1], vec![0, 1, 0], vec![1, 0, 0]]);
-    }
-
-    #[test]
-    fn applying_the_identity_leaves_the_order_unchanged() {
-        let order = [3, 1, 4, 1, 5, 9];
-        assert_eq!(apply(&[0, 1, 2, 3, 4, 5], order), order);
-    }
-
-    #[test]
-    fn apply_reads_each_slot_through_the_permutation() {
-        assert_eq!(
-            apply(&[1, 0, 2, 3, 4, 5], [3, 1, 4, 1, 5, 9]),
-            [1, 3, 4, 1, 5, 9]
-        );
-    }
-
-    #[test]
-    fn relative_order_ranks_the_neighbors_by_magnitude_collapsing_ties() {
-        let neighbors = [s(1), s(2), s(3), s(4)];
-        let rank = |site| {
-            if site == s(2) || site == s(4) {
-                10
-            } else if site == s(3) {
-                20
-            } else {
-                30
-            }
-        };
-        assert_eq!(relative_order(&neighbors, rank), [3, 0, 2, 0, 0, 0]);
-    }
-
-    #[test]
-    fn relative_order_depends_only_on_the_relative_ranks() {
-        let neighbors = [s(1), s(2), s(3), s(4)];
-        let compact = |site| neighbors.iter().position(|&x| x == site).unwrap();
-        let spread = |site| 100 * neighbors.iter().position(|&x| x == site).unwrap();
-        assert_eq!(
-            relative_order(&neighbors, compact),
-            relative_order(&neighbors, spread),
-        );
-    }
-
-    #[test]
-    fn relabel_maps_classes_to_dense_labels_in_sorted_order() {
-        assert_eq!(relabel(&[7, 3, 7, 9]), vec![1, 0, 1, 2]);
-    }
-
-    #[test]
-    fn relabel_gives_identical_classes_one_label() {
-        assert_eq!(relabel(&[5, 5, 5]), vec![0, 0, 0]);
-    }
-
-    #[test]
-    fn every_geometry_group_permutes_its_slots() {
-        for kind in KINDS {
-            for &element in geometry(kind).group {
-                assert!(is_permutation(element, kind.slot_count()));
-            }
-        }
-    }
-
-    #[test]
-    fn every_geometry_group_contains_the_identity() {
-        for kind in KINDS {
-            let identity = identity(kind.slot_count());
-            assert!(geometry(kind).group.contains(&identity.as_slice()));
-        }
-    }
-
-    #[test]
-    fn every_geometry_group_is_closed_under_composition() {
-        for kind in KINDS {
-            let group = geometry(kind).group;
-            for &g in group {
-                for &h in group {
-                    let product = compose(g, h);
-                    assert!(group.contains(&product.as_slice()));
-                }
-            }
-        }
-    }
-
-    #[test]
-    fn every_geometry_group_is_the_rotation_group_of_its_directions() {
-        for kind in KINDS {
-            let directions = geometry(kind).directions;
-            if directions.is_empty() {
-                continue;
-            }
-            let mut rotations: Vec<Vec<u8>> = permutations(directions.len())
-                .into_iter()
-                .filter(|perm| is_rotation(directions, perm))
-                .collect();
-            rotations.sort_unstable();
-            let mut group: Vec<Vec<u8>> = geometry(kind).group.iter().map(|g| g.to_vec()).collect();
-            group.sort_unstable();
-            assert_eq!(group, rotations);
-        }
-    }
-
-    #[test]
-    fn every_geometry_admits_the_kinds_configuration_count() {
-        for kind in KINDS {
-            let all_distinct: Vec<usize> = (0..kind.slot_count()).collect();
-            assert_eq!(
-                geometry(kind).configuration_count(&all_distinct),
-                kind.configuration_count(),
-            );
-        }
-    }
-
-    #[test]
-    fn a_repeated_substituent_leaves_a_tetrahedron_with_one_configuration() {
-        assert_eq!(
-            geometry(StereoKind::Tetrahedral).configuration_count(&[0, 0, 1, 2]),
-            1,
-        );
-    }
-
-    #[test]
-    fn an_octahedral_m_a4_b2_has_a_cis_and_a_trans_configuration() {
-        assert_eq!(
-            geometry(StereoKind::Octahedral).configuration_count(&[0, 0, 0, 0, 1, 1]),
-            2,
-        );
-    }
-
-    #[test]
-    fn every_geometry_reflection_permutes_its_slots() {
-        for kind in KINDS {
-            assert!(is_permutation(geometry(kind).reflection, kind.slot_count()));
-        }
-    }
-
-    #[test]
-    fn a_geometry_reflection_lies_in_its_group_exactly_when_the_kind_is_achiral() {
-        for kind in KINDS {
-            let reflection = geometry(kind).reflection;
-            let in_group = geometry(kind).group.contains(&reflection);
-            assert_eq!(in_group, !kind.is_chiral());
-        }
-    }
-
-    #[test]
-    fn every_spatial_reflection_preserves_the_pairwise_angles() {
-        for kind in KINDS {
-            let directions = geometry(kind).directions;
-            if !directions.is_empty() {
-                assert!(preserves_angles(directions, geometry(kind).reflection));
-            }
-        }
-    }
-
-    #[test]
-    fn only_the_edge_geometries_are_bipartite() {
-        for kind in KINDS {
-            let expected = matches!(kind, StereoKind::CisTrans | StereoKind::Allene);
-            assert_eq!(geometry(kind).bipartite, expected);
-        }
-    }
-
-    #[test]
-    fn a_geometry_has_reference_directions_exactly_when_it_is_not_bipartite() {
-        for kind in KINDS {
-            assert_eq!(
-                geometry(kind).directions.is_empty(),
-                geometry(kind).bipartite
-            );
-        }
-    }
-
-    #[test]
-    fn present_directions_number_the_slots() {
-        for kind in KINDS {
-            let geometry = geometry(kind);
-            if !geometry.directions.is_empty() {
-                assert_eq!(geometry.directions.len(), kind.slot_count());
-            }
-        }
-    }
-
-    #[test]
-    fn a_rotation_of_the_neighbors_preserves_the_token() {
-        for kind in KINDS {
-            let neighbors: Vec<SiteId> = (1..=kind.slot_count() as u32).map(s).collect();
-            let token = geometry(kind).token(&neighbors, ranked(&neighbors));
-            for &element in geometry(kind).group {
-                let rotated: Vec<SiteId> = element.iter().map(|&i| neighbors[i as usize]).collect();
-                assert_eq!(geometry(kind).token(&rotated, ranked(&neighbors)), token);
-            }
-        }
-    }
-
-    #[test]
-    fn a_reflection_returns_a_token_to_itself() {
-        for kind in KINDS {
-            let token = distinct_token(kind);
-            assert_eq!(geometry(kind).mirror(geometry(kind).mirror(token)), token);
-        }
-    }
-
-    #[test]
-    fn an_achiral_geometry_mirror_fixes_every_token() {
-        for kind in [StereoKind::CisTrans, StereoKind::SquarePlanar] {
-            let token = distinct_token(kind);
-            assert_eq!(geometry(kind).mirror(token), token);
-        }
-    }
-
-    #[test]
-    fn a_chiral_geometry_mirror_alters_a_distinct_token() {
-        for kind in KINDS {
-            if kind.is_chiral() {
-                let token = distinct_token(kind);
-                assert_ne!(geometry(kind).mirror(token), token);
-            }
-        }
+        )
+        .with([
+            StereoConfiguration::new(
+                StereoLocus::Site(s(2)),
+                StereoKind::Tetrahedral,
+                [s(4), s(5), s(6), s(1)],
+            )
+            .unwrap(),
+            StereoConfiguration::new(
+                StereoLocus::Site(s(3)),
+                StereoKind::Tetrahedral,
+                [s(8), s(7), s(9), s(1)],
+            )
+            .unwrap(),
+        ])
     }
 
     #[test]
@@ -960,15 +557,15 @@ mod tests {
     }
 
     #[test]
-    fn a_double_bond_frame_is_none_when_a_terminus_lacks_two_substituents() {
-        assert!(frame(&short_alkene(), StereoLocus::Bond(b(1))).is_none());
-    }
-
-    #[test]
     fn a_cumulene_bond_frame_walks_out_to_the_chain_termini() {
         let located = frame(&butatriene(), StereoLocus::Bond(b(2))).unwrap();
         assert_eq!(located.anchors, vec![s(1), s(4)]);
         assert_eq!(located.substituents, vec![s(5), s(6), s(7), s(8)]);
+    }
+
+    #[test]
+    fn a_double_bond_frame_is_none_when_a_terminus_lacks_two_substituents() {
+        assert!(frame(&short_alkene(), StereoLocus::Bond(b(1))).is_none());
     }
 
     #[test]
@@ -986,5 +583,215 @@ mod tests {
     #[test]
     fn an_axis_frame_is_none_off_a_cumulene_center() {
         assert!(frame(&alkene(), StereoLocus::Axis(s(1))).is_none());
+    }
+
+    #[test]
+    fn candidate_loci_offer_each_site_as_a_centre_and_an_axis_and_each_bond() {
+        let loci: Vec<StereoLocus> = candidate_loci(&center()).collect();
+        assert_eq!(loci.len(), 5 + 5 + 4);
+        assert!(loci.contains(&StereoLocus::Site(s(1))));
+        assert!(loci.contains(&StereoLocus::Axis(s(1))));
+        assert!(loci.contains(&StereoLocus::Bond(b(1))));
+    }
+
+    #[test]
+    fn a_reflected_signal_is_the_mirror_of_the_plain_signal() {
+        let mol = center().with([StereoConfiguration::new(
+            StereoLocus::Site(s(1)),
+            StereoKind::Tetrahedral,
+            [s(2), s(3), s(4), s(5)],
+        )
+        .unwrap()]);
+        let canon = refined(&mol, &|site: SiteId| site.get(), &|_: BondId| 0u8, false);
+        let plain = signals(&mol, &canon, false);
+        let mirror = signals(&mol, &canon, true);
+        assert_eq!(mirror[&s(1)][0], plain[&s(1)][0].mirror());
+    }
+
+    #[test]
+    fn refined_without_configurations_matches_the_bare_canonical_form() {
+        let mol = center();
+        let site_key = |_: SiteId| 0u8;
+        let bond_key = |_: BondId| 0u8;
+        let bare = canonicalize(&mol, site_key, bond_key);
+        let refined_form = refined(&mol, &site_key, &bond_key, false);
+        assert_eq!(refined_form.orbits().count(), bare.orbits().count());
+    }
+
+    #[test]
+    fn refined_splits_a_symmetry_that_stereochemistry_breaks() {
+        let mol = pseudo_asymmetric();
+        let site_key = |site: SiteId| match site.get() {
+            1 => 0u8,
+            2 | 3 => 1,
+            4 | 7 => 2,
+            5 | 8 => 3,
+            6 | 9 => 4,
+            _ => unreachable!(),
+        };
+        let bond_key = |_: BondId| 0u8;
+        let bare = canonicalize(&mol, site_key, bond_key);
+        let refined_form = refined(&mol, &site_key, &bond_key, false);
+        assert_eq!(class(&bare, s(2)), class(&bare, s(3)));
+        assert_ne!(class(&refined_form, s(2)), class(&refined_form, s(3)));
+    }
+
+    #[test]
+    fn settle_files_a_site_configuration_against_its_site() {
+        let mol = center().with([StereoConfiguration::new(
+            StereoLocus::Site(s(1)),
+            StereoKind::Tetrahedral,
+            [s(2), s(3), s(4), s(5)],
+        )
+        .unwrap()]);
+        let signal = settle(&mol, &|site: SiteId| site.get(), &|_: BondId| 0u8);
+        assert_eq!(signal.len(), 1);
+        assert_eq!(signal[&s(1)].len(), 1);
+    }
+
+    #[test]
+    fn settle_files_a_bond_configuration_against_both_ends() {
+        let mol = alkene().with([StereoConfiguration::new(
+            StereoLocus::Bond(b(1)),
+            StereoKind::CisTrans,
+            [s(3), s(4), s(5), s(6)],
+        )
+        .unwrap()]);
+        let signal = settle(&mol, &|site: SiteId| site.get(), &|_: BondId| 0u8);
+        assert_eq!(signal.len(), 2);
+        assert!(signal.contains_key(&s(1)) && signal.contains_key(&s(2)));
+    }
+
+    #[test]
+    fn configurations_of_a_center_are_one_per_stereoisomer() {
+        let subs = [s(1), s(2), s(3), s(4)];
+        let configs = configurations(
+            StereoLocus::Site(s(1)),
+            StereoKind::Tetrahedral,
+            &subs,
+            |site| site.get() as usize,
+        );
+        assert_eq!(configs.len(), StereoKind::Tetrahedral.configuration_count());
+    }
+
+    #[test]
+    fn configurations_collapse_a_repeated_substituent() {
+        let subs = [s(1), s(2), s(3), s(4)];
+        let configs = configurations(
+            StereoLocus::Site(s(1)),
+            StereoKind::Tetrahedral,
+            &subs,
+            |site| {
+                if site == s(1) || site == s(2) {
+                    0
+                } else {
+                    site.get() as usize
+                }
+            },
+        );
+        assert_eq!(configs.len(), 1);
+    }
+
+    #[test]
+    fn an_octahedral_m_a4_b2_has_a_cis_and_a_trans_configuration() {
+        let subs = [s(1), s(2), s(3), s(4), s(5), s(6)];
+        let configs = configurations(
+            StereoLocus::Site(s(1)),
+            StereoKind::Octahedral,
+            &subs,
+            |site| usize::from(site == s(5) || site == s(6)),
+        );
+        assert_eq!(configs.len(), 2);
+    }
+
+    #[test]
+    fn realisable_lists_a_stereogenic_centers_configurations() {
+        let configs = realisable(
+            &center(),
+            StereoLocus::Site(s(1)),
+            StereoKind::Tetrahedral,
+            &|site: SiteId| site.get(),
+            &|_: BondId| 0u8,
+        );
+        assert_eq!(configs.len(), StereoKind::Tetrahedral.configuration_count());
+    }
+
+    #[test]
+    fn realisable_collapses_a_symmetric_center_to_one() {
+        let configs = realisable(
+            &center(),
+            StereoLocus::Site(s(1)),
+            StereoKind::Tetrahedral,
+            &|_: SiteId| 0u8,
+            &|_: BondId| 0u8,
+        );
+        assert_eq!(configs.len(), 1);
+    }
+
+    #[test]
+    fn realisable_is_empty_off_an_anchor() {
+        let configs = realisable(
+            &center(),
+            StereoLocus::Bond(b(1)),
+            StereoKind::Tetrahedral,
+            &|site: SiteId| site.get(),
+            &|_: BondId| 0u8,
+        );
+        assert!(configs.is_empty());
+    }
+
+    #[test]
+    fn realisable_is_empty_without_a_frame() {
+        let configs = realisable(
+            &short_alkene(),
+            StereoLocus::Bond(b(1)),
+            StereoKind::CisTrans,
+            &|site: SiteId| site.get(),
+            &|_: BondId| 0u8,
+        );
+        assert!(configs.is_empty());
+    }
+
+    #[test]
+    fn realisable_is_empty_when_the_substituents_miscount() {
+        let configs = realisable(
+            &trigonal(),
+            StereoLocus::Site(s(1)),
+            StereoKind::Tetrahedral,
+            &|site: SiteId| site.get(),
+            &|_: BondId| 0u8,
+        );
+        assert!(configs.is_empty());
+    }
+
+    #[test]
+    fn frame_mark_numbers_anchors_from_one_and_marks_outsiders_zero() {
+        let anchors = [s(4), s(7)];
+        assert_eq!(frame_mark(s(4), &anchors), 1);
+        assert_eq!(frame_mark(s(7), &anchors), 2);
+        assert_eq!(frame_mark(s(1), &anchors), 0);
+    }
+
+    #[test]
+    fn presentations_of_a_center_are_every_ordering() {
+        let subs = [s(1), s(2), s(3), s(4)];
+        let orderings = presentations(StereoKind::Tetrahedral, &subs);
+        assert_eq!(orderings.len(), 24);
+        let mut distinct = orderings.clone();
+        distinct.sort_unstable();
+        distinct.dedup();
+        assert_eq!(distinct.len(), 24);
+    }
+
+    #[test]
+    fn presentations_of_an_edge_keep_each_end_within_itself() {
+        let subs = [s(1), s(2), s(3), s(4)];
+        let orderings = presentations(StereoKind::CisTrans, &subs);
+        assert_eq!(orderings.len(), 4);
+        for ordering in orderings {
+            let mut first = [ordering[0], ordering[1]];
+            first.sort_unstable();
+            assert_eq!(first, [s(1), s(2)]);
+        }
     }
 }

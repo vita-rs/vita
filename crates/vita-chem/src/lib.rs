@@ -3,7 +3,8 @@ mod capability;
 mod primitive;
 
 pub use primitive::{
-    BondId, BondOrder, Hybridization, StereoConfiguration, StereoKind, StereoLocus,
+    BondId, BondOrder, Hybridization, StereoConfiguration, StereoDescriptor, StereoKind,
+    StereoLocus,
 };
 
 pub use capability::{

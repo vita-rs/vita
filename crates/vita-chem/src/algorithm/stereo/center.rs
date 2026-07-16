@@ -1,17 +1,17 @@
 use vita_core::SiteId;
 
-use super::{frame, geometry};
-use crate::algorithm::canonical::{Canonical, canonicalize};
-use crate::{BondId, HasBondOrders, StereoKind, StereoLocus};
+use super::{candidate_loci, realisable, refined_key, settle};
+use crate::{BondId, HasBondOrders, HasStereoConfigurations, StereoKind, StereoLocus};
 
 /// The stereogenic units of a molecule: the loci whose substituents symmetry cannot
 /// interchange, so more than one configuration is realisable.
 ///
-/// Membership is topological — a function of the graph and the caller's coloring,
-/// independent of any configuration a source may declare. A locus survives when the
-/// substituent classes its geometry admits realise more than one distinct
-/// arrangement, so repeated substituents are weighed correctly: an octahedral MA₄B₂
-/// centre is stereogenic (cis and trans), an MA₅B one is not.
+/// Membership is a function of the graph, the caller's coloring, and the
+/// configurations the molecule declares — the last because a pseudo-asymmetric
+/// centre is stereogenic only for a particular pairing of its neighbours' handedness.
+/// A locus survives when the substituent classes its geometry admits realise more
+/// than one distinct arrangement, so repeated substituents are weighed correctly: an
+/// octahedral MA₄B₂ centre is stereogenic (cis and trans), an MA₅B one is not.
 ///
 /// Obtain via [`stereocenters`].
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -49,19 +49,28 @@ impl Stereocenters {
 /// `candidate` is the caller's: it reports which loci could bear stereochemistry and
 /// of which [`StereoKind`] — a centre's coordination geometry — which the library
 /// cannot know. The library then keeps only those a symmetry does *not* neutralise:
-/// `site_key` and `bond_key` colour the graph exactly as for [`canonicalize`], and a
-/// candidate survives when, once its frame is individualised, its substituent classes
-/// admit more than one arrangement under the geometry's group.
+/// `site_key` and `bond_key` colour the graph as for [`canonicalize`](crate::canonical::canonicalize),
+/// the declared configurations refine that colouring to a fixpoint — so a centre whose
+/// stereogenicity turns on its neighbours' handedness is resolved — and a candidate
+/// survives when, once its frame is individualised, its substituent classes admit
+/// more than one arrangement under the geometry's group.
 ///
-/// The substituents are taken from the bonds present; a stereocentre bearing an
-/// implicit hydrogen must give it explicitly, or fold the coordination into
-/// `site_key`. A bond's or axis's substituents hang off the termini of its rigid
-/// double-bond chain, so a plain double bond and a cumulene resolve alike.
+/// A molecule that declares no configurations is coloured by its constitution alone,
+/// and detection is then purely topological. The substituents are taken from the
+/// bonds present; a stereocentre bearing an implicit hydrogen must give it
+/// explicitly, or fold the coordination into `site_key`. A bond's or axis's
+/// substituents hang off the termini of its rigid double-bond chain, so a plain
+/// double bond and a cumulene resolve alike.
+///
+/// Detection speaks for the molecule as declared. Which loci could be stereogenic
+/// under *some* assignment is a different, intrinsically enumerative question —
+/// answered by the loci [`stereoisomers`](super::stereoisomers) assigns.
 ///
 /// # Complexity
 ///
-/// O(L · V · (V + E) · log V) time and O(V + E) space, over the molecule's `V` sites
-/// and `E` bonds, for `L` candidate loci — one [`canonicalize`] each.
+/// O((V + L) · V · (V + E) · log V) time and O(V + E) space, over the molecule's `V`
+/// sites and `E` bonds, for `L` candidate loci — the fixpoint refinement and one
+/// [`canonicalize`](crate::canonical::canonicalize) per candidate.
 pub fn stereocenters<M, VK, EK>(
     mol: &M,
     site_key: impl Fn(SiteId) -> VK,
@@ -69,90 +78,20 @@ pub fn stereocenters<M, VK, EK>(
     candidate: impl Fn(StereoLocus) -> Option<StereoKind>,
 ) -> Stereocenters
 where
-    M: HasBondOrders,
+    M: HasStereoConfigurations + HasBondOrders,
     VK: Ord,
     EK: Ord,
 {
+    let signal = settle(mol, &site_key, &bond_key);
+    let key = refined_key(&signal, &site_key);
+
     let surviving = |locus| {
         let kind = candidate(locus)?;
-        stereogenic(mol, locus, kind, &site_key, &bond_key).then_some(locus)
+        (realisable(mol, locus, kind, &key, &bond_key).len() > 1).then_some(locus)
     };
-    let sites = mol
-        .sites()
-        .filter_map(|site| surviving(StereoLocus::Site(site)));
-    let axes = mol
-        .sites()
-        .filter_map(|site| surviving(StereoLocus::Axis(site)));
-    let bonds = mol
-        .bonds()
-        .filter_map(|bond| surviving(StereoLocus::Bond(bond)));
-
-    let mut loci: Vec<StereoLocus> = sites.chain(axes).chain(bonds).collect();
+    let mut loci: Vec<StereoLocus> = candidate_loci(mol).filter_map(surviving).collect();
     loci.sort_unstable();
     Stereocenters { loci }
-}
-
-/// Whether the frame `locus` names realises more than one configuration of `kind`
-/// once individualised.
-fn stereogenic<M, VK, EK>(
-    mol: &M,
-    locus: StereoLocus,
-    kind: StereoKind,
-    site_key: &impl Fn(SiteId) -> VK,
-    bond_key: &impl Fn(BondId) -> EK,
-) -> bool
-where
-    M: HasBondOrders,
-    VK: Ord,
-    EK: Ord,
-{
-    if !locus.anchors(kind) {
-        return false;
-    }
-    let Some(frame) = frame(mol, locus) else {
-        return false;
-    };
-    if frame.substituents.len() != kind.slot_count() {
-        return false;
-    }
-    let canon = canonicalize(
-        mol,
-        |other| (frame_mark(other, &frame.anchors), site_key(other)),
-        bond_key,
-    );
-    geometry(kind).configuration_count(&classes(&canon, &frame.substituents)) > 1
-}
-
-/// The symmetry class of each site: the least canonical rank in its orbit, so
-/// interchangeable substituents share a class.
-fn classes<VK, EK>(canon: &Canonical<VK, EK>, sites: &[SiteId]) -> Vec<usize> {
-    sites
-        .iter()
-        .map(|&site| {
-            canon
-                .orbit(site)
-                .expect("a substituent is in the molecule")
-                .iter()
-                .map(|member| {
-                    canon
-                        .rank(member)
-                        .expect("an orbit member is in the molecule")
-                })
-                .min()
-                .expect("an orbit is non-empty")
-        })
-        .collect()
-}
-
-/// A distinct individualisation mark for each anchor of a frame — its position in
-/// `anchors` plus one, or zero for a site outside it — so a canonical labeling holds
-/// the frame fixed and tells its members apart. A site marks itself, an edge or axis
-/// its two termini.
-fn frame_mark(site: SiteId, anchors: &[SiteId]) -> u8 {
-    anchors
-        .iter()
-        .position(|&anchor| anchor == site)
-        .map_or(0, |index| index as u8 + 1)
 }
 
 #[cfg(test)]
@@ -162,7 +101,7 @@ mod tests {
     use vita_core::HasSites;
 
     use crate::BondOrder::{Double, Single};
-    use crate::{BondOrder, HasBonds};
+    use crate::{BondOrder, HasBonds, StereoConfiguration};
 
     fn s(n: u32) -> SiteId {
         SiteId::new(n).unwrap()
@@ -183,17 +122,32 @@ mod tests {
         }
     }
 
+    fn config(site: u32, order: [u32; 4]) -> StereoConfiguration {
+        StereoConfiguration::new(
+            StereoLocus::Site(s(site)),
+            StereoKind::Tetrahedral,
+            order.map(s),
+        )
+        .unwrap()
+    }
+
     struct Mol {
         sites: Vec<SiteId>,
         colors: Vec<u32>,
         bonds: Vec<BondId>,
         endpoints: Vec<(SiteId, SiteId)>,
         orders: Vec<BondOrder>,
+        configs: Vec<StereoConfiguration>,
     }
 
     impl Mol {
         fn color(&self, site: SiteId) -> u32 {
             self.colors[self.sites.iter().position(|&x| x == site).unwrap()]
+        }
+
+        fn with(mut self, configs: impl IntoIterator<Item = StereoConfiguration>) -> Self {
+            self.configs = configs.into_iter().collect();
+            self
         }
     }
 
@@ -221,6 +175,12 @@ mod tests {
         }
     }
 
+    impl HasStereoConfigurations for Mol {
+        fn stereo_configurations(&self) -> impl Iterator<Item = StereoConfiguration> + '_ {
+            self.configs.iter().cloned()
+        }
+    }
+
     fn detect(mol: &Mol, candidate: impl Fn(StereoLocus) -> Option<StereoKind>) -> Stereocenters {
         stereocenters(mol, |site| mol.color(site), |_| 0u32, candidate)
     }
@@ -232,6 +192,7 @@ mod tests {
             bonds: bonds.iter().map(|&(id, ..)| b(id)).collect(),
             endpoints: bonds.iter().map(|&(_, a, c, _)| (s(a), s(c))).collect(),
             orders: bonds.iter().map(|&(_, _, _, order)| order).collect(),
+            configs: Vec::new(),
         }
     }
 
@@ -242,6 +203,7 @@ mod tests {
             bonds: m.bonds.iter().rev().copied().collect(),
             endpoints: m.endpoints.iter().rev().copied().collect(),
             orders: m.orders.iter().rev().copied().collect(),
+            configs: m.configs.iter().rev().cloned().collect(),
         }
     }
 
@@ -372,6 +334,41 @@ mod tests {
         )
     }
 
+    fn trihydroxyglutaric(arms: [[u32; 4]; 2]) -> Mol {
+        mol(
+            &[
+                (1, 0),
+                (2, 0),
+                (3, 0),
+                (4, 1),
+                (5, 2),
+                (6, 1),
+                (7, 2),
+                (8, 1),
+                (9, 2),
+                (10, 3),
+                (11, 3),
+            ],
+            &[
+                (1, 1, 2, Single),
+                (2, 2, 3, Single),
+                (3, 1, 4, Single),
+                (4, 1, 5, Single),
+                (5, 1, 10, Single),
+                (6, 2, 6, Single),
+                (7, 2, 7, Single),
+                (8, 3, 8, Single),
+                (9, 3, 9, Single),
+                (10, 3, 11, Single),
+            ],
+        )
+        .with([
+            config(1, arms[0]),
+            config(2, [1, 6, 7, 3]),
+            config(3, arms[1]),
+        ])
+    }
+
     #[test]
     fn empty_molecule_has_no_stereocenters() {
         let centers = detect(&empty(), |_| Some(StereoKind::Tetrahedral));
@@ -467,6 +464,20 @@ mod tests {
         let centers = detect(&paired_centers(), centers_at(&[1, 2]));
         assert!(centers.contains(StereoLocus::Site(s(1))));
         assert!(centers.contains(StereoLocus::Site(s(2))));
+    }
+
+    #[test]
+    fn a_pseudo_asymmetric_center_is_detected() {
+        let mol = trihydroxyglutaric([[2, 4, 5, 10], [8, 2, 9, 11]]);
+        let centers = detect(&mol, only(StereoLocus::Site(s(2)), StereoKind::Tetrahedral));
+        assert!(centers.contains(StereoLocus::Site(s(2))));
+    }
+
+    #[test]
+    fn a_dormant_pseudo_center_is_not_detected() {
+        let mol = trihydroxyglutaric([[2, 4, 5, 10], [2, 8, 9, 11]]);
+        let centers = detect(&mol, only(StereoLocus::Site(s(2)), StereoKind::Tetrahedral));
+        assert!(!centers.contains(StereoLocus::Site(s(2))));
     }
 
     #[test]

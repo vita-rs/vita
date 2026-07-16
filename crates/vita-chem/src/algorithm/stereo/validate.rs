@@ -68,8 +68,8 @@ impl StereoConsistency {
 ///
 /// # Complexity
 ///
-/// As [`stereocenters`]: O(L · V · (V + E) · log V) time and O(V + E) space, over the
-/// molecule's `V` sites and `E` bonds, for `L` candidate loci.
+/// As [`stereocenters`]: O((V + L) · V · (V + E) · log V) time and O(V + E) space, over
+/// the molecule's `V` sites and `E` bonds, for `L` candidate loci.
 pub fn consistency<M, VK, EK>(
     mol: &M,
     site_key: impl Fn(SiteId) -> VK,

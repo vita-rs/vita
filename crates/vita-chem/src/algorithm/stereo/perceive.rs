@@ -4,14 +4,14 @@ use vita_core::tensor::{Point3, Vector3};
 use vita_core::units::length::Angstrom;
 use vita_core::{HasPositions, Scalar, SiteId};
 
-use super::{frame, geometry, next_permutation};
+use super::{candidate_loci, frame};
 use crate::capability::delegation::forward_capabilities;
 use crate::{
     HasBondOrders, HasBonds, HasStereoConfigurations, StereoConfiguration, StereoKind, StereoLocus,
 };
 
-/// The stereo configurations perceived in a molecule — one per stereogenic unit its
-/// coordinates resolve, ordered by locus.
+/// A set of stereo configurations over a molecule — one per stereogenic unit, ordered
+/// by locus.
 ///
 /// Obtain via [`perceive`].
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -20,24 +20,22 @@ pub struct StereoConfigurations {
 }
 
 impl StereoConfigurations {
-    /// Number of perceived configurations.
+    /// Number of configurations.
     pub fn len(&self) -> usize {
         self.configurations.len()
     }
 
-    /// Returns `true` if no configuration was perceived.
+    /// Returns `true` if there are no configurations.
     pub fn is_empty(&self) -> bool {
         self.configurations.is_empty()
     }
 
-    /// Iterates the perceived configurations, ordered by locus.
+    /// Iterates the configurations, ordered by locus.
     pub fn iter(&self) -> impl Iterator<Item = &StereoConfiguration> + '_ {
         self.configurations.iter()
     }
 
-    /// The configuration perceived at `locus`.
-    ///
-    /// Returns `None` if `locus` is absent or its coordinates fixed no configuration.
+    /// The configuration at `locus`, or `None` if it bears none.
     pub fn get(&self, locus: StereoLocus) -> Option<&StereoConfiguration> {
         self.configurations
             .binary_search_by_key(&locus, StereoConfiguration::locus)
@@ -45,12 +43,18 @@ impl StereoConfigurations {
             .map(|index| &self.configurations[index])
     }
 
-    /// Binds this perception to `mol`, yielding a view that implements
+    /// The `configurations` gathered into a locus-ordered set.
+    pub(super) fn from_configurations(mut configurations: Vec<StereoConfiguration>) -> Self {
+        configurations.sort_unstable_by_key(StereoConfiguration::locus);
+        StereoConfigurations { configurations }
+    }
+
+    /// Binds these configurations to `mol`, yielding a view that implements
     /// [`HasStereoConfigurations`].
     ///
-    /// The view borrows both, so `mol` stays immutable while it is held — the
-    /// perception cannot silently fall out of step with the molecule it describes.
-    /// Use it to feed a perceived molecule to anything that reads the
+    /// The view borrows both, so `mol` stays immutable while it is held — the stereo
+    /// cannot silently fall out of step with the molecule it describes. Use it to feed
+    /// a molecule's computed stereo to anything that reads the
     /// [`HasStereoConfigurations`] capability.
     pub fn bind<'a, M: HasBonds>(&'a self, mol: &'a M) -> WithStereoConfigurations<'a, M> {
         WithStereoConfigurations {
@@ -60,12 +64,12 @@ impl StereoConfigurations {
     }
 }
 
-/// A molecule viewed together with its perceived [`StereoConfigurations`].
+/// A molecule viewed together with a set of [`StereoConfigurations`].
 ///
-/// Answers the stereo configurations from the perception and forwards every other
-/// core and chem capability to the molecule, so a computed result reads as the
-/// [`HasStereoConfigurations`] capability its consumers expect — at no cost beyond
-/// the two references it holds.
+/// Answers the stereo configurations from that set and forwards every other core and
+/// chem capability to the molecule, so a computed result reads as the
+/// [`HasStereoConfigurations`] capability its consumers expect — at no cost beyond the
+/// two references it holds.
 ///
 /// Obtain via [`StereoConfigurations::bind`].
 pub struct WithStereoConfigurations<'a, M> {
@@ -128,7 +132,7 @@ impl<M: HasBonds> HasStereoConfigurations for WithStereoConfigurations<'_, M> {
 ///
 /// The perceived order follows [`StereoConfiguration`]'s convention, and that
 /// convention is load-bearing: any other source — a SMILES `@`, a wedge — must be
-/// read into the same one, or its handedness will disagree with what is perceived
+/// read into the same one, or its configuration will disagree with what is perceived
 /// here.
 ///
 /// # Complexity
@@ -164,21 +168,8 @@ where
             _ => None,
         }
     };
-    let perceive = &perceive;
 
-    let sites = mol
-        .sites()
-        .filter_map(move |s| perceive(StereoLocus::Site(s)));
-    let axes = mol
-        .sites()
-        .filter_map(move |s| perceive(StereoLocus::Axis(s)));
-    let bonds = mol
-        .bonds()
-        .filter_map(move |b| perceive(StereoLocus::Bond(b)));
-
-    let mut configurations: Vec<StereoConfiguration> = sites.chain(axes).chain(bonds).collect();
-    configurations.sort_unstable_by_key(StereoConfiguration::locus);
-    StereoConfigurations { configurations }
+    StereoConfigurations::from_configurations(candidate_loci(mol).filter_map(perceive).collect())
 }
 
 /// The configuration of a central geometry from the directions to its substituents,
@@ -196,7 +187,7 @@ fn central<V>(
 where
     V: Scalar,
 {
-    let reference = geometry(kind).directions;
+    let reference = kind.directions();
     let n = substituents.len();
     if n != reference.len() {
         return None;
@@ -234,8 +225,8 @@ where
             return None;
         }
         if handedness.signum() != orientation(&reference, triple).signum() {
-            order = geometry(kind)
-                .reflection
+            order = kind
+                .reflection()
                 .iter()
                 .map(|&s| order[s as usize])
                 .collect();
@@ -329,6 +320,21 @@ where
     StereoConfiguration::new(locus, StereoKind::Allene, ordered)
 }
 
+/// Advances `slice` to the next lexicographic permutation, `false` at the last.
+fn next_permutation(slice: &mut [u8]) -> bool {
+    let n = slice.len();
+    let Some(pivot) = (1..n).rev().find(|&i| slice[i - 1] < slice[i]) else {
+        return false;
+    };
+    let successor = (pivot..n)
+        .rev()
+        .find(|&i| slice[i] > slice[pivot - 1])
+        .expect("a successor exists past the pivot");
+    slice.swap(pivot - 1, successor);
+    slice[pivot..].reverse();
+    true
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -351,16 +357,8 @@ mod tests {
         move |locus| (locus == target).then_some(kind)
     }
 
-    fn same_configuration(a: &StereoConfiguration, b: &StereoConfiguration) -> bool {
-        a.locus() == b.locus()
-            && a.kind() == b.kind()
-            && geometry(a.kind()).group.iter().any(|permutation| {
-                let rotated: Vec<SiteId> = permutation
-                    .iter()
-                    .map(|&i| a.neighbors()[i as usize])
-                    .collect();
-                rotated == b.neighbors()
-            })
+    fn config_at(locus: StereoLocus, kind: StereoKind, order: [u32; 4]) -> StereoConfiguration {
+        StereoConfiguration::new(locus, kind, order.map(s)).unwrap()
     }
 
     fn difference(a: [f64; 3], b: [f64; 3]) -> [f64; 3] {
@@ -713,8 +711,14 @@ mod tests {
             &cis_alkene(),
             only(StereoLocus::Bond(b(1)), StereoKind::CisTrans),
         );
-        let config = perceived.get(StereoLocus::Bond(b(1))).unwrap();
-        assert_eq!(config.neighbors(), [s(3), s(4), s(5), s(6)].as_slice());
+        assert_eq!(
+            perceived.get(StereoLocus::Bond(b(1))),
+            Some(&config_at(
+                StereoLocus::Bond(b(1)),
+                StereoKind::CisTrans,
+                [3, 4, 5, 6]
+            )),
+        );
     }
 
     #[test]
@@ -723,8 +727,14 @@ mod tests {
             &trans_alkene(),
             only(StereoLocus::Bond(b(1)), StereoKind::CisTrans),
         );
-        let config = perceived.get(StereoLocus::Bond(b(1))).unwrap();
-        assert_eq!(config.neighbors(), [s(3), s(4), s(6), s(5)].as_slice());
+        assert_eq!(
+            perceived.get(StereoLocus::Bond(b(1))),
+            Some(&config_at(
+                StereoLocus::Bond(b(1)),
+                StereoKind::CisTrans,
+                [3, 4, 6, 5]
+            )),
+        );
     }
 
     #[test]
@@ -739,8 +749,14 @@ mod tests {
     #[test]
     fn an_allene_is_perceived_in_reference_order() {
         let perceived = perceive(&allene(), only(StereoLocus::Axis(s(2)), StereoKind::Allene));
-        let config = perceived.get(StereoLocus::Axis(s(2))).unwrap();
-        assert_eq!(config.neighbors(), [s(4), s(5), s(6), s(7)].as_slice());
+        assert_eq!(
+            perceived.get(StereoLocus::Axis(s(2))),
+            Some(&config_at(
+                StereoLocus::Axis(s(2)),
+                StereoKind::Allene,
+                [4, 5, 6, 7]
+            )),
+        );
     }
 
     #[test]
@@ -749,8 +765,14 @@ mod tests {
             &mirrored(&allene()),
             only(StereoLocus::Axis(s(2)), StereoKind::Allene),
         );
-        let config = perceived.get(StereoLocus::Axis(s(2))).unwrap();
-        assert_eq!(config.neighbors(), [s(5), s(4), s(6), s(7)].as_slice());
+        assert_eq!(
+            perceived.get(StereoLocus::Axis(s(2))),
+            Some(&config_at(
+                StereoLocus::Axis(s(2)),
+                StereoKind::Allene,
+                [5, 4, 6, 7]
+            )),
+        );
     }
 
     #[test]
@@ -829,16 +851,9 @@ mod tests {
     #[test]
     fn perception_is_independent_of_input_order() {
         let candidate = only(StereoLocus::Bond(b(1)), StereoKind::CisTrans);
-        let forward = perceive(&cis_alkene(), &candidate);
-        let backward = perceive(&reversed(&cis_alkene()), &candidate);
-        let forward: Vec<&StereoConfiguration> = forward.iter().collect();
-        let backward: Vec<&StereoConfiguration> = backward.iter().collect();
-        assert_eq!(forward.len(), backward.len());
-        assert!(
-            forward
-                .iter()
-                .zip(&backward)
-                .all(|(a, b)| same_configuration(a, b))
+        assert_eq!(
+            perceive(&cis_alkene(), &candidate),
+            perceive(&reversed(&cis_alkene()), &candidate),
         );
     }
 }
