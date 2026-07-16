@@ -1,9 +1,11 @@
 mod center;
+mod enumerate;
 mod identity;
 mod perceive;
 mod validate;
 
 pub use center::{Stereocenters, stereocenters};
+pub use enumerate::{Stereoisomers, stereoisomers};
 pub use identity::{StereoForm, StereoRelationship, form};
 pub use perceive::{StereoConfigurations, WithStereoConfigurations, perceive};
 pub use validate::{StereoConsistency, consistency};
