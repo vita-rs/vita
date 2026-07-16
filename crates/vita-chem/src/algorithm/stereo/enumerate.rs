@@ -143,3 +143,196 @@ fn extend<M, VK, EK>(
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use vita_core::HasSites;
+
+    use crate::BondOrder::Single;
+    use crate::{BondOrder, HasBonds, HasStereoConfigurations};
+
+    fn s(n: u32) -> SiteId {
+        SiteId::new(n).unwrap()
+    }
+
+    fn b(n: u32) -> BondId {
+        BondId::new(n).unwrap()
+    }
+
+    fn centers_at(sites: &'static [u32]) -> impl Fn(StereoLocus) -> Option<StereoKind> {
+        move |locus| match locus {
+            StereoLocus::Site(site) if sites.contains(&site.get()) => Some(StereoKind::Tetrahedral),
+            _ => None,
+        }
+    }
+
+    struct Mol {
+        sites: Vec<SiteId>,
+        colors: Vec<u32>,
+        bonds: Vec<BondId>,
+        endpoints: Vec<(SiteId, SiteId)>,
+    }
+
+    impl Mol {
+        fn color(&self, site: SiteId) -> u32 {
+            self.colors[self.sites.iter().position(|&x| x == site).unwrap()]
+        }
+    }
+
+    impl HasSites for Mol {
+        fn sites(&self) -> impl Iterator<Item = SiteId> + '_ {
+            self.sites.iter().copied()
+        }
+    }
+
+    impl HasBonds for Mol {
+        fn bonds(&self) -> impl Iterator<Item = BondId> + '_ {
+            self.bonds.iter().copied()
+        }
+
+        fn bond_endpoints(&self, bond: BondId) -> (SiteId, SiteId) {
+            let i = self.bonds.iter().position(|&x| x == bond).unwrap();
+            self.endpoints[i]
+        }
+    }
+
+    impl HasBondOrders for Mol {
+        fn bond_order(&self, _: BondId) -> BondOrder {
+            Single
+        }
+    }
+
+    fn enumerate(
+        mol: &Mol,
+        candidate: impl Fn(StereoLocus) -> Option<StereoKind>,
+    ) -> Stereoisomers {
+        stereoisomers(mol, |site| mol.color(site), |_| 0u32, candidate)
+    }
+
+    fn mol(atoms: &[(u32, u32)], bonds: &[(u32, u32, u32)]) -> Mol {
+        Mol {
+            sites: atoms.iter().map(|&(id, _)| s(id)).collect(),
+            colors: atoms.iter().map(|&(_, color)| color).collect(),
+            bonds: bonds.iter().map(|&(id, ..)| b(id)).collect(),
+            endpoints: bonds.iter().map(|&(_, a, c)| (s(a), s(c))).collect(),
+        }
+    }
+
+    fn reversed(m: &Mol) -> Mol {
+        Mol {
+            sites: m.sites.iter().rev().copied().collect(),
+            colors: m.colors.iter().rev().copied().collect(),
+            bonds: m.bonds.iter().rev().copied().collect(),
+            endpoints: m.endpoints.iter().rev().copied().collect(),
+        }
+    }
+
+    fn tetrahedral() -> Mol {
+        mol(
+            &[(1, 0), (2, 1), (3, 2), (4, 3), (5, 4)],
+            &[(1, 1, 2), (2, 1, 3), (3, 1, 4), (4, 1, 5)],
+        )
+    }
+
+    fn tartaric() -> Mol {
+        mol(
+            &[
+                (1, 0),
+                (2, 0),
+                (3, 1),
+                (4, 2),
+                (5, 3),
+                (6, 1),
+                (7, 2),
+                (8, 3),
+            ],
+            &[
+                (1, 1, 2),
+                (2, 1, 3),
+                (3, 1, 4),
+                (4, 1, 5),
+                (5, 2, 6),
+                (6, 2, 7),
+                (7, 2, 8),
+            ],
+        )
+    }
+
+    fn trihydroxyglutaric() -> Mol {
+        mol(
+            &[
+                (1, 0),
+                (2, 0),
+                (3, 0),
+                (4, 1),
+                (5, 2),
+                (6, 1),
+                (7, 2),
+                (8, 1),
+                (9, 2),
+                (10, 3),
+                (11, 3),
+            ],
+            &[
+                (1, 1, 2),
+                (2, 2, 3),
+                (3, 1, 4),
+                (4, 1, 5),
+                (5, 1, 10),
+                (6, 2, 6),
+                (7, 2, 7),
+                (8, 3, 8),
+                (9, 3, 9),
+                (10, 3, 11),
+            ],
+        )
+    }
+
+    #[test]
+    fn a_constitution_without_stereocenters_has_a_single_isomer() {
+        assert_eq!(enumerate(&tetrahedral(), |_| None).len(), 1);
+    }
+
+    #[test]
+    fn a_single_stereocenter_has_two_isomers() {
+        assert_eq!(enumerate(&tetrahedral(), centers_at(&[1])).len(), 2);
+    }
+
+    #[test]
+    fn two_equivalent_centers_have_three_stereoisomers() {
+        assert_eq!(enumerate(&tartaric(), centers_at(&[1, 2])).len(), 3);
+    }
+
+    #[test]
+    fn a_pseudo_asymmetric_constitution_has_four_stereoisomers() {
+        assert_eq!(
+            enumerate(&trihydroxyglutaric(), centers_at(&[1, 2, 3])).len(),
+            4,
+        );
+    }
+
+    #[test]
+    fn a_lone_isomer_is_not_empty() {
+        assert!(!enumerate(&tetrahedral(), |_| None).is_empty());
+    }
+
+    #[test]
+    fn each_isomer_binds_a_configuration_to_the_stereocenter() {
+        let molecule = tetrahedral();
+        let isomers = enumerate(&molecule, centers_at(&[1]));
+        for isomer in isomers.iter() {
+            assert_eq!(isomer.bind(&molecule).stereo_configuration_count(), 1);
+        }
+    }
+
+    #[test]
+    fn enumeration_is_independent_of_input_order() {
+        let molecule = trihydroxyglutaric();
+        assert_eq!(
+            enumerate(&molecule, centers_at(&[1, 2, 3])),
+            enumerate(&reversed(&molecule), centers_at(&[1, 2, 3])),
+        );
+    }
+}
