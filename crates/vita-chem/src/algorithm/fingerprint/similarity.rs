@@ -96,3 +96,144 @@ pub trait FeatureVector {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    struct Counts(Vec<usize>);
+
+    impl FeatureVector for Counts {
+        fn cardinality(&self) -> usize {
+            self.0.iter().sum()
+        }
+
+        fn intersection(&self, other: &Self) -> usize {
+            self.0.iter().zip(&other.0).map(|(&a, &b)| a.min(b)).sum()
+        }
+
+        fn dot(&self, other: &Self) -> usize {
+            self.0.iter().zip(&other.0).map(|(&a, &b)| a * b).sum()
+        }
+    }
+
+    fn counts(values: &[usize]) -> Counts {
+        Counts(values.to_vec())
+    }
+
+    #[test]
+    fn tanimoto_of_two_empty_vectors_is_one() {
+        assert_eq!(counts(&[]).tanimoto::<f64>(&counts(&[])), 1.0);
+    }
+
+    #[test]
+    fn tversky_of_two_empty_vectors_is_one() {
+        assert_eq!(counts(&[]).tversky(&counts(&[]), 2.0, 3.0), 1.0);
+    }
+
+    #[test]
+    fn cosine_of_two_empty_vectors_is_one() {
+        assert_eq!(counts(&[]).cosine::<f64>(&counts(&[])), 1.0);
+    }
+
+    #[test]
+    fn tanimoto_is_the_shared_count_over_the_union() {
+        let a = counts(&[2, 1, 0]);
+        let b = counts(&[1, 1, 1]);
+        assert_eq!(a.tanimoto::<f64>(&b), 0.5);
+    }
+
+    #[test]
+    fn tversky_weights_each_sides_surplus() {
+        let a = counts(&[3, 1]);
+        let b = counts(&[1, 1]);
+        assert_eq!(a.tversky(&b, 1.0, 0.0), 0.5);
+        assert_eq!(a.tversky(&b, 0.0, 1.0), 1.0);
+    }
+
+    #[test]
+    fn half_weights_give_the_dice_coefficient() {
+        let a = counts(&[2, 1]);
+        let b = counts(&[1, 1]);
+        assert_eq!(a.tversky(&b, 0.5, 0.5), 0.8);
+    }
+
+    #[test]
+    fn cosine_is_the_dot_over_the_norms() {
+        let a = counts(&[3, 4]);
+        let b = counts(&[4, 3]);
+        assert_eq!(a.cosine::<f64>(&b), 0.96);
+    }
+
+    #[test]
+    fn tanimoto_of_disjoint_vectors_is_zero() {
+        let a = counts(&[1, 0]);
+        let b = counts(&[0, 1]);
+        assert_eq!(a.tanimoto::<f64>(&b), 0.0);
+    }
+
+    #[test]
+    fn cosine_of_disjoint_vectors_is_zero() {
+        let a = counts(&[1, 0]);
+        let b = counts(&[0, 1]);
+        assert_eq!(a.cosine::<f64>(&b), 0.0);
+    }
+
+    #[test]
+    fn tanimoto_of_an_empty_and_a_nonempty_vector_is_zero() {
+        assert_eq!(counts(&[]).tanimoto::<f64>(&counts(&[1])), 0.0);
+    }
+
+    #[test]
+    fn cosine_of_an_empty_and_a_nonempty_vector_is_zero() {
+        assert_eq!(counts(&[]).cosine::<f64>(&counts(&[1])), 0.0);
+    }
+
+    #[test]
+    fn tversky_with_zero_weights_on_disjoint_vectors_is_zero() {
+        let a = counts(&[1, 0]);
+        let b = counts(&[0, 1]);
+        assert_eq!(a.tversky(&b, 0.0, 0.0), 0.0);
+    }
+
+    #[test]
+    fn cosine_and_tanimoto_diverge_on_repeated_features() {
+        let a = counts(&[2]);
+        let b = counts(&[1]);
+        assert_eq!(a.cosine::<f64>(&b), 1.0);
+        assert_eq!(a.tanimoto::<f64>(&b), 0.5);
+    }
+
+    #[test]
+    fn tanimoto_of_a_vector_with_itself_is_one() {
+        let a = counts(&[2, 1]);
+        assert_eq!(a.tanimoto::<f64>(&a), 1.0);
+    }
+
+    #[test]
+    fn cosine_of_a_vector_with_itself_is_one() {
+        let a = counts(&[3, 4]);
+        assert_eq!(a.cosine::<f64>(&a), 1.0);
+    }
+
+    #[test]
+    fn tanimoto_is_symmetric() {
+        let a = counts(&[3, 0, 1]);
+        let b = counts(&[1, 2, 1]);
+        assert_eq!(a.tanimoto::<f64>(&b), b.tanimoto::<f64>(&a));
+    }
+
+    #[test]
+    fn cosine_is_symmetric() {
+        let a = counts(&[3, 0, 1]);
+        let b = counts(&[1, 2, 1]);
+        assert_eq!(a.cosine::<f64>(&b), b.cosine::<f64>(&a));
+    }
+
+    #[test]
+    fn tversky_with_equal_weights_is_symmetric() {
+        let a = counts(&[3, 0]);
+        let b = counts(&[1, 1]);
+        assert_eq!(a.tversky(&b, 2.0, 2.0), b.tversky(&a, 2.0, 2.0));
+    }
+}

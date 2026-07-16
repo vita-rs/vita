@@ -164,3 +164,261 @@ fn hashed(descriptor: &StereoDescriptor) -> u64 {
     descriptor.hash(&mut hasher);
     hasher.finish()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use vita_core::HasSites;
+
+    use crate::fingerprint::FeatureVector;
+    use crate::{StereoKind, StereoLocus};
+
+    fn s(n: u32) -> SiteId {
+        SiteId::new(n).unwrap()
+    }
+
+    fn b(n: u32) -> BondId {
+        BondId::new(n).unwrap()
+    }
+
+    fn config(site: u32, order: [u32; 4]) -> StereoConfiguration {
+        StereoConfiguration::new(
+            StereoLocus::Site(s(site)),
+            StereoKind::Tetrahedral,
+            order.map(s),
+        )
+        .unwrap()
+    }
+
+    struct Mol {
+        sites: Vec<SiteId>,
+        colors: Vec<u64>,
+        bonds: Vec<BondId>,
+        endpoints: Vec<(SiteId, SiteId)>,
+    }
+
+    impl Mol {
+        fn color(&self, site: SiteId) -> u64 {
+            self.colors[self.sites.iter().position(|&x| x == site).unwrap()]
+        }
+    }
+
+    impl HasSites for Mol {
+        fn sites(&self) -> impl Iterator<Item = SiteId> + '_ {
+            self.sites.iter().copied()
+        }
+    }
+
+    impl HasBonds for Mol {
+        fn bonds(&self) -> impl Iterator<Item = BondId> + '_ {
+            self.bonds.iter().copied()
+        }
+
+        fn bond_endpoints(&self, bond: BondId) -> (SiteId, SiteId) {
+            let i = self.bonds.iter().position(|&x| x == bond).unwrap();
+            self.endpoints[i]
+        }
+    }
+
+    fn mol(atoms: &[(u32, u64)], bonds: &[(u32, u32, u32)]) -> Mol {
+        Mol {
+            sites: atoms.iter().map(|&(id, _)| s(id)).collect(),
+            colors: atoms.iter().map(|&(_, color)| color).collect(),
+            bonds: bonds.iter().map(|&(id, ..)| b(id)).collect(),
+            endpoints: bonds.iter().map(|&(_, a, c)| (s(a), s(c))).collect(),
+        }
+    }
+
+    fn fingerprint(m: &Mol, radius: usize) -> Fingerprint {
+        circular(m, |site| m.color(site), |_| 0, |_| None, radius)
+    }
+
+    fn configured(m: &Mol, site: u32, order: [u32; 4], radius: usize) -> Fingerprint {
+        let configuration = config(site, order);
+        circular(
+            m,
+            |x| m.color(x),
+            |_| 0,
+            |x| (x == s(site)).then(|| configuration.clone()),
+            radius,
+        )
+    }
+
+    fn reversed(m: &Mol) -> Mol {
+        Mol {
+            sites: m.sites.iter().rev().copied().collect(),
+            colors: m.colors.iter().rev().copied().collect(),
+            bonds: m.bonds.iter().rev().copied().collect(),
+            endpoints: m.endpoints.iter().rev().map(|&(a, c)| (c, a)).collect(),
+        }
+    }
+
+    fn dumbbell() -> Mol {
+        mol(&[(1, 1), (2, 1)], &[(1, 1, 2)])
+    }
+
+    fn chain() -> Mol {
+        mol(&[(1, 1), (2, 1), (3, 1)], &[(1, 1, 2), (2, 2, 3)])
+    }
+
+    fn triangle() -> Mol {
+        mol(
+            &[(1, 1), (2, 1), (3, 1)],
+            &[(1, 1, 2), (2, 2, 3), (3, 1, 3)],
+        )
+    }
+
+    fn star(neighbours: [u64; 4]) -> Mol {
+        mol(
+            &[
+                (1, 0),
+                (2, neighbours[0]),
+                (3, neighbours[1]),
+                (4, neighbours[2]),
+                (5, neighbours[3]),
+            ],
+            &[(1, 1, 2), (2, 1, 3), (3, 1, 4), (4, 1, 5)],
+        )
+    }
+
+    fn tailed_star() -> Mol {
+        mol(
+            &[
+                (1, 0),
+                (2, 7),
+                (3, 7),
+                (4, 7),
+                (5, 7),
+                (6, 11),
+                (7, 12),
+                (8, 13),
+                (9, 14),
+            ],
+            &[
+                (1, 1, 2),
+                (2, 1, 3),
+                (3, 1, 4),
+                (4, 1, 5),
+                (5, 2, 6),
+                (6, 3, 7),
+                (7, 4, 8),
+                (8, 5, 9),
+            ],
+        )
+    }
+
+    #[test]
+    fn an_empty_molecule_has_an_empty_fingerprint() {
+        assert!(fingerprint(&mol(&[], &[]), 2).is_empty());
+    }
+
+    #[test]
+    fn a_radius_zero_fingerprint_counts_the_sites_by_colour() {
+        let print = fingerprint(&mol(&[(1, 1), (2, 2), (3, 1)], &[(1, 1, 2), (2, 2, 3)]), 0);
+        assert_eq!(print.len(), 2);
+        assert_eq!(print.cardinality(), 3);
+    }
+
+    #[test]
+    fn sites_of_one_colour_share_a_feature() {
+        let print = fingerprint(&mol(&[(1, 7), (2, 7)], &[]), 0);
+        assert_eq!(print.len(), 1);
+        assert_eq!(print.cardinality(), 2);
+    }
+
+    #[test]
+    fn sites_of_different_colours_have_distinct_features() {
+        assert_eq!(fingerprint(&mol(&[(1, 7), (2, 8)], &[]), 0).len(), 2);
+    }
+
+    #[test]
+    fn a_wider_radius_separates_distinct_environments() {
+        let print = fingerprint(&chain(), 1);
+        assert_eq!(print.len(), 3);
+        assert_eq!(print.cardinality(), 6);
+    }
+
+    #[test]
+    fn bond_colours_enter_the_environment() {
+        let m = dumbbell();
+        let plain = circular(&m, |x| m.color(x), |_| 0, |_| None, 1);
+        let recoloured = circular(&m, |x| m.color(x), |_| 1, |_| None, 1);
+        assert_ne!(plain, recoloured);
+    }
+
+    #[test]
+    fn equivalent_environments_with_distinct_reaches_each_count() {
+        let print = fingerprint(&triangle(), 1);
+        assert_eq!(print.len(), 2);
+        assert_eq!(print.cardinality(), 6);
+    }
+
+    #[test]
+    fn an_isolated_site_contributes_only_its_radius_zero_feature() {
+        let m = mol(&[(1, 7)], &[]);
+        assert_eq!(fingerprint(&m, 3), fingerprint(&m, 0));
+    }
+
+    #[test]
+    fn sites_covering_the_same_bonds_pool_into_one_environment() {
+        assert_eq!(fingerprint(&dumbbell(), 1).cardinality(), 3);
+    }
+
+    #[test]
+    fn a_radius_beyond_the_molecules_reach_adds_nothing() {
+        assert_eq!(fingerprint(&dumbbell(), 2), fingerprint(&dumbbell(), 1));
+    }
+
+    #[test]
+    fn a_configuration_is_invisible_at_radius_zero() {
+        let m = star([2, 3, 4, 5]);
+        assert_eq!(configured(&m, 1, [2, 3, 4, 5], 0), fingerprint(&m, 0));
+    }
+
+    #[test]
+    fn a_configuration_refines_its_centres_feature() {
+        let m = star([2, 3, 4, 5]);
+        assert_ne!(configured(&m, 1, [2, 3, 4, 5], 1), fingerprint(&m, 1));
+    }
+
+    #[test]
+    fn mirror_configurations_yield_distinct_fingerprints() {
+        let m = star([2, 3, 4, 5]);
+        assert_ne!(
+            configured(&m, 1, [2, 3, 4, 5], 1),
+            configured(&m, 1, [3, 2, 4, 5], 1),
+        );
+    }
+
+    #[test]
+    fn a_configuration_among_indistinguishable_neighbours_separates_nothing() {
+        let m = star([7, 7, 7, 7]);
+        assert_eq!(
+            configured(&m, 1, [2, 3, 4, 5], 1),
+            configured(&m, 1, [3, 2, 4, 5], 1),
+        );
+    }
+
+    #[test]
+    fn a_configuration_parts_mirror_forms_once_the_radius_resolves_its_neighbours() {
+        let m = tailed_star();
+        assert_eq!(
+            configured(&m, 1, [2, 3, 4, 5], 1),
+            configured(&m, 1, [3, 2, 4, 5], 1),
+        );
+        assert_ne!(
+            configured(&m, 1, [2, 3, 4, 5], 2),
+            configured(&m, 1, [3, 2, 4, 5], 2),
+        );
+    }
+
+    #[test]
+    fn the_fingerprint_is_independent_of_input_order() {
+        let m = tailed_star();
+        assert_eq!(
+            configured(&m, 1, [2, 3, 4, 5], 2),
+            configured(&reversed(&m), 1, [2, 3, 4, 5], 2),
+        );
+    }
+}

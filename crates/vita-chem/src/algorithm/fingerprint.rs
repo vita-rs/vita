@@ -76,3 +76,118 @@ fn index<M: HasBonds>(mol: &M) -> Indexed {
         adjacency,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use vita_core::HasSites;
+
+    fn s(n: u32) -> SiteId {
+        SiteId::new(n).unwrap()
+    }
+
+    fn b(n: u32) -> BondId {
+        BondId::new(n).unwrap()
+    }
+
+    struct Mol {
+        sites: Vec<SiteId>,
+        bonds: Vec<BondId>,
+        endpoints: Vec<(SiteId, SiteId)>,
+    }
+
+    impl HasSites for Mol {
+        fn sites(&self) -> impl Iterator<Item = SiteId> + '_ {
+            self.sites.iter().copied()
+        }
+    }
+
+    impl HasBonds for Mol {
+        fn bonds(&self) -> impl Iterator<Item = BondId> + '_ {
+            self.bonds.iter().copied()
+        }
+
+        fn bond_endpoints(&self, bond: BondId) -> (SiteId, SiteId) {
+            let i = self.bonds.iter().position(|&x| x == bond).unwrap();
+            self.endpoints[i]
+        }
+    }
+
+    fn empty() -> Mol {
+        Mol {
+            sites: Vec::new(),
+            bonds: Vec::new(),
+            endpoints: Vec::new(),
+        }
+    }
+
+    fn chain() -> Mol {
+        Mol {
+            sites: vec![s(5), s(2), s(9)],
+            bonds: vec![b(7), b(4)],
+            endpoints: vec![(s(5), s(2)), (s(2), s(9))],
+        }
+    }
+
+    #[test]
+    fn an_empty_molecule_indexes_to_nothing() {
+        let indexed = index(&empty());
+        assert!(indexed.sites.is_empty());
+        assert!(indexed.bonds.is_empty());
+        assert_eq!(indexed.adjacency.len(), 0);
+    }
+
+    #[test]
+    fn mix_of_zero_is_zero() {
+        assert_eq!(mix(0), 0);
+    }
+
+    #[test]
+    fn combining_no_words_yields_the_seed() {
+        assert_eq!(combine([]), SEED);
+    }
+
+    #[test]
+    fn mix_is_stable_across_builds() {
+        assert_eq!(mix(1), 0x5692_161d_100b_05e5);
+    }
+
+    #[test]
+    fn combine_is_stable_across_builds() {
+        assert_eq!(combine([1, 2]), 0x64b1_7449_5128_d35e);
+    }
+
+    #[test]
+    fn combine_depends_on_the_words() {
+        assert_ne!(combine([1]), combine([2]));
+    }
+
+    #[test]
+    fn combine_depends_on_word_order() {
+        assert_ne!(combine([1, 2]), combine([2, 1]));
+    }
+
+    #[test]
+    fn combine_depends_on_word_count() {
+        assert_ne!(combine([1]), combine([1, 1]));
+    }
+
+    #[test]
+    fn index_preserves_site_order() {
+        assert_eq!(index(&chain()).sites, vec![s(5), s(2), s(9)]);
+    }
+
+    #[test]
+    fn index_preserves_bond_order() {
+        assert_eq!(index(&chain()).bonds, vec![b(7), b(4)]);
+    }
+
+    #[test]
+    fn index_wires_the_adjacency_over_the_indices() {
+        let indexed = index(&chain());
+        assert_eq!(indexed.adjacency.neighbors(0), [(0, 1)]);
+        assert_eq!(indexed.adjacency.neighbors(1), [(0, 0), (1, 2)]);
+        assert_eq!(indexed.adjacency.neighbors(2), [(1, 1)]);
+    }
+}

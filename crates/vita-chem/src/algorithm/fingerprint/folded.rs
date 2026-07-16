@@ -73,3 +73,124 @@ impl FeatureVector for FoldedFingerprint {
         self.intersection(other)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_fold_of_no_codes_has_zero_cardinality() {
+        assert_eq!(FoldedFingerprint::new([], 8).cardinality(), 0);
+    }
+
+    #[test]
+    fn a_fold_of_no_codes_yields_no_bits() {
+        assert!(FoldedFingerprint::new([], 8).iter().next().is_none());
+    }
+
+    #[test]
+    fn width_reports_the_folded_width() {
+        assert_eq!(FoldedFingerprint::new([], 8).width(), 8);
+    }
+
+    #[test]
+    fn each_code_reaches_its_bit_modulo_the_width() {
+        let folded = FoldedFingerprint::new([3, 10], 8);
+        assert!(folded.contains(3));
+        assert!(folded.contains(2));
+    }
+
+    #[test]
+    fn iter_yields_the_reached_bits_in_ascending_order() {
+        let folded = FoldedFingerprint::new([10, 3], 8);
+        let bits: Vec<usize> = folded.iter().collect();
+        assert_eq!(bits, vec![2, 3]);
+    }
+
+    #[test]
+    fn cardinality_counts_the_reached_bits() {
+        assert_eq!(FoldedFingerprint::new([1, 3, 10], 8).cardinality(), 3);
+    }
+
+    #[test]
+    fn colliding_codes_reach_one_bit() {
+        assert_eq!(FoldedFingerprint::new([2, 10], 8).cardinality(), 1);
+    }
+
+    #[test]
+    fn intersection_counts_the_shared_bits() {
+        let a = FoldedFingerprint::new([1, 2], 8);
+        let b = FoldedFingerprint::new([2, 3], 8);
+        assert_eq!(a.intersection(&b), 1);
+    }
+
+    #[test]
+    fn dot_agrees_with_intersection() {
+        let a = FoldedFingerprint::new([1, 2], 8);
+        let b = FoldedFingerprint::new([2, 3], 8);
+        assert_eq!(a.dot(&b), a.intersection(&b));
+    }
+
+    #[test]
+    fn an_unreached_bit_is_not_contained() {
+        assert!(!FoldedFingerprint::new([3], 8).contains(0));
+    }
+
+    #[test]
+    fn folds_sharing_no_bit_have_zero_intersection() {
+        let a = FoldedFingerprint::new([1], 8);
+        let b = FoldedFingerprint::new([2], 8);
+        assert_eq!(a.intersection(&b), 0);
+    }
+
+    #[test]
+    fn a_zero_width_fold_ignores_its_codes() {
+        let folded = FoldedFingerprint::new([1, 9], 0);
+        assert_eq!(folded.width(), 0);
+        assert_eq!(folded.cardinality(), 0);
+    }
+
+    #[test]
+    #[should_panic(expected = "different widths")]
+    fn intersection_across_widths_panics() {
+        let _ = FoldedFingerprint::new([1], 8).intersection(&FoldedFingerprint::new([1], 16));
+    }
+
+    #[test]
+    #[should_panic(expected = "different widths")]
+    fn dot_across_widths_panics() {
+        let _ = FoldedFingerprint::new([1], 8).dot(&FoldedFingerprint::new([1], 16));
+    }
+
+    #[test]
+    fn folds_reaching_the_same_bits_are_equal() {
+        assert_eq!(
+            FoldedFingerprint::new([2, 10], 8),
+            FoldedFingerprint::new([10], 8),
+        );
+    }
+
+    #[test]
+    fn folds_reaching_different_bits_are_not_equal() {
+        assert_ne!(
+            FoldedFingerprint::new([1], 8),
+            FoldedFingerprint::new([2], 8),
+        );
+    }
+
+    #[test]
+    fn folds_of_different_widths_are_not_equal() {
+        assert_ne!(
+            FoldedFingerprint::new([], 8),
+            FoldedFingerprint::new([], 16),
+        );
+    }
+
+    #[test]
+    fn the_fold_is_independent_of_input_order() {
+        assert_eq!(
+            FoldedFingerprint::new([3, 10, 1], 8),
+            FoldedFingerprint::new([1, 3, 10], 8),
+        );
+    }
+}
