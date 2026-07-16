@@ -17,7 +17,7 @@ pub use disjoint_set::DisjointSet;
 pub use electronegativity::electronegativity;
 pub use embedding::embeddings;
 pub use gf2_basis::Gf2Basis;
-pub use hash::{FxHashMap, FxHashSet};
+pub use hash::{FxHashMap, FxHashSet, FxHasher};
 pub use labeling::labeling;
 pub use matching::maximum_matching;
 pub use sorted_map::SortedMap;

@@ -2,6 +2,7 @@ mod utils;
 
 pub mod aromaticity;
 pub mod canonical;
+pub mod fingerprint;
 pub mod isomorphism;
 pub mod stereo;
 pub mod topology;

@@ -59,7 +59,6 @@ impl BitSet {
     }
 
     /// Number of positions set in both this bit set and `other`.
-    #[allow(dead_code)]
     pub fn count_and(&self, other: &BitSet) -> usize {
         self.words
             .iter()

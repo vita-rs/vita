@@ -23,13 +23,11 @@ impl<K: Ord, V> SortedMap<K, V> {
     }
 
     /// Number of entries.
-    #[allow(dead_code)]
     pub fn len(&self) -> usize {
         self.entries.len()
     }
 
     /// Returns `true` if the map has no entries.
-    #[allow(dead_code)]
     pub fn is_empty(&self) -> bool {
         self.entries.is_empty()
     }
