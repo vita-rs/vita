@@ -542,3 +542,1228 @@ fn beyond_sigma(order: BondOrder) -> Option<u32> {
 fn orbitals(element: Element) -> u32 {
     if element.atomic_number() <= 2 { 1 } else { 4 }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use vita_core::HasSites;
+
+    use crate::HasBonds;
+
+    fn s(n: u32) -> SiteId {
+        SiteId::new(n).unwrap()
+    }
+
+    fn b(n: u32) -> BondId {
+        BondId::new(n).unwrap()
+    }
+
+    fn elem(symbol: &str) -> Element {
+        Element::from_symbol(symbol).unwrap()
+    }
+
+    struct Mol {
+        sites: Vec<SiteId>,
+        elements: Vec<Element>,
+        bonds: Vec<BondId>,
+        endpoints: Vec<(SiteId, SiteId)>,
+        orders: Vec<BondOrder>,
+        formal_charges: Vec<i8>,
+        radicals: Vec<u8>,
+    }
+
+    impl HasSites for Mol {
+        fn sites(&self) -> impl Iterator<Item = SiteId> + '_ {
+            self.sites.iter().copied()
+        }
+    }
+
+    impl HasElements for Mol {
+        fn element(&self, site: SiteId) -> Element {
+            let i = self.sites.iter().position(|&x| x == site).unwrap();
+            self.elements[i]
+        }
+    }
+
+    impl HasBonds for Mol {
+        fn bonds(&self) -> impl Iterator<Item = BondId> + '_ {
+            self.bonds.iter().copied()
+        }
+
+        fn bond_endpoints(&self, bond: BondId) -> (SiteId, SiteId) {
+            let i = self.bonds.iter().position(|&x| x == bond).unwrap();
+            self.endpoints[i]
+        }
+    }
+
+    impl HasBondOrders for Mol {
+        fn bond_order(&self, bond: BondId) -> BondOrder {
+            let i = self.bonds.iter().position(|&x| x == bond).unwrap();
+            self.orders[i]
+        }
+    }
+
+    impl HasFormalCharges for Mol {
+        fn formal_charge(&self, site: SiteId) -> i8 {
+            let i = self.sites.iter().position(|&x| x == site).unwrap();
+            self.formal_charges[i]
+        }
+    }
+
+    impl HasRadicalElectrons for Mol {
+        fn radical_electron(&self, site: SiteId) -> u8 {
+            let i = self.sites.iter().position(|&x| x == site).unwrap();
+            self.radicals[i]
+        }
+    }
+
+    fn molecule(atoms: &[(u32, &str, i8, u8)], bonds: &[(u32, u32, u32, BondOrder)]) -> Mol {
+        Mol {
+            sites: atoms.iter().map(|&(id, ..)| s(id)).collect(),
+            elements: atoms.iter().map(|&(_, symbol, ..)| elem(symbol)).collect(),
+            formal_charges: atoms.iter().map(|&(_, _, charge, _)| charge).collect(),
+            radicals: atoms.iter().map(|&(.., radicals)| radicals).collect(),
+            bonds: bonds.iter().map(|&(id, ..)| b(id)).collect(),
+            endpoints: bonds.iter().map(|&(_, u, v, _)| (s(u), s(v))).collect(),
+            orders: bonds.iter().map(|&(.., order)| order).collect(),
+        }
+    }
+
+    fn shape(perceived: &ConjugatedSystems) -> Vec<(Vec<SiteId>, Vec<BondId>, Option<u32>)> {
+        perceived
+            .iter()
+            .map(|system| {
+                (
+                    system.sites().collect(),
+                    system.bonds().collect(),
+                    system.pi_electrons(),
+                )
+            })
+            .collect()
+    }
+
+    fn empty() -> Mol {
+        molecule(&[], &[])
+    }
+
+    fn ethane() -> Mol {
+        molecule(
+            &[
+                (1, "C", 0, 0),
+                (2, "C", 0, 0),
+                (3, "H", 0, 0),
+                (4, "H", 0, 0),
+                (5, "H", 0, 0),
+                (6, "H", 0, 0),
+                (7, "H", 0, 0),
+                (8, "H", 0, 0),
+            ],
+            &[
+                (1, 1, 2, BondOrder::Single),
+                (2, 1, 3, BondOrder::Single),
+                (3, 1, 4, BondOrder::Single),
+                (4, 1, 5, BondOrder::Single),
+                (5, 2, 6, BondOrder::Single),
+                (6, 2, 7, BondOrder::Single),
+                (7, 2, 8, BondOrder::Single),
+            ],
+        )
+    }
+
+    fn ethylene() -> Mol {
+        molecule(
+            &[
+                (1, "C", 0, 0),
+                (2, "C", 0, 0),
+                (3, "H", 0, 0),
+                (4, "H", 0, 0),
+                (5, "H", 0, 0),
+                (6, "H", 0, 0),
+            ],
+            &[
+                (1, 1, 2, BondOrder::Double),
+                (2, 1, 3, BondOrder::Single),
+                (3, 1, 4, BondOrder::Single),
+                (4, 2, 5, BondOrder::Single),
+                (5, 2, 6, BondOrder::Single),
+            ],
+        )
+    }
+
+    fn formaldehyde() -> Mol {
+        molecule(
+            &[
+                (1, "C", 0, 0),
+                (2, "O", 0, 0),
+                (3, "H", 0, 0),
+                (4, "H", 0, 0),
+            ],
+            &[
+                (1, 1, 2, BondOrder::Double),
+                (2, 1, 3, BondOrder::Single),
+                (3, 1, 4, BondOrder::Single),
+            ],
+        )
+    }
+
+    fn penta_1_4_diene() -> Mol {
+        molecule(
+            &[
+                (1, "C", 0, 0),
+                (2, "C", 0, 0),
+                (3, "C", 0, 0),
+                (4, "C", 0, 0),
+                (5, "C", 0, 0),
+                (6, "H", 0, 0),
+                (7, "H", 0, 0),
+                (8, "H", 0, 0),
+                (9, "H", 0, 0),
+                (10, "H", 0, 0),
+                (11, "H", 0, 0),
+                (12, "H", 0, 0),
+                (13, "H", 0, 0),
+            ],
+            &[
+                (1, 1, 2, BondOrder::Double),
+                (2, 2, 3, BondOrder::Single),
+                (3, 3, 4, BondOrder::Single),
+                (4, 4, 5, BondOrder::Double),
+                (5, 1, 6, BondOrder::Single),
+                (6, 1, 7, BondOrder::Single),
+                (7, 2, 8, BondOrder::Single),
+                (8, 3, 9, BondOrder::Single),
+                (9, 3, 10, BondOrder::Single),
+                (10, 4, 11, BondOrder::Single),
+                (11, 5, 12, BondOrder::Single),
+                (12, 5, 13, BondOrder::Single),
+            ],
+        )
+    }
+
+    fn butadiene() -> Mol {
+        molecule(
+            &[
+                (1, "C", 0, 0),
+                (2, "C", 0, 0),
+                (3, "C", 0, 0),
+                (4, "C", 0, 0),
+                (5, "H", 0, 0),
+                (6, "H", 0, 0),
+                (7, "H", 0, 0),
+                (8, "H", 0, 0),
+                (9, "H", 0, 0),
+                (10, "H", 0, 0),
+            ],
+            &[
+                (1, 1, 2, BondOrder::Double),
+                (2, 2, 3, BondOrder::Single),
+                (3, 3, 4, BondOrder::Double),
+                (4, 1, 5, BondOrder::Single),
+                (5, 1, 6, BondOrder::Single),
+                (6, 2, 7, BondOrder::Single),
+                (7, 3, 8, BondOrder::Single),
+                (8, 4, 9, BondOrder::Single),
+                (9, 4, 10, BondOrder::Single),
+            ],
+        )
+    }
+
+    fn vinyl_chloride() -> Mol {
+        molecule(
+            &[
+                (1, "C", 0, 0),
+                (2, "C", 0, 0),
+                (3, "Cl", 0, 0),
+                (4, "H", 0, 0),
+                (5, "H", 0, 0),
+                (6, "H", 0, 0),
+            ],
+            &[
+                (1, 1, 2, BondOrder::Double),
+                (2, 2, 3, BondOrder::Single),
+                (3, 1, 4, BondOrder::Single),
+                (4, 1, 5, BondOrder::Single),
+                (5, 2, 6, BondOrder::Single),
+            ],
+        )
+    }
+
+    fn hydrazine() -> Mol {
+        molecule(
+            &[
+                (1, "N", 0, 0),
+                (2, "N", 0, 0),
+                (3, "H", 0, 0),
+                (4, "H", 0, 0),
+                (5, "H", 0, 0),
+                (6, "H", 0, 0),
+            ],
+            &[
+                (1, 1, 2, BondOrder::Single),
+                (2, 1, 3, BondOrder::Single),
+                (3, 1, 4, BondOrder::Single),
+                (4, 2, 5, BondOrder::Single),
+                (5, 2, 6, BondOrder::Single),
+            ],
+        )
+    }
+
+    fn allyl(charge: i8, radicals: u8) -> Mol {
+        molecule(
+            &[
+                (1, "C", 0, 0),
+                (2, "C", 0, 0),
+                (3, "C", charge, radicals),
+                (4, "H", 0, 0),
+                (5, "H", 0, 0),
+                (6, "H", 0, 0),
+                (7, "H", 0, 0),
+                (8, "H", 0, 0),
+            ],
+            &[
+                (1, 1, 2, BondOrder::Double),
+                (2, 2, 3, BondOrder::Single),
+                (3, 1, 4, BondOrder::Single),
+                (4, 1, 5, BondOrder::Single),
+                (5, 2, 6, BondOrder::Single),
+                (6, 3, 7, BondOrder::Single),
+                (7, 3, 8, BondOrder::Single),
+            ],
+        )
+    }
+
+    fn acetate() -> Mol {
+        molecule(
+            &[
+                (1, "C", 0, 0),
+                (2, "C", 0, 0),
+                (3, "O", 0, 0),
+                (4, "O", -1, 0),
+                (5, "H", 0, 0),
+                (6, "H", 0, 0),
+                (7, "H", 0, 0),
+            ],
+            &[
+                (1, 1, 2, BondOrder::Single),
+                (2, 2, 3, BondOrder::Double),
+                (3, 2, 4, BondOrder::Single),
+                (4, 1, 5, BondOrder::Single),
+                (5, 1, 6, BondOrder::Single),
+                (6, 1, 7, BondOrder::Single),
+            ],
+        )
+    }
+
+    fn divinyl_ketone() -> Mol {
+        molecule(
+            &[
+                (1, "O", 0, 0),
+                (2, "C", 0, 0),
+                (3, "C", 0, 0),
+                (4, "C", 0, 0),
+                (5, "C", 0, 0),
+                (6, "C", 0, 0),
+                (7, "H", 0, 0),
+                (8, "H", 0, 0),
+                (9, "H", 0, 0),
+                (10, "H", 0, 0),
+                (11, "H", 0, 0),
+                (12, "H", 0, 0),
+            ],
+            &[
+                (1, 1, 2, BondOrder::Double),
+                (2, 2, 3, BondOrder::Single),
+                (3, 3, 4, BondOrder::Double),
+                (4, 2, 5, BondOrder::Single),
+                (5, 5, 6, BondOrder::Double),
+                (6, 3, 7, BondOrder::Single),
+                (7, 4, 8, BondOrder::Single),
+                (8, 4, 9, BondOrder::Single),
+                (9, 5, 10, BondOrder::Single),
+                (10, 6, 11, BondOrder::Single),
+                (11, 6, 12, BondOrder::Single),
+            ],
+        )
+    }
+
+    fn kekule_benzene() -> Mol {
+        molecule(
+            &[
+                (1, "C", 0, 0),
+                (2, "C", 0, 0),
+                (3, "C", 0, 0),
+                (4, "C", 0, 0),
+                (5, "C", 0, 0),
+                (6, "C", 0, 0),
+                (7, "H", 0, 0),
+                (8, "H", 0, 0),
+                (9, "H", 0, 0),
+                (10, "H", 0, 0),
+                (11, "H", 0, 0),
+                (12, "H", 0, 0),
+            ],
+            &[
+                (1, 1, 2, BondOrder::Double),
+                (2, 2, 3, BondOrder::Single),
+                (3, 3, 4, BondOrder::Double),
+                (4, 4, 5, BondOrder::Single),
+                (5, 5, 6, BondOrder::Double),
+                (6, 6, 1, BondOrder::Single),
+                (7, 1, 7, BondOrder::Single),
+                (8, 2, 8, BondOrder::Single),
+                (9, 3, 9, BondOrder::Single),
+                (10, 4, 10, BondOrder::Single),
+                (11, 5, 11, BondOrder::Single),
+                (12, 6, 12, BondOrder::Single),
+            ],
+        )
+    }
+
+    fn kekule_furan() -> Mol {
+        molecule(
+            &[
+                (1, "O", 0, 0),
+                (2, "C", 0, 0),
+                (3, "C", 0, 0),
+                (4, "C", 0, 0),
+                (5, "C", 0, 0),
+                (6, "H", 0, 0),
+                (7, "H", 0, 0),
+                (8, "H", 0, 0),
+                (9, "H", 0, 0),
+            ],
+            &[
+                (1, 1, 2, BondOrder::Single),
+                (2, 2, 3, BondOrder::Double),
+                (3, 3, 4, BondOrder::Single),
+                (4, 4, 5, BondOrder::Double),
+                (5, 5, 1, BondOrder::Single),
+                (6, 2, 6, BondOrder::Single),
+                (7, 3, 7, BondOrder::Single),
+                (8, 4, 8, BondOrder::Single),
+                (9, 5, 9, BondOrder::Single),
+            ],
+        )
+    }
+
+    fn divinyl_ether() -> Mol {
+        molecule(
+            &[
+                (1, "C", 0, 0),
+                (2, "C", 0, 0),
+                (3, "O", 0, 0),
+                (4, "C", 0, 0),
+                (5, "C", 0, 0),
+                (6, "H", 0, 0),
+                (7, "H", 0, 0),
+                (8, "H", 0, 0),
+                (9, "H", 0, 0),
+                (10, "H", 0, 0),
+                (11, "H", 0, 0),
+            ],
+            &[
+                (1, 1, 2, BondOrder::Double),
+                (2, 2, 3, BondOrder::Single),
+                (3, 3, 4, BondOrder::Single),
+                (4, 4, 5, BondOrder::Double),
+                (5, 1, 6, BondOrder::Single),
+                (6, 1, 7, BondOrder::Single),
+                (7, 2, 8, BondOrder::Single),
+                (8, 4, 9, BondOrder::Single),
+                (9, 5, 10, BondOrder::Single),
+                (10, 5, 11, BondOrder::Single),
+            ],
+        )
+    }
+
+    fn allene() -> Mol {
+        molecule(
+            &[
+                (1, "C", 0, 0),
+                (2, "C", 0, 0),
+                (3, "C", 0, 0),
+                (4, "H", 0, 0),
+                (5, "H", 0, 0),
+                (6, "H", 0, 0),
+                (7, "H", 0, 0),
+            ],
+            &[
+                (1, 1, 2, BondOrder::Double),
+                (2, 2, 3, BondOrder::Double),
+                (3, 1, 4, BondOrder::Single),
+                (4, 1, 5, BondOrder::Single),
+                (5, 3, 6, BondOrder::Single),
+                (6, 3, 7, BondOrder::Single),
+            ],
+        )
+    }
+
+    fn butatriene() -> Mol {
+        molecule(
+            &[
+                (1, "C", 0, 0),
+                (2, "C", 0, 0),
+                (3, "C", 0, 0),
+                (4, "C", 0, 0),
+                (5, "H", 0, 0),
+                (6, "H", 0, 0),
+                (7, "H", 0, 0),
+                (8, "H", 0, 0),
+            ],
+            &[
+                (1, 1, 2, BondOrder::Double),
+                (2, 2, 3, BondOrder::Double),
+                (3, 3, 4, BondOrder::Double),
+                (4, 1, 5, BondOrder::Single),
+                (5, 1, 6, BondOrder::Single),
+                (6, 4, 7, BondOrder::Single),
+                (7, 4, 8, BondOrder::Single),
+            ],
+        )
+    }
+
+    fn pentatetraene() -> Mol {
+        molecule(
+            &[
+                (1, "C", 0, 0),
+                (2, "C", 0, 0),
+                (3, "C", 0, 0),
+                (4, "C", 0, 0),
+                (5, "C", 0, 0),
+                (6, "H", 0, 0),
+                (7, "H", 0, 0),
+                (8, "H", 0, 0),
+                (9, "H", 0, 0),
+            ],
+            &[
+                (1, 1, 2, BondOrder::Double),
+                (2, 2, 3, BondOrder::Double),
+                (3, 3, 4, BondOrder::Double),
+                (4, 4, 5, BondOrder::Double),
+                (5, 1, 6, BondOrder::Single),
+                (6, 1, 7, BondOrder::Single),
+                (7, 5, 8, BondOrder::Single),
+                (8, 5, 9, BondOrder::Single),
+            ],
+        )
+    }
+
+    fn vinylacetylene() -> Mol {
+        molecule(
+            &[
+                (1, "C", 0, 0),
+                (2, "C", 0, 0),
+                (3, "C", 0, 0),
+                (4, "C", 0, 0),
+                (5, "H", 0, 0),
+                (6, "H", 0, 0),
+                (7, "H", 0, 0),
+                (8, "H", 0, 0),
+            ],
+            &[
+                (1, 1, 2, BondOrder::Double),
+                (2, 2, 3, BondOrder::Single),
+                (3, 3, 4, BondOrder::Triple),
+                (4, 1, 5, BondOrder::Single),
+                (5, 1, 6, BondOrder::Single),
+                (6, 2, 7, BondOrder::Single),
+                (7, 4, 8, BondOrder::Single),
+            ],
+        )
+    }
+
+    fn diacetylene() -> Mol {
+        molecule(
+            &[
+                (1, "H", 0, 0),
+                (2, "C", 0, 0),
+                (3, "C", 0, 0),
+                (4, "C", 0, 0),
+                (5, "C", 0, 0),
+                (6, "H", 0, 0),
+            ],
+            &[
+                (1, 2, 3, BondOrder::Triple),
+                (2, 3, 4, BondOrder::Single),
+                (3, 4, 5, BondOrder::Triple),
+                (4, 1, 2, BondOrder::Single),
+                (5, 5, 6, BondOrder::Single),
+            ],
+        )
+    }
+
+    fn azide() -> Mol {
+        molecule(
+            &[(1, "N", -1, 0), (2, "N", 1, 0), (3, "N", -1, 0)],
+            &[(1, 1, 2, BondOrder::Double), (2, 2, 3, BondOrder::Double)],
+        )
+    }
+
+    fn chloroacetylene() -> Mol {
+        molecule(
+            &[
+                (1, "Cl", 0, 0),
+                (2, "C", 0, 0),
+                (3, "C", 0, 0),
+                (4, "H", 0, 0),
+            ],
+            &[
+                (1, 1, 2, BondOrder::Single),
+                (2, 2, 3, BondOrder::Triple),
+                (3, 3, 4, BondOrder::Single),
+            ],
+        )
+    }
+
+    fn acrylonitrile() -> Mol {
+        molecule(
+            &[
+                (1, "C", 0, 0),
+                (2, "C", 0, 0),
+                (3, "C", 0, 0),
+                (4, "N", 0, 0),
+                (5, "H", 0, 0),
+                (6, "H", 0, 0),
+                (7, "H", 0, 0),
+            ],
+            &[
+                (1, 1, 2, BondOrder::Double),
+                (2, 2, 3, BondOrder::Single),
+                (3, 3, 4, BondOrder::Triple),
+                (4, 1, 5, BondOrder::Single),
+                (5, 1, 6, BondOrder::Single),
+                (6, 2, 7, BondOrder::Single),
+            ],
+        )
+    }
+
+    fn cumulated_cycle() -> Mol {
+        molecule(
+            &[(1, "C", 0, 0), (2, "C", 0, 0), (3, "C", 0, 0)],
+            &[
+                (1, 1, 2, BondOrder::Double),
+                (2, 2, 3, BondOrder::Double),
+                (3, 3, 1, BondOrder::Double),
+            ],
+        )
+    }
+
+    fn dimethyl_sulfone() -> Mol {
+        molecule(
+            &[
+                (1, "S", 0, 0),
+                (2, "O", 0, 0),
+                (3, "O", 0, 0),
+                (4, "C", 0, 0),
+                (5, "C", 0, 0),
+                (6, "H", 0, 0),
+                (7, "H", 0, 0),
+                (8, "H", 0, 0),
+                (9, "H", 0, 0),
+                (10, "H", 0, 0),
+                (11, "H", 0, 0),
+            ],
+            &[
+                (1, 1, 2, BondOrder::Double),
+                (2, 1, 3, BondOrder::Double),
+                (3, 1, 4, BondOrder::Single),
+                (4, 1, 5, BondOrder::Single),
+                (5, 4, 6, BondOrder::Single),
+                (6, 4, 7, BondOrder::Single),
+                (7, 4, 8, BondOrder::Single),
+                (8, 5, 9, BondOrder::Single),
+                (9, 5, 10, BondOrder::Single),
+                (10, 5, 11, BondOrder::Single),
+            ],
+        )
+    }
+
+    fn iron_vinyl() -> Mol {
+        molecule(
+            &[
+                (1, "Fe", 0, 0),
+                (2, "C", 0, 0),
+                (3, "C", 0, 0),
+                (4, "H", 0, 0),
+                (5, "H", 0, 0),
+                (6, "H", 0, 0),
+            ],
+            &[
+                (1, 1, 2, BondOrder::Single),
+                (2, 2, 3, BondOrder::Double),
+                (3, 2, 4, BondOrder::Single),
+                (4, 3, 5, BondOrder::Single),
+                (5, 3, 6, BondOrder::Single),
+            ],
+        )
+    }
+
+    fn aromatic_benzene() -> Mol {
+        molecule(
+            &[
+                (1, "C", 0, 0),
+                (2, "C", 0, 0),
+                (3, "C", 0, 0),
+                (4, "C", 0, 0),
+                (5, "C", 0, 0),
+                (6, "C", 0, 0),
+                (7, "H", 0, 0),
+                (8, "H", 0, 0),
+                (9, "H", 0, 0),
+                (10, "H", 0, 0),
+                (11, "H", 0, 0),
+                (12, "H", 0, 0),
+            ],
+            &[
+                (1, 1, 2, BondOrder::Aromatic),
+                (2, 2, 3, BondOrder::Aromatic),
+                (3, 3, 4, BondOrder::Aromatic),
+                (4, 4, 5, BondOrder::Aromatic),
+                (5, 5, 6, BondOrder::Aromatic),
+                (6, 6, 1, BondOrder::Aromatic),
+                (7, 1, 7, BondOrder::Single),
+                (8, 2, 8, BondOrder::Single),
+                (9, 3, 9, BondOrder::Single),
+                (10, 4, 10, BondOrder::Single),
+                (11, 5, 11, BondOrder::Single),
+                (12, 6, 12, BondOrder::Single),
+            ],
+        )
+    }
+
+    fn aromatic_styrene() -> Mol {
+        molecule(
+            &[
+                (1, "C", 0, 0),
+                (2, "C", 0, 0),
+                (3, "C", 0, 0),
+                (4, "C", 0, 0),
+                (5, "C", 0, 0),
+                (6, "C", 0, 0),
+                (7, "C", 0, 0),
+                (8, "C", 0, 0),
+                (9, "H", 0, 0),
+                (10, "H", 0, 0),
+                (11, "H", 0, 0),
+                (12, "H", 0, 0),
+                (13, "H", 0, 0),
+                (14, "H", 0, 0),
+                (15, "H", 0, 0),
+                (16, "H", 0, 0),
+            ],
+            &[
+                (1, 1, 2, BondOrder::Aromatic),
+                (2, 2, 3, BondOrder::Aromatic),
+                (3, 3, 4, BondOrder::Aromatic),
+                (4, 4, 5, BondOrder::Aromatic),
+                (5, 5, 6, BondOrder::Aromatic),
+                (6, 6, 1, BondOrder::Aromatic),
+                (7, 1, 7, BondOrder::Single),
+                (8, 7, 8, BondOrder::Double),
+                (9, 2, 9, BondOrder::Single),
+                (10, 3, 10, BondOrder::Single),
+                (11, 4, 11, BondOrder::Single),
+                (12, 5, 12, BondOrder::Single),
+                (13, 6, 13, BondOrder::Single),
+                (14, 7, 14, BondOrder::Single),
+                (15, 8, 15, BondOrder::Single),
+                (16, 8, 16, BondOrder::Single),
+            ],
+        )
+    }
+
+    fn aniline() -> Mol {
+        molecule(
+            &[
+                (1, "C", 0, 0),
+                (2, "C", 0, 0),
+                (3, "C", 0, 0),
+                (4, "C", 0, 0),
+                (5, "C", 0, 0),
+                (6, "C", 0, 0),
+                (7, "N", 0, 0),
+                (8, "H", 0, 0),
+                (9, "H", 0, 0),
+                (10, "H", 0, 0),
+                (11, "H", 0, 0),
+                (12, "H", 0, 0),
+                (13, "H", 0, 0),
+                (14, "H", 0, 0),
+            ],
+            &[
+                (1, 1, 2, BondOrder::Aromatic),
+                (2, 2, 3, BondOrder::Aromatic),
+                (3, 3, 4, BondOrder::Aromatic),
+                (4, 4, 5, BondOrder::Aromatic),
+                (5, 5, 6, BondOrder::Aromatic),
+                (6, 6, 1, BondOrder::Aromatic),
+                (7, 1, 7, BondOrder::Single),
+                (8, 7, 8, BondOrder::Single),
+                (9, 7, 9, BondOrder::Single),
+                (10, 2, 10, BondOrder::Single),
+                (11, 3, 11, BondOrder::Single),
+                (12, 4, 12, BondOrder::Single),
+                (13, 5, 13, BondOrder::Single),
+                (14, 6, 14, BondOrder::Single),
+            ],
+        )
+    }
+
+    fn formamide() -> Mol {
+        molecule(
+            &[
+                (1, "O", 0, 0),
+                (2, "C", 0, 0),
+                (3, "N", 0, 0),
+                (4, "H", 0, 0),
+                (5, "H", 0, 0),
+                (6, "H", 0, 0),
+            ],
+            &[
+                (1, 1, 2, BondOrder::Double),
+                (2, 2, 3, BondOrder::Single),
+                (3, 2, 4, BondOrder::Single),
+                (4, 3, 5, BondOrder::Single),
+                (5, 3, 6, BondOrder::Single),
+            ],
+        )
+    }
+
+    fn formamide_polar() -> Mol {
+        molecule(
+            &[
+                (1, "O", -1, 0),
+                (2, "C", 0, 0),
+                (3, "N", 1, 0),
+                (4, "H", 0, 0),
+                (5, "H", 0, 0),
+                (6, "H", 0, 0),
+            ],
+            &[
+                (1, 1, 2, BondOrder::Single),
+                (2, 2, 3, BondOrder::Double),
+                (3, 2, 4, BondOrder::Single),
+                (4, 3, 5, BondOrder::Single),
+                (5, 3, 6, BondOrder::Single),
+            ],
+        )
+    }
+
+    fn two_fragments() -> Mol {
+        molecule(
+            &[
+                (1, "C", 0, 0),
+                (2, "C", 0, 0),
+                (3, "Cl", 0, 0),
+                (4, "H", 0, 0),
+                (5, "H", 0, 0),
+                (6, "H", 0, 0),
+                (11, "C", 0, 0),
+                (12, "C", 0, 0),
+                (13, "C", 0, 0),
+                (14, "C", 0, 0),
+                (15, "H", 0, 0),
+                (16, "H", 0, 0),
+                (17, "H", 0, 0),
+                (18, "H", 0, 0),
+                (19, "H", 0, 0),
+                (20, "H", 0, 0),
+            ],
+            &[
+                (1, 11, 12, BondOrder::Double),
+                (2, 12, 13, BondOrder::Single),
+                (3, 13, 14, BondOrder::Double),
+                (4, 1, 2, BondOrder::Double),
+                (5, 2, 3, BondOrder::Single),
+                (6, 1, 4, BondOrder::Single),
+                (7, 1, 5, BondOrder::Single),
+                (8, 2, 6, BondOrder::Single),
+                (9, 11, 15, BondOrder::Single),
+                (10, 11, 16, BondOrder::Single),
+                (11, 12, 17, BondOrder::Single),
+                (12, 13, 18, BondOrder::Single),
+                (13, 14, 19, BondOrder::Single),
+                (14, 14, 20, BondOrder::Single),
+            ],
+        )
+    }
+
+    #[test]
+    fn an_empty_molecule_has_no_systems() {
+        let perceived = systems(&empty());
+        assert_eq!(perceived.len(), 0);
+        assert!(perceived.is_empty());
+        assert_eq!(perceived.iter().count(), 0);
+    }
+
+    #[test]
+    fn a_saturated_molecule_has_no_systems() {
+        assert!(systems(&ethane()).is_empty());
+    }
+
+    #[test]
+    fn an_isolated_multiple_bond_is_not_a_system() {
+        assert!(systems(&ethylene()).is_empty());
+    }
+
+    #[test]
+    fn an_isolated_carbonyl_is_not_a_system() {
+        assert!(systems(&formaldehyde()).is_empty());
+    }
+
+    #[test]
+    fn a_saturated_site_does_not_bridge() {
+        assert!(systems(&penta_1_4_diene()).is_empty());
+    }
+
+    #[test]
+    fn alternating_multiple_bonds_conjugate() {
+        let perceived = systems(&butadiene());
+        assert_eq!(
+            shape(&perceived),
+            vec![(
+                vec![s(1), s(2), s(3), s(4)],
+                vec![b(1), b(2), b(3)],
+                Some(4)
+            )]
+        );
+        let system = perceived.iter().next().unwrap();
+        assert_eq!(system.site_count(), 4);
+        assert_eq!(system.bond_count(), 3);
+        assert!(system.contains_site(s(1)));
+        assert!(!system.contains_site(s(5)));
+        assert!(system.contains_bond(b(2)));
+        assert!(!system.contains_bond(b(4)));
+    }
+
+    #[test]
+    fn a_lone_pair_joins_an_adjacent_pi_bond() {
+        assert_eq!(
+            shape(&systems(&vinyl_chloride())),
+            vec![(vec![s(1), s(2), s(3)], vec![b(1), b(2)], Some(4))]
+        );
+    }
+
+    #[test]
+    fn adjacent_lone_pairs_alone_do_not_conjugate() {
+        assert!(systems(&hydrazine()).is_empty());
+    }
+
+    #[test]
+    fn a_radical_joins_an_adjacent_pi_bond() {
+        assert_eq!(
+            shape(&systems(&allyl(0, 1))),
+            vec![(vec![s(1), s(2), s(3)], vec![b(1), b(2)], Some(3))]
+        );
+    }
+
+    #[test]
+    fn a_vacant_orbital_joins_an_adjacent_pi_bond() {
+        assert_eq!(
+            shape(&systems(&allyl(1, 0))),
+            vec![(vec![s(1), s(2), s(3)], vec![b(1), b(2)], Some(2))]
+        );
+    }
+
+    #[test]
+    fn a_charged_donor_joins_an_adjacent_pi_bond() {
+        assert_eq!(
+            shape(&systems(&acetate())),
+            vec![(vec![s(2), s(3), s(4)], vec![b(2), b(3)], Some(4))]
+        );
+    }
+
+    #[test]
+    fn cross_conjugation_merges_into_one_system() {
+        assert_eq!(
+            shape(&systems(&divinyl_ketone())),
+            vec![(
+                vec![s(1), s(2), s(3), s(4), s(5), s(6)],
+                vec![b(1), b(2), b(3), b(4), b(5)],
+                Some(6)
+            )]
+        );
+    }
+
+    #[test]
+    fn a_kekule_ring_is_one_system() {
+        assert_eq!(
+            shape(&systems(&kekule_benzene())),
+            vec![(
+                vec![s(1), s(2), s(3), s(4), s(5), s(6)],
+                vec![b(1), b(2), b(3), b(4), b(5), b(6)],
+                Some(6)
+            )]
+        );
+    }
+
+    #[test]
+    fn a_kekule_heteroring_counts_its_donated_pair() {
+        assert_eq!(
+            shape(&systems(&kekule_furan())),
+            vec![(
+                vec![s(1), s(2), s(3), s(4), s(5)],
+                vec![b(1), b(2), b(3), b(4), b(5)],
+                Some(6)
+            )]
+        );
+    }
+
+    #[test]
+    fn a_donor_bridges_disjoint_pi_bonds() {
+        assert_eq!(
+            shape(&systems(&divinyl_ether())),
+            vec![(
+                vec![s(1), s(2), s(3), s(4), s(5)],
+                vec![b(1), b(2), b(3), b(4)],
+                Some(6)
+            )]
+        );
+    }
+
+    #[test]
+    fn an_even_cumulene_does_not_conjugate_through() {
+        assert!(systems(&allene()).is_empty());
+    }
+
+    #[test]
+    fn an_odd_cumulene_conjugates_end_to_end() {
+        assert_eq!(
+            shape(&systems(&butatriene())),
+            vec![(
+                vec![s(1), s(2), s(3), s(4)],
+                vec![b(1), b(2), b(3)],
+                Some(4)
+            )]
+        );
+    }
+
+    #[test]
+    fn a_longer_even_cumulene_conjugates_within_each_plane() {
+        let perceived = systems(&pentatetraene());
+        assert_eq!(
+            shape(&perceived),
+            vec![
+                (
+                    vec![s(1), s(2), s(3), s(4)],
+                    vec![b(1), b(2), b(3)],
+                    Some(4)
+                ),
+                (
+                    vec![s(2), s(3), s(4), s(5)],
+                    vec![b(2), b(3), b(4)],
+                    Some(4)
+                ),
+            ]
+        );
+        assert_eq!(perceived.of_bond(b(2)).count(), 2);
+    }
+
+    #[test]
+    fn a_triple_bond_conjugates_in_one_plane() {
+        assert_eq!(
+            shape(&systems(&vinylacetylene())),
+            vec![(
+                vec![s(1), s(2), s(3), s(4)],
+                vec![b(1), b(2), b(3)],
+                Some(4)
+            )]
+        );
+    }
+
+    #[test]
+    fn adjacent_triple_bonds_conjugate_in_both_planes() {
+        assert_eq!(
+            shape(&systems(&diacetylene())),
+            vec![
+                (
+                    vec![s(2), s(3), s(4), s(5)],
+                    vec![b(1), b(2), b(3)],
+                    Some(4)
+                ),
+                (
+                    vec![s(2), s(3), s(4), s(5)],
+                    vec![b(1), b(2), b(3)],
+                    Some(4)
+                ),
+            ]
+        );
+    }
+
+    #[test]
+    fn orthogonal_systems_coincide_on_their_sites() {
+        let perceived = systems(&azide());
+        assert_eq!(
+            shape(&perceived),
+            vec![
+                (vec![s(1), s(2), s(3)], vec![b(1), b(2)], Some(4)),
+                (vec![s(1), s(2), s(3)], vec![b(1), b(2)], Some(4)),
+            ]
+        );
+        assert_eq!(perceived.of_site(s(2)).count(), 2);
+        assert_eq!(perceived.of_bond(b(1)).count(), 2);
+    }
+
+    #[test]
+    fn a_terminal_donor_reaches_both_orthogonal_planes() {
+        assert_eq!(
+            shape(&systems(&chloroacetylene())),
+            vec![
+                (vec![s(1), s(2), s(3)], vec![b(1), b(2)], Some(4)),
+                (vec![s(1), s(2), s(3)], vec![b(1), b(2)], Some(4)),
+            ]
+        );
+    }
+
+    #[test]
+    fn a_nitrile_lone_pair_points_along_the_axis() {
+        assert_eq!(
+            shape(&systems(&acrylonitrile())),
+            vec![(
+                vec![s(1), s(2), s(3), s(4)],
+                vec![b(1), b(2), b(3)],
+                Some(4)
+            )]
+        );
+    }
+
+    #[test]
+    fn a_frustrated_cumulated_cycle_merges_into_one_system() {
+        assert_eq!(
+            shape(&systems(&cumulated_cycle())),
+            vec![(vec![s(1), s(2), s(3)], vec![b(1), b(2), b(3)], Some(6))]
+        );
+    }
+
+    #[test]
+    fn conjugation_does_not_cross_a_hypervalent_centre() {
+        assert!(systems(&dimethyl_sulfone()).is_empty());
+    }
+
+    #[test]
+    fn a_d_block_site_never_participates() {
+        assert!(systems(&iron_vinyl()).is_empty());
+    }
+
+    #[test]
+    fn a_declared_aromatic_ring_is_a_system_with_indeterminate_electrons() {
+        assert_eq!(
+            shape(&systems(&aromatic_benzene())),
+            vec![(
+                vec![s(1), s(2), s(3), s(4), s(5), s(6)],
+                vec![b(1), b(2), b(3), b(4), b(5), b(6)],
+                None
+            )]
+        );
+    }
+
+    #[test]
+    fn a_declared_aromatic_ring_conjugates_with_its_substituent() {
+        assert_eq!(
+            shape(&systems(&aromatic_styrene())),
+            vec![(
+                vec![s(1), s(2), s(3), s(4), s(5), s(6), s(7), s(8)],
+                vec![b(1), b(2), b(3), b(4), b(5), b(6), b(7), b(8)],
+                None
+            )]
+        );
+    }
+
+    #[test]
+    fn a_donor_joins_a_declared_aromatic_ring() {
+        assert_eq!(
+            shape(&systems(&aniline())),
+            vec![(
+                vec![s(1), s(2), s(3), s(4), s(5), s(6), s(7)],
+                vec![b(1), b(2), b(3), b(4), b(5), b(6), b(7)],
+                None
+            )]
+        );
+    }
+
+    #[test]
+    fn systems_iterate_in_canonical_order() {
+        let perceived = systems(&two_fragments());
+        assert_eq!(
+            shape(&perceived),
+            vec![
+                (vec![s(1), s(2), s(3)], vec![b(4), b(5)], Some(4)),
+                (
+                    vec![s(11), s(12), s(13), s(14)],
+                    vec![b(1), b(2), b(3)],
+                    Some(4)
+                ),
+            ]
+        );
+    }
+
+    #[test]
+    fn same_relates_sites_sharing_a_system() {
+        let perceived = systems(&butadiene());
+        assert!(perceived.same(s(1), s(4)));
+        assert!(!perceived.same(s(1), s(5)));
+        assert!(!perceived.same(s(1), s(99)));
+    }
+
+    #[test]
+    fn same_is_false_across_orthogonal_planes() {
+        let perceived = systems(&pentatetraene());
+        assert!(perceived.same(s(1), s(4)));
+        assert!(!perceived.same(s(1), s(5)));
+    }
+
+    #[test]
+    fn of_site_of_an_absent_site_is_empty() {
+        assert_eq!(systems(&butadiene()).of_site(s(99)).count(), 0);
+    }
+
+    #[test]
+    fn of_site_of_a_saturated_site_is_empty() {
+        assert_eq!(systems(&butadiene()).of_site(s(5)).count(), 0);
+    }
+
+    #[test]
+    fn of_bond_of_an_unconjugated_bond_is_empty() {
+        assert_eq!(systems(&butadiene()).of_bond(b(4)).count(), 0);
+    }
+
+    #[test]
+    fn the_systems_are_independent_of_the_resonance_form() {
+        assert_eq!(systems(&formamide()), systems(&formamide_polar()));
+        assert_eq!(
+            shape(&systems(&formamide())),
+            vec![(vec![s(1), s(2), s(3)], vec![b(1), b(2)], Some(4))]
+        );
+    }
+
+    #[test]
+    fn the_systems_are_independent_of_input_order() {
+        let shuffled = molecule(
+            &[
+                (8, "H", 0, 0),
+                (3, "C", 0, 0),
+                (10, "H", 0, 0),
+                (1, "C", 0, 0),
+                (6, "H", 0, 0),
+                (4, "C", 0, 0),
+                (9, "H", 0, 0),
+                (2, "C", 0, 0),
+                (5, "H", 0, 0),
+                (7, "H", 0, 0),
+            ],
+            &[
+                (7, 3, 8, BondOrder::Single),
+                (3, 3, 4, BondOrder::Double),
+                (9, 4, 10, BondOrder::Single),
+                (1, 1, 2, BondOrder::Double),
+                (5, 1, 6, BondOrder::Single),
+                (8, 4, 9, BondOrder::Single),
+                (2, 2, 3, BondOrder::Single),
+                (6, 2, 7, BondOrder::Single),
+                (4, 1, 5, BondOrder::Single),
+            ],
+        );
+        assert_eq!(systems(&butadiene()), systems(&shuffled));
+    }
+}
