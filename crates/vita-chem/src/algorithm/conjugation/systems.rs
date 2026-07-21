@@ -13,6 +13,7 @@ pub struct ConjugatedSystem {
     sites: Vec<SiteId>,
     bonds: Vec<BondId>,
     electrons: Option<u32>,
+    donations: Vec<(SiteId, u32)>,
 }
 
 impl ConjugatedSystem {
@@ -58,6 +59,19 @@ impl ConjugatedSystem {
     /// have no per-system count until the ring is kekulised.
     pub fn pi_electrons(&self) -> Option<u32> {
         self.electrons
+    }
+
+    /// Number of lone pairs `site` donates into this system's π network.
+    ///
+    /// Zero when `site` donates nothing: it contributes through its π-bonds
+    /// alone, lies outside the system, or is absent from the molecule. The
+    /// attribution follows the declared Lewis form — an amide's neutral form
+    /// donates from the nitrogen, its zwitterionic form from the oxygen —
+    /// while the partition and its electron count stay form-independent.
+    pub fn donated_pairs(&self, site: SiteId) -> u32 {
+        self.donations
+            .binary_search_by_key(&site, |&(donor, _)| donor)
+            .map_or(0, |i| self.donations[i].1)
     }
 }
 
@@ -429,48 +443,59 @@ pub fn systems<M: HasBondOrders + HasElements + HasFormalCharges + HasRadicalEle
     // Gather channels, keep those with at least two contributions, and
     // materialise canonically ordered systems.
     let mut bucket_index: FxHashMap<usize, usize> = FxHashMap::default();
-    let mut buckets: Vec<(u32, Vec<usize>, Option<u32>)> = Vec::new();
-    let mut bucket = |root: usize, buckets: &mut Vec<(u32, Vec<usize>, Option<u32>)>| -> usize {
+    let mut buckets: Vec<Bucket> = Vec::new();
+    let mut bucket = |root: usize, buckets: &mut Vec<Bucket>| -> usize {
         *bucket_index.entry(root).or_insert_with(|| {
-            buckets.push((0, Vec::new(), Some(0)));
+            buckets.push((0, Vec::new(), Some(0), Vec::new()));
             buckets.len() - 1
         })
     };
     for (unit, &(lo, hi)) in units.iter().enumerate() {
         let at = bucket(channels.find(unit), &mut buckets);
-        let (count, members, electrons) = &mut buckets[at];
+        let (count, members, electrons, _) = &mut buckets[at];
         *count += 1;
         members.extend([lo, hi]);
         *electrons = electrons.map(|total| total + 2);
     }
     for (block, members_of_block) in block_sites.iter().enumerate() {
         let at = bucket(channels.find(units.len() + block), &mut buckets);
-        let (count, members, electrons) = &mut buckets[at];
+        let (count, members, electrons, _) = &mut buckets[at];
         *count += 2;
         members.extend(members_of_block);
         *electrons = None;
     }
     for &(site, contribution, anchor) in &attached {
         let at = bucket(channels.find(anchor), &mut buckets);
-        let (count, members, electrons) = &mut buckets[at];
+        let (count, members, electrons, donors) = &mut buckets[at];
         *count += 1;
         members.push(site);
         *electrons = electrons.map(|total| total + contribution);
+        if contribution == 2 {
+            donors.push(site);
+        }
     }
 
-    let mut kept: Vec<(Vec<usize>, Option<u32>)> = buckets
+    let mut kept: Vec<Channel> = buckets
         .into_iter()
         .filter(|&(count, ..)| count >= 2)
-        .map(|(_, mut members, electrons)| {
+        .map(|(_, mut members, electrons, mut donors)| {
             members.sort_unstable();
             members.dedup();
-            (members, electrons)
+            donors.sort_unstable();
+            let mut donations: Vec<(usize, u32)> = Vec::new();
+            for donor in donors {
+                match donations.last_mut() {
+                    Some((site, pairs)) if *site == donor => *pairs += 1,
+                    _ => donations.push((donor, 1)),
+                }
+            }
+            (members, electrons, donations)
         })
         .collect();
     kept.sort_unstable();
 
     let mut memberships: Vec<Vec<usize>> = vec![Vec::new(); n];
-    for (g, (members, _)) in kept.iter().enumerate() {
+    for (g, (members, ..)) in kept.iter().enumerate() {
         for &i in members {
             memberships[i].push(g);
         }
@@ -487,12 +512,16 @@ pub fn systems<M: HasBondOrders + HasElements + HasFormalCharges + HasRadicalEle
     let mut groups: Vec<ConjugatedSystem> = kept
         .into_iter()
         .zip(group_bonds)
-        .map(|((members, electrons), mut bonds)| {
+        .map(|((members, electrons, donations), mut bonds)| {
             bonds.sort_unstable();
             ConjugatedSystem {
                 sites: members.into_iter().map(|i| sites[i]).collect(),
                 bonds,
                 electrons,
+                donations: donations
+                    .into_iter()
+                    .map(|(i, pairs)| (sites[i], pairs))
+                    .collect(),
             }
         })
         .collect();
@@ -501,6 +530,7 @@ pub fn systems<M: HasBondOrders + HasElements + HasFormalCharges + HasRadicalEle
             .cmp(&b.sites)
             .then_with(|| a.bonds.cmp(&b.bonds))
             .then_with(|| a.electrons.cmp(&b.electrons))
+            .then_with(|| a.donations.cmp(&b.donations))
     });
 
     let site_index = SortedMultimap::from_pairs(
@@ -522,6 +552,14 @@ pub fn systems<M: HasBondOrders + HasElements + HasFormalCharges + HasRadicalEle
         bond_index,
     }
 }
+
+/// One channel being gathered: its contribution count, member site indices,
+/// running electron count, and lone-pair donor site indices.
+type Bucket = (u32, Vec<usize>, Option<u32>, Vec<usize>);
+
+/// A channel past the two-contribution threshold: its member site indices,
+/// electron count, and donated pairs per donor site index.
+type Channel = (Vec<usize>, Option<u32>, Vec<(usize, u32)>);
 
 /// Bonding orbitals an order engages at each end beyond its σ — π, δ, and φ
 /// components alike; `None` for the delocalised aromatic order.
@@ -1468,10 +1506,12 @@ mod tests {
 
     #[test]
     fn a_charged_donor_joins_an_adjacent_pi_bond() {
+        let perceived = systems(&acetate());
         assert_eq!(
-            shape(&systems(&acetate())),
+            shape(&perceived),
             vec![(vec![s(2), s(3), s(4)], vec![b(2), b(3)], Some(4))]
         );
+        assert_eq!(perceived.iter().next().unwrap().donated_pairs(s(4)), 1);
     }
 
     #[test]
@@ -1500,14 +1540,16 @@ mod tests {
 
     #[test]
     fn a_kekule_heteroring_counts_its_donated_pair() {
+        let perceived = systems(&kekule_furan());
         assert_eq!(
-            shape(&systems(&kekule_furan())),
+            shape(&perceived),
             vec![(
                 vec![s(1), s(2), s(3), s(4), s(5)],
                 vec![b(1), b(2), b(3), b(4), b(5)],
                 Some(6)
             )]
         );
+        assert_eq!(perceived.iter().next().unwrap().donated_pairs(s(1)), 1);
     }
 
     #[test]
@@ -1618,14 +1660,16 @@ mod tests {
 
     #[test]
     fn a_nitrile_lone_pair_points_along_the_axis() {
+        let perceived = systems(&acrylonitrile());
         assert_eq!(
-            shape(&systems(&acrylonitrile())),
+            shape(&perceived),
             vec![(
                 vec![s(1), s(2), s(3), s(4)],
                 vec![b(1), b(2), b(3)],
                 Some(4)
             )]
         );
+        assert_eq!(perceived.iter().next().unwrap().donated_pairs(s(4)), 0);
     }
 
     #[test]
@@ -1729,12 +1773,70 @@ mod tests {
     }
 
     #[test]
+    fn donated_pairs_counts_lone_pairs_given_to_the_system() {
+        let perceived = systems(&vinyl_chloride());
+        let system = perceived.iter().next().unwrap();
+        assert_eq!(system.donated_pairs(s(3)), 1);
+        assert_eq!(system.donated_pairs(s(1)), 0);
+        assert_eq!(system.donated_pairs(s(4)), 0);
+        assert_eq!(system.donated_pairs(s(99)), 0);
+    }
+
+    #[test]
+    fn a_radical_or_vacant_donor_donates_no_pairs() {
+        let radical = systems(&allyl(0, 1));
+        let cation = systems(&allyl(1, 0));
+        assert_eq!(radical.iter().next().unwrap().donated_pairs(s(3)), 0);
+        assert_eq!(cation.iter().next().unwrap().donated_pairs(s(3)), 0);
+    }
+
+    #[test]
+    fn a_terminal_donor_donates_one_pair_per_plane() {
+        let perceived = systems(&chloroacetylene());
+        for system in perceived.iter() {
+            assert_eq!(system.donated_pairs(s(1)), 1);
+        }
+    }
+
+    #[test]
+    fn orthogonal_planes_split_their_donations() {
+        let perceived = systems(&azide());
+        let split: Vec<(u32, u32)> = perceived
+            .iter()
+            .map(|system| (system.donated_pairs(s(1)), system.donated_pairs(s(3))))
+            .collect();
+        assert_eq!(split, vec![(1, 0), (0, 1)]);
+    }
+
+    #[test]
+    fn donation_stays_exact_in_a_declared_aromatic_system() {
+        let perceived = systems(&aniline());
+        let system = perceived.iter().next().unwrap();
+        assert_eq!(system.donated_pairs(s(7)), 1);
+        assert_eq!(system.pi_electrons(), None);
+    }
+
+    #[test]
     fn the_systems_are_independent_of_the_resonance_form() {
-        assert_eq!(systems(&formamide()), systems(&formamide_polar()));
+        let neutral = systems(&formamide());
+        let polar = systems(&formamide_polar());
+        assert_eq!(shape(&neutral), shape(&polar));
         assert_eq!(
-            shape(&systems(&formamide())),
+            shape(&neutral),
             vec![(vec![s(1), s(2), s(3)], vec![b(1), b(2)], Some(4))]
         );
+    }
+
+    #[test]
+    fn donation_attribution_follows_the_declared_form() {
+        let neutral = systems(&formamide());
+        let polar = systems(&formamide_polar());
+        let from_neutral = neutral.iter().next().unwrap();
+        let from_polar = polar.iter().next().unwrap();
+        assert_eq!(from_neutral.donated_pairs(s(3)), 1);
+        assert_eq!(from_neutral.donated_pairs(s(1)), 0);
+        assert_eq!(from_polar.donated_pairs(s(1)), 1);
+        assert_eq!(from_polar.donated_pairs(s(3)), 0);
     }
 
     #[test]
