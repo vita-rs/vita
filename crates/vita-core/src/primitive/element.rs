@@ -135,7 +135,7 @@ mod data {
     }
 
     /// Initial letter of each digit root, for systematic symbols.
-    const ROOT_INITIAL: [u8; 10] = [b'n', b'u', b'b', b't', b'q', b'p', b'h', b's', b'o', b'e'];
+    const ROOT_INITIAL: [u8; 10] = *b"nubtqphsoe";
 
     /// Digit roots for systematic names: `0..=9`.
     const ROOT: [&str; 10] = [
