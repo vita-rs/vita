@@ -12,4 +12,6 @@ pub use capability::{
     HasPartialCharges, HasRadicalElectrons, HasStereoConfigurations,
 };
 
-pub use algorithm::{aromaticity, canonical, fingerprint, isomorphism, stereo, topology, valence};
+pub use algorithm::{
+    aromaticity, canonical, conjugation, fingerprint, isomorphism, stereo, topology, valence,
+};
