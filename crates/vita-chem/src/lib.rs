@@ -13,5 +13,6 @@ pub use capability::{
 };
 
 pub use algorithm::{
-    aromaticity, canonical, conjugation, fingerprint, isomorphism, stereo, topology, valence,
+    aromaticity, canonical, conjugation, fingerprint, hybridization, isomorphism, stereo, topology,
+    valence,
 };
