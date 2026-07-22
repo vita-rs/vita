@@ -220,3 +220,371 @@ fn number(bytes: &[u8], start: usize) -> (usize, Option<u32>) {
     }
     (end, value)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use crate::algorithm::notation::formula::write;
+
+    fn elem(symbol: &str) -> Element {
+        Element::from_symbol(symbol).unwrap()
+    }
+
+    fn natural(symbol: &str) -> Constituent {
+        Constituent::Element(elem(symbol))
+    }
+
+    fn nuclide(symbol: &str, mass_number: u16) -> Constituent {
+        Constituent::Nuclide(Isotope::new(elem(symbol), mass_number).unwrap())
+    }
+
+    fn water() -> Composition {
+        Composition::from_counts([(natural("H"), 2), (natural("O"), 1)], 0)
+    }
+
+    fn sulfate() -> Composition {
+        Composition::from_counts([(natural("S"), 1), (natural("O"), 4)], -2)
+    }
+
+    fn heavy_benzene() -> Composition {
+        Composition::from_counts(
+            [(natural("C"), 6), (natural("H"), 5), (nuclide("H", 2), 1)],
+            0,
+        )
+    }
+
+    #[test]
+    fn an_empty_string_parses_to_the_empty_composition() {
+        assert_eq!(parse(""), Ok(Composition::from_counts([], 0)));
+    }
+
+    #[test]
+    fn a_lone_symbol_parses_to_one_atom() {
+        assert_eq!(
+            parse("O"),
+            Ok(Composition::from_counts([(natural("O"), 1)], 0))
+        );
+    }
+
+    #[test]
+    fn a_count_follows_its_symbol() {
+        assert_eq!(
+            parse("O2"),
+            Ok(Composition::from_counts([(natural("O"), 2)], 0))
+        );
+    }
+
+    #[test]
+    fn a_two_letter_symbol_parses_whole() {
+        assert_eq!(
+            parse("Cl"),
+            Ok(Composition::from_counts([(natural("Cl"), 1)], 0))
+        );
+    }
+
+    #[test]
+    fn a_bracketed_nuclide_parses() {
+        assert_eq!(
+            parse("[13C]"),
+            Ok(Composition::from_counts([(nuclide("C", 13), 1)], 0))
+        );
+    }
+
+    #[test]
+    fn a_count_multiplies_a_nuclide() {
+        assert_eq!(
+            parse("[2H]2"),
+            Ok(Composition::from_counts([(nuclide("H", 2), 2)], 0))
+        );
+    }
+
+    #[test]
+    fn deuterium_aliases_to_hydrogen_two() {
+        assert_eq!(
+            parse("D"),
+            Ok(Composition::from_counts([(nuclide("H", 2), 1)], 0))
+        );
+    }
+
+    #[test]
+    fn tritium_aliases_to_hydrogen_three() {
+        assert_eq!(
+            parse("T"),
+            Ok(Composition::from_counts([(nuclide("H", 3), 1)], 0))
+        );
+    }
+
+    #[test]
+    fn an_alias_takes_a_count() {
+        let heavy_water = Composition::from_counts([(nuclide("H", 2), 2), (natural("O"), 1)], 0);
+        assert_eq!(parse("D2O"), Ok(heavy_water));
+    }
+
+    #[test]
+    fn a_sign_alone_parses_to_a_unit_charge() {
+        assert_eq!(parse("+"), Ok(Composition::from_counts([], 1)));
+        assert_eq!(parse("-"), Ok(Composition::from_counts([], -1)));
+    }
+
+    #[test]
+    fn a_charge_magnitude_follows_its_sign() {
+        assert_eq!(
+            parse("Fe+3"),
+            Ok(Composition::from_counts([(natural("Fe"), 1)], 3))
+        );
+    }
+
+    #[test]
+    fn a_dot_separates_summed_parts() {
+        let expected = Composition::from_counts(
+            [
+                (natural("Na"), 1),
+                (natural("Cl"), 1),
+                (natural("H"), 2),
+                (natural("O"), 1),
+            ],
+            0,
+        );
+        assert_eq!(parse("NaCl.H2O"), Ok(expected));
+    }
+
+    #[test]
+    fn charges_sum_across_parts() {
+        let expected = Composition::from_counts([(natural("Na"), 1), (natural("Cl"), 1)], 0);
+        assert_eq!(parse("Na+.Cl-"), Ok(expected));
+    }
+
+    #[test]
+    fn repeated_symbols_accumulate() {
+        let acetic_acid =
+            Composition::from_counts([(natural("C"), 2), (natural("H"), 4), (natural("O"), 2)], 0);
+        assert_eq!(parse("CH3COOH"), Ok(acetic_acid));
+    }
+
+    #[test]
+    fn a_coefficient_multiplies_its_part() {
+        let hydrate = Composition::from_counts(
+            [
+                (natural("Cu"), 1),
+                (natural("S"), 1),
+                (natural("O"), 9),
+                (natural("H"), 10),
+            ],
+            0,
+        );
+        assert_eq!(parse("CuSO4.5H2O"), Ok(hydrate));
+    }
+
+    #[test]
+    fn a_coefficient_scales_its_parts_charge() {
+        assert_eq!(
+            parse("2Na+"),
+            Ok(Composition::from_counts([(natural("Na"), 2)], 2))
+        );
+    }
+
+    #[test]
+    fn an_error_kind_displays_its_condition() {
+        assert_eq!(
+            ErrorKind::UnknownSymbol.to_string(),
+            "unknown element symbol"
+        );
+    }
+
+    #[test]
+    fn an_unknown_symbol_is_rejected() {
+        assert_eq!(
+            parse("Q"),
+            Err(ParseError::new(0, ErrorKind::UnknownSymbol))
+        );
+    }
+
+    #[test]
+    fn an_unknown_bracketed_symbol_is_rejected() {
+        assert_eq!(
+            parse("[13Qq]"),
+            Err(ParseError::new(3, ErrorKind::UnknownSymbol))
+        );
+    }
+
+    #[test]
+    fn a_zero_count_is_rejected() {
+        assert_eq!(
+            parse("C0"),
+            Err(ParseError::new(1, ErrorKind::ZeroQuantity))
+        );
+    }
+
+    #[test]
+    fn a_zero_coefficient_is_rejected() {
+        assert_eq!(
+            parse("0H2O"),
+            Err(ParseError::new(0, ErrorKind::ZeroQuantity))
+        );
+    }
+
+    #[test]
+    fn an_overflowing_count_is_rejected() {
+        assert_eq!(
+            parse("C4294967296"),
+            Err(ParseError::new(1, ErrorKind::Overflow))
+        );
+    }
+
+    #[test]
+    fn an_overflowing_scaled_count_is_rejected() {
+        assert_eq!(
+            parse("5C4000000000"),
+            Err(ParseError::new(1, ErrorKind::Overflow))
+        );
+    }
+
+    #[test]
+    fn an_overflowing_merged_count_is_rejected() {
+        assert_eq!(
+            parse("C4294967295C"),
+            Err(ParseError::new(11, ErrorKind::Overflow))
+        );
+    }
+
+    #[test]
+    fn a_missing_mass_number_is_rejected() {
+        assert_eq!(
+            parse("[C]"),
+            Err(ParseError::new(1, ErrorKind::InvalidMassNumber))
+        );
+    }
+
+    #[test]
+    fn a_mass_number_below_the_atomic_number_is_rejected() {
+        assert_eq!(
+            parse("[1C]"),
+            Err(ParseError::new(1, ErrorKind::InvalidMassNumber))
+        );
+    }
+
+    #[test]
+    fn an_overflowing_mass_number_is_rejected() {
+        assert_eq!(
+            parse("[100000H]"),
+            Err(ParseError::new(1, ErrorKind::InvalidMassNumber))
+        );
+    }
+
+    #[test]
+    fn an_unclosed_bracket_is_rejected() {
+        assert_eq!(
+            parse("[13C"),
+            Err(ParseError::new(0, ErrorKind::UnclosedBracket))
+        );
+    }
+
+    #[test]
+    fn an_overflowing_charge_magnitude_is_rejected() {
+        assert_eq!(
+            parse("+4294967296"),
+            Err(ParseError::new(0, ErrorKind::Overflow))
+        );
+    }
+
+    #[test]
+    fn an_overflowing_net_charge_is_rejected() {
+        assert_eq!(
+            parse("+2000000000.+2000000000"),
+            Err(ParseError::new(12, ErrorKind::Overflow))
+        );
+    }
+
+    #[test]
+    fn a_lowercase_letter_is_rejected() {
+        assert_eq!(
+            parse("h2o"),
+            Err(ParseError::new(0, ErrorKind::UnexpectedCharacter))
+        );
+    }
+
+    #[test]
+    fn a_unit_after_a_charge_is_rejected() {
+        assert_eq!(
+            parse("Na+K"),
+            Err(ParseError::new(3, ErrorKind::UnexpectedCharacter))
+        );
+    }
+
+    #[test]
+    fn whitespace_is_rejected() {
+        assert_eq!(
+            parse("H2 O"),
+            Err(ParseError::new(2, ErrorKind::UnexpectedCharacter))
+        );
+    }
+
+    #[test]
+    fn the_longest_symbol_wins() {
+        assert_eq!(
+            parse("Co"),
+            Ok(Composition::from_counts([(natural("Co"), 1)], 0))
+        );
+    }
+
+    #[test]
+    fn a_real_symbol_outranks_an_alias() {
+        assert_eq!(
+            parse("Db"),
+            Ok(Composition::from_counts([(natural("Db"), 1)], 0))
+        );
+    }
+
+    #[test]
+    fn an_empty_part_contributes_nothing() {
+        assert_eq!(parse(".H2O"), Ok(water()));
+    }
+
+    #[test]
+    fn a_bare_coefficient_part_contributes_nothing() {
+        assert_eq!(parse("2.H2O"), Ok(water()));
+    }
+
+    #[test]
+    fn the_most_negative_charge_parses() {
+        assert_eq!(
+            parse("-2147483648"),
+            Ok(Composition::from_counts([], i32::MIN))
+        );
+    }
+
+    #[test]
+    fn a_salt_with_nuclides_counts_and_charges_parses() {
+        let expected = Composition::from_counts(
+            [
+                (nuclide("H", 2), 2),
+                (natural("O"), 1),
+                (natural("Na"), 1),
+                (natural("Cl"), 1),
+            ],
+            0,
+        );
+        assert_eq!(parse("[2H]2O.Na+.Cl-"), Ok(expected));
+    }
+
+    #[test]
+    fn parsing_is_independent_of_unit_order() {
+        assert_eq!(parse("OH2"), parse("H2O"));
+    }
+
+    #[test]
+    fn parsing_recovers_what_write_produced() {
+        let compositions = [
+            Composition::from_counts([], 0),
+            Composition::from_counts([], -3),
+            water(),
+            sulfate(),
+            heavy_benzene(),
+            Composition::from_counts([(natural("C"), 4_000_000_000)], 0),
+        ];
+        for composition in compositions {
+            assert_eq!(parse(&write(&composition)), Ok(composition));
+        }
+    }
+}
