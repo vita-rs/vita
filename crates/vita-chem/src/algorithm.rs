@@ -2,6 +2,7 @@ mod utils;
 
 pub mod aromaticity;
 pub mod canonical;
+pub mod composition;
 pub mod conjugation;
 pub mod fingerprint;
 pub mod hybridization;
