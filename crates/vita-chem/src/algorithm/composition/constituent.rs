@@ -214,3 +214,294 @@ fn gcd(mut a: u32, mut b: u32) -> u32 {
     }
     a
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn elem(symbol: &str) -> Element {
+        Element::from_symbol(symbol).unwrap()
+    }
+
+    fn natural(symbol: &str) -> Constituent {
+        Constituent::Element(elem(symbol))
+    }
+
+    fn nuclide(symbol: &str, mass_number: u16) -> Constituent {
+        Constituent::Nuclide(Isotope::new(elem(symbol), mass_number).unwrap())
+    }
+
+    fn empty() -> Composition {
+        Composition::from_counts([], 0)
+    }
+
+    fn water() -> Composition {
+        Composition::from_counts([(natural("H"), 2), (natural("O"), 1)], 0)
+    }
+
+    fn sulfate() -> Composition {
+        Composition::from_counts([(natural("S"), 1), (natural("O"), 4)], -2)
+    }
+
+    fn acetic_acid() -> Composition {
+        Composition::from_counts([(natural("C"), 2), (natural("H"), 4), (natural("O"), 2)], 0)
+    }
+
+    fn oxalate() -> Composition {
+        Composition::from_counts([(natural("C"), 2), (natural("O"), 4)], -2)
+    }
+
+    fn heavy_benzene() -> Composition {
+        Composition::from_counts(
+            [(natural("C"), 6), (natural("H"), 5), (nuclide("H", 2), 1)],
+            0,
+        )
+    }
+
+    #[test]
+    fn an_empty_composition_has_no_constituents() {
+        assert_eq!(empty().len(), 0);
+    }
+
+    #[test]
+    fn an_empty_composition_is_empty() {
+        assert!(empty().is_empty());
+    }
+
+    #[test]
+    fn an_empty_composition_counts_no_atoms() {
+        assert_eq!(empty().atom_count(), 0);
+    }
+
+    #[test]
+    fn an_empty_composition_yields_no_pairs() {
+        assert!(empty().iter().next().is_none());
+    }
+
+    #[test]
+    fn empirical_of_an_empty_composition_is_empty() {
+        assert_eq!(empty().empirical(), empty());
+    }
+
+    #[test]
+    fn the_default_composition_is_empty_and_chargeless() {
+        assert_eq!(Composition::default(), empty());
+    }
+
+    #[test]
+    fn constituent_element_spans_both_precisions() {
+        assert_eq!(natural("C").element(), elem("C"));
+        assert_eq!(nuclide("C", 13).element(), elem("C"));
+    }
+
+    #[test]
+    fn constituent_mass_number_is_some_for_a_nuclide() {
+        assert_eq!(nuclide("H", 2).mass_number().unwrap(), 2);
+    }
+
+    #[test]
+    fn constituent_mass_number_is_none_for_the_natural_mixture() {
+        assert!(natural("H").mass_number().is_none());
+    }
+
+    #[test]
+    fn an_element_converts_into_a_natural_constituent() {
+        assert_eq!(Constituent::from(elem("C")), natural("C"));
+    }
+
+    #[test]
+    fn an_isotope_converts_into_a_nuclide_constituent() {
+        let isotope = Isotope::new(elem("H"), 2).unwrap();
+        assert_eq!(Constituent::from(isotope), nuclide("H", 2));
+    }
+
+    #[test]
+    fn from_counts_sums_repeated_constituents() {
+        let composition = Composition::from_counts([(natural("H"), 1), (natural("H"), 1)], 0);
+        assert_eq!(composition.count(natural("H")), 2);
+    }
+
+    #[test]
+    fn len_counts_distinct_constituents() {
+        assert_eq!(heavy_benzene().len(), 3);
+    }
+
+    #[test]
+    fn count_returns_the_multiplicity_of_a_present_constituent() {
+        assert_eq!(water().count(natural("H")), 2);
+    }
+
+    #[test]
+    fn element_count_totals_the_mixture_and_its_nuclides() {
+        assert_eq!(heavy_benzene().element_count(elem("H")), 6);
+    }
+
+    #[test]
+    fn atom_count_totals_all_multiplicities() {
+        assert_eq!(water().atom_count(), 3);
+    }
+
+    #[test]
+    fn charge_returns_the_net_charge() {
+        assert_eq!(sulfate().charge(), -2);
+    }
+
+    #[test]
+    fn iter_yields_each_constituent_with_its_count() {
+        let pairs: Vec<(Constituent, u32)> = water().iter().collect();
+        assert_eq!(pairs, vec![(natural("H"), 2), (natural("O"), 1)]);
+    }
+
+    #[test]
+    fn empirical_reduces_counts_to_their_smallest_ratio() {
+        let expected =
+            Composition::from_counts([(natural("C"), 1), (natural("H"), 2), (natural("O"), 1)], 0);
+        assert_eq!(acetic_acid().empirical(), expected);
+    }
+
+    #[test]
+    fn adding_compositions_sums_counts_and_charges() {
+        let expected = Composition::from_counts(
+            [(natural("H"), 2), (natural("O"), 5), (natural("S"), 1)],
+            -2,
+        );
+        assert_eq!(&water() + &sulfate(), expected);
+    }
+
+    #[test]
+    fn add_assign_accumulates_in_place() {
+        let mut composition = water();
+        composition += &water();
+        assert_eq!(composition.count(natural("H")), 4);
+    }
+
+    #[test]
+    fn count_is_zero_for_an_absent_constituent() {
+        assert_eq!(water().count(natural("C")), 0);
+    }
+
+    #[test]
+    fn count_keeps_the_mixture_and_its_nuclides_apart() {
+        assert_eq!(heavy_benzene().count(natural("H")), 5);
+        assert_eq!(heavy_benzene().count(nuclide("H", 2)), 1);
+    }
+
+    #[test]
+    fn element_count_is_zero_for_an_absent_element() {
+        assert_eq!(water().element_count(elem("C")), 0);
+    }
+
+    #[test]
+    fn from_counts_drops_zero_counts() {
+        assert!(Composition::from_counts([(natural("H"), 0)], 0).is_empty());
+    }
+
+    #[test]
+    fn a_composition_with_atoms_is_not_empty() {
+        assert!(!water().is_empty());
+    }
+
+    #[test]
+    fn empirical_leaves_coprime_counts_unchanged() {
+        assert_eq!(water().empirical(), water());
+    }
+
+    #[test]
+    fn empirical_divides_the_charge_with_the_counts() {
+        let expected = Composition::from_counts([(natural("C"), 1), (natural("O"), 2)], -1);
+        assert_eq!(oxalate().empirical(), expected);
+    }
+
+    #[test]
+    fn empirical_reduces_a_bare_charge_to_a_single_unit() {
+        assert_eq!(
+            Composition::from_counts([], -4).empirical(),
+            Composition::from_counts([], -1)
+        );
+    }
+
+    #[test]
+    fn empirical_reduces_the_most_negative_charge_to_a_single_unit() {
+        assert_eq!(
+            Composition::from_counts([], i32::MIN).empirical(),
+            Composition::from_counts([], -1)
+        );
+    }
+
+    #[test]
+    fn a_bare_charge_composition_is_empty() {
+        assert!(Composition::from_counts([], 1).is_empty());
+    }
+
+    #[test]
+    fn the_natural_mixture_orders_before_its_nuclides() {
+        assert!(natural("H") < nuclide("H", 1));
+    }
+
+    #[test]
+    fn constituents_order_by_element_before_precision() {
+        assert!(nuclide("H", 2) < natural("C"));
+    }
+
+    #[test]
+    fn nuclides_order_by_ascending_mass_number() {
+        assert!(nuclide("H", 2) < nuclide("H", 3));
+    }
+
+    #[test]
+    fn the_empirical_of_a_doubled_fragment_recovers_the_fragment() {
+        assert_eq!((&water() + &water()).empirical(), water());
+    }
+
+    #[test]
+    fn the_composition_is_independent_of_input_order() {
+        let forward = Composition::from_counts([(natural("H"), 2), (natural("O"), 1)], 0);
+        let backward = Composition::from_counts([(natural("O"), 1), (natural("H"), 2)], 0);
+        assert_eq!(forward, backward);
+    }
+
+    #[test]
+    fn addition_is_commutative() {
+        assert_eq!(&water() + &sulfate(), &sulfate() + &water());
+    }
+
+    #[test]
+    fn addition_is_associative() {
+        let left = &(&water() + &sulfate()) + &heavy_benzene();
+        let right = &water() + &(&sulfate() + &heavy_benzene());
+        assert_eq!(left, right);
+    }
+
+    #[test]
+    fn the_default_composition_is_the_additive_identity() {
+        assert_eq!(&water() + &Composition::default(), water());
+    }
+
+    #[test]
+    fn iter_is_ordered_by_constituent() {
+        let composition = Composition::from_counts(
+            [
+                (natural("O"), 1),
+                (nuclide("H", 2), 1),
+                (nuclide("C", 13), 1),
+                (natural("H"), 1),
+                (natural("C"), 1),
+            ],
+            0,
+        );
+        let keys: Vec<Constituent> = composition
+            .iter()
+            .map(|(constituent, _)| constituent)
+            .collect();
+        assert_eq!(
+            keys,
+            vec![
+                natural("H"),
+                nuclide("H", 2),
+                natural("C"),
+                nuclide("C", 13),
+                natural("O"),
+            ]
+        );
+    }
+}
