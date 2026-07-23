@@ -6,6 +6,7 @@ version = 4
 name = "vita"
 version = "0.2.0"
 dependencies = [
+ "vita-chem",
  "vita-core",
  "vita-io",
 ]
