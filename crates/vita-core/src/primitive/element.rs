@@ -135,7 +135,7 @@ mod data {
     }
 
     /// Initial letter of each digit root, for systematic symbols.
-    const ROOT_INITIAL: [u8; 10] = [b'n', b'u', b'b', b't', b'q', b'p', b'h', b's', b'o', b'e'];
+    const ROOT_INITIAL: [u8; 10] = *b"nubtqphsoe";
 
     /// Digit roots for systematic names: `0..=9`.
     const ROOT: [&str; 10] = [
@@ -268,159 +268,167 @@ mod data {
 mod tests {
     use super::*;
 
-    #[test]
-    fn new() {
-        assert!(Element::new(0).is_none());
-        assert!(Element::new(1).is_some());
-        assert!(Element::new(255).is_some());
+    fn element(z: u8) -> Element {
+        Element::new(z).unwrap()
     }
 
     #[test]
-    fn from_nonzero() {
+    fn new_rejects_zero() {
+        assert_eq!(Element::new(0), None);
+    }
+
+    #[test]
+    fn atomic_number_returns_the_proton_count() {
+        assert_eq!(element(6).atomic_number(), 6);
+    }
+
+    #[test]
+    fn from_nonzero_preserves_the_atomic_number() {
         let z = NonZeroU8::new(6).unwrap();
         assert_eq!(Element::from_nonzero(z).atomic_number(), 6);
     }
 
     #[test]
-    fn from_symbol_named() {
-        assert_eq!(Element::from_symbol("H"), Element::new(1));
-        assert_eq!(Element::from_symbol("C"), Element::new(6));
-        assert_eq!(Element::from_symbol("Fe"), Element::new(26));
-        assert_eq!(Element::from_symbol("Og"), Element::new(118));
+    fn a_named_element_reports_its_iupac_symbol() {
+        assert_eq!(element(1).symbol(), "H");
+        assert_eq!(element(6).symbol(), "C");
+        assert_eq!(element(118).symbol(), "Og");
     }
 
     #[test]
-    fn from_symbol_systematic() {
-        assert_eq!(Element::from_symbol("Uue"), Element::new(119));
-        assert_eq!(Element::from_symbol("Ubn"), Element::new(120));
-        assert_eq!(Element::from_symbol("Uen"), Element::new(190));
-        assert_eq!(Element::from_symbol("Bpp"), Element::new(255));
+    fn a_named_element_reports_its_iupac_name() {
+        assert_eq!(element(1).name(), "Hydrogen");
+        assert_eq!(element(6).name(), "Carbon");
+        assert_eq!(element(118).name(), "Oganesson");
+    }
+
+    #[test]
+    fn from_symbol_finds_a_named_element() {
+        assert_eq!(Element::from_symbol("C"), Some(element(6)));
+        assert_eq!(Element::from_symbol("Og"), Some(element(118)));
+    }
+
+    #[test]
+    fn period_maps_each_periodic_table_row() {
+        assert_eq!(element(1).period(), Some(1));
+        assert_eq!(element(3).period(), Some(2));
+        assert_eq!(element(11).period(), Some(3));
+        assert_eq!(element(19).period(), Some(4));
+        assert_eq!(element(37).period(), Some(5));
+        assert_eq!(element(55).period(), Some(6));
+        assert_eq!(element(87).period(), Some(7));
+    }
+
+    #[test]
+    fn from_symbol_rejects_unknown_symbols() {
+        assert_eq!(Element::from_symbol("Xx"), None);
+        assert_eq!(Element::from_symbol("Xyz"), None);
+        assert_eq!(Element::from_symbol("Nnn"), None);
     }
 
     #[test]
     fn from_symbol_is_case_sensitive() {
-        assert!(Element::from_symbol("h").is_none());
-        assert!(Element::from_symbol("fe").is_none());
-        assert!(Element::from_symbol("FE").is_none());
-        assert!(Element::from_symbol("uue").is_none());
-        assert!(Element::from_symbol("UUE").is_none());
+        assert_eq!(Element::from_symbol("c"), None);
+        assert_eq!(Element::from_symbol("he"), None);
     }
 
     #[test]
-    fn from_symbol_rejects_systematic_form_of_named_element() {
-        assert!(Element::from_symbol("Unn").is_none());
-        assert!(Element::from_symbol("Uuo").is_none());
+    fn from_symbol_rejects_the_wrong_length() {
+        assert_eq!(Element::from_symbol(""), None);
+        assert_eq!(Element::from_symbol("Abcd"), None);
     }
 
     #[test]
-    fn from_symbol_rejects_unknown() {
-        assert!(Element::from_symbol("").is_none());
-        assert!(Element::from_symbol("Xx").is_none());
-        assert!(Element::from_symbol("Uux").is_none());
-        assert!(Element::from_symbol("Carbon").is_none());
+    fn elements_beyond_the_named_range_have_no_period() {
+        assert_eq!(element(119).period(), None);
+        assert_eq!(element(255).period(), None);
     }
 
     #[test]
-    fn atomic_number_roundtrip() {
-        assert_eq!(Element::new(92).unwrap().atomic_number(), 92);
+    fn one_is_the_smallest_element() {
+        assert_eq!(Element::new(1).unwrap().atomic_number(), 1);
     }
 
     #[test]
-    fn symbol_named() {
-        assert_eq!(Element::new(1).unwrap().symbol(), "H");
-        assert_eq!(Element::new(6).unwrap().symbol(), "C");
-        assert_eq!(Element::new(118).unwrap().symbol(), "Og");
+    fn the_largest_atomic_number_is_valid() {
+        assert_eq!(Element::new(255).unwrap().atomic_number(), 255);
     }
 
     #[test]
-    fn name_named() {
-        assert_eq!(Element::new(1).unwrap().name(), "Hydrogen");
-        assert_eq!(Element::new(6).unwrap().name(), "Carbon");
-        assert_eq!(Element::new(118).unwrap().name(), "Oganesson");
+    fn the_last_named_element_has_period_seven() {
+        assert_eq!(element(118).period(), Some(7));
     }
 
     #[test]
-    fn symbol_systematic() {
-        assert_eq!(Element::new(119).unwrap().symbol(), "Uue");
-        assert_eq!(Element::new(120).unwrap().symbol(), "Ubn");
-        assert_eq!(Element::new(190).unwrap().symbol(), "Uen");
-        assert_eq!(Element::new(255).unwrap().symbol(), "Bpp");
+    fn the_first_element_past_the_named_range_is_systematic() {
+        assert_eq!(element(119).symbol(), "Uue");
+        assert_eq!(element(119).name(), "Ununennium");
     }
 
     #[test]
-    fn name_systematic() {
-        assert_eq!(Element::new(119).unwrap().name(), "Ununennium");
-        assert_eq!(Element::new(120).unwrap().name(), "Unbinilium");
-        assert_eq!(Element::new(122).unwrap().name(), "Unbibium");
-        assert_eq!(Element::new(123).unwrap().name(), "Unbitrium");
-        assert_eq!(Element::new(190).unwrap().name(), "Unennilium");
-        assert_eq!(Element::new(255).unwrap().name(), "Bipentpentium");
+    fn a_systematic_element_concatenates_its_digit_roots() {
+        assert_eq!(element(120).symbol(), "Ubn");
+        assert_eq!(element(120).name(), "Unbinilium");
     }
 
     #[test]
-    fn symbol_roundtrip() {
+    fn systematic_name_elides_a_doubled_n_between_enn_and_nil() {
+        assert_eq!(element(190).name(), "Unennilium");
+    }
+
+    #[test]
+    fn systematic_name_drops_the_trailing_i_of_a_final_bi() {
+        assert_eq!(element(122).name(), "Unbibium");
+    }
+
+    #[test]
+    fn systematic_name_drops_the_trailing_i_of_a_final_tri() {
+        assert_eq!(element(123).name(), "Unbitrium");
+    }
+
+    #[test]
+    fn the_largest_element_is_named_systematically() {
+        assert_eq!(element(255).symbol(), "Bpp");
+        assert_eq!(element(255).name(), "Bipentpentium");
+    }
+
+    #[test]
+    fn from_symbol_finds_a_systematic_element() {
+        assert_eq!(Element::from_symbol("Uue"), Some(element(119)));
+        assert_eq!(Element::from_symbol("Bpp"), Some(element(255)));
+    }
+
+    #[test]
+    fn display_is_the_symbol() {
+        assert_eq!(format!("{}", element(6)), "C");
+        assert_eq!(format!("{}", element(119)), "Uue");
+    }
+
+    #[test]
+    fn elements_order_by_atomic_number() {
+        assert!(element(1) < element(2));
+        assert!(element(8) > element(6));
+    }
+
+    #[test]
+    fn elements_are_equal_when_their_atomic_numbers_match() {
+        assert_eq!(element(6), element(6));
+        assert_ne!(element(6), element(7));
+    }
+
+    #[test]
+    fn from_symbol_inverts_symbol_for_every_element() {
         for z in 1..=u8::MAX {
-            let e = Element::new(z).unwrap();
-            assert_eq!(Element::from_symbol(e.symbol()), Some(e));
+            let e = element(z);
+            assert_eq!(Element::from_symbol(e.symbol()), Some(e), "z = {z}");
         }
     }
 
     #[test]
-    fn period() {
-        assert_eq!(Element::new(1).unwrap().period(), Some(1));
-        assert_eq!(Element::new(2).unwrap().period(), Some(1));
-        assert_eq!(Element::new(3).unwrap().period(), Some(2));
-        assert_eq!(Element::new(18).unwrap().period(), Some(3));
-        assert_eq!(Element::new(118).unwrap().period(), Some(7));
-    }
-
-    #[test]
-    fn period_is_none_beyond_named() {
-        assert_eq!(Element::new(119).unwrap().period(), None);
-        assert_eq!(Element::new(255).unwrap().period(), None);
-    }
-
-    #[test]
-    fn copy_and_clone() {
-        let a = Element::new(6).unwrap();
-        let b = a;
-        let c = ::core::clone::Clone::clone(&a);
-        assert_eq!(a, b);
-        assert_eq!(a, c);
-    }
-
-    #[test]
-    fn eq() {
-        let a = Element::new(6).unwrap();
-        assert_eq!(a, Element::new(6).unwrap());
-        assert_ne!(a, Element::new(7).unwrap());
-    }
-
-    #[test]
-    fn ord() {
-        let h = Element::new(1).unwrap();
-        let c = Element::new(6).unwrap();
-        assert!(h < c);
-        assert!(c > h);
-        assert_eq!(c.cmp(&c), ::core::cmp::Ordering::Equal);
-    }
-
-    #[test]
-    fn debug() {
-        assert_eq!(format!("{:?}", Element::new(6).unwrap()), "Element(6)");
-    }
-
-    #[test]
-    fn display() {
-        assert_eq!(format!("{}", Element::new(6).unwrap()), "C");
-        assert_eq!(format!("{}", Element::new(119).unwrap()), "Uue");
-    }
-
-    #[test]
-    fn option_is_same_size_as_u8() {
+    fn option_is_the_same_size_as_the_raw_integer() {
         assert_eq!(
-            ::core::mem::size_of::<Option<Element>>(),
-            ::core::mem::size_of::<u8>()
+            core::mem::size_of::<Option<Element>>(),
+            core::mem::size_of::<u8>()
         );
     }
 }

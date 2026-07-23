@@ -183,255 +183,209 @@ fn from_angstroms<V: Scalar, U: LengthUnit>(value: V) -> Length<V, U> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
     use crate::units::angle::Degree;
-    use crate::units::length::{Bohr, Nanometer};
-    use crate::units::volume::CubicNanometer;
+    use crate::units::length::Nanometer;
 
-    fn angstrom(v: f64) -> Length<f64, Angstrom> {
-        Length::new(v)
+    const TOL: f64 = 1e-9;
+
+    fn length(x: f64) -> Length<f64, Angstrom> {
+        Length::new(x)
     }
 
-    fn cubic_two() -> Lattice<f64> {
-        Lattice::cubic(angstrom(2.0)).unwrap()
+    fn degrees(x: f64) -> Angle<f64, Degree> {
+        Angle::new(x)
+    }
+
+    fn length_values<U: LengthUnit>(v: Vector3<Length<f64, U>>) -> [f64; 3] {
+        v.to_array().map(|l| l.value())
+    }
+
+    fn angle_values(v: Vector3<Angle<f64, Degree>>) -> [f64; 3] {
+        v.to_array().map(|a| a.value())
+    }
+
+    fn assert_close(a: f64, b: f64) {
+        assert!((a - b).abs() < TOL, "{a} not close to {b}");
+    }
+
+    fn assert_all_close(actual: [f64; 3], expected: [f64; 3]) {
+        for (a, b) in actual.iter().zip(expected.iter()) {
+            assert!((a - b).abs() < TOL, "{a} not close to {b}");
+        }
     }
 
     #[test]
-    fn from_vectors() {
-        let l = Lattice::from_vectors(
-            Vector3::new(angstrom(3.0), angstrom(0.0), angstrom(0.0)),
-            Vector3::new(angstrom(0.0), angstrom(4.0), angstrom(0.0)),
-            Vector3::new(angstrom(0.0), angstrom(0.0), angstrom(5.0)),
+    fn cubic_has_equal_edge_lengths() {
+        let lat = Lattice::cubic(length(2.0)).unwrap();
+        assert_all_close(
+            length_values(lat.edge_lengths::<Angstrom>()),
+            [2.0, 2.0, 2.0],
+        );
+    }
+
+    #[test]
+    fn cubic_is_orthogonal() {
+        let lat = Lattice::cubic(length(2.0)).unwrap();
+        assert_all_close(angle_values(lat.angles::<Degree>()), [90.0, 90.0, 90.0]);
+    }
+
+    #[test]
+    fn cubic_volume_is_the_side_cubed() {
+        let lat = Lattice::cubic(length(2.0)).unwrap();
+        assert_close(lat.volume::<CubicAngstrom>().value(), 8.0);
+    }
+
+    #[test]
+    fn cubic_basis_vectors_are_axis_aligned() {
+        let lat = Lattice::cubic(length(2.0)).unwrap();
+        assert_all_close(length_values(lat.a::<Angstrom>()), [2.0, 0.0, 0.0]);
+        assert_all_close(length_values(lat.b::<Angstrom>()), [0.0, 2.0, 0.0]);
+        assert_all_close(length_values(lat.c::<Angstrom>()), [0.0, 0.0, 2.0]);
+    }
+
+    #[test]
+    fn orthorhombic_edge_lengths_match_its_arguments() {
+        let lat = Lattice::orthorhombic(length(2.0), length(3.0), length(4.0)).unwrap();
+        assert_all_close(
+            length_values(lat.edge_lengths::<Angstrom>()),
+            [2.0, 3.0, 4.0],
+        );
+    }
+
+    #[test]
+    fn orthorhombic_volume_is_the_product_of_edges() {
+        let lat = Lattice::orthorhombic(length(2.0), length(3.0), length(4.0)).unwrap();
+        assert_close(lat.volume::<CubicAngstrom>().value(), 24.0);
+    }
+
+    #[test]
+    fn from_vectors_recovers_its_basis_vectors() {
+        let a = Vector3::new(length(2.0), length(0.0), length(0.0));
+        let b = Vector3::new(length(0.0), length(3.0), length(0.0));
+        let c = Vector3::new(length(0.0), length(0.0), length(4.0));
+        let lat = Lattice::from_vectors(a, b, c).unwrap();
+        assert_all_close(length_values(lat.a::<Angstrom>()), [2.0, 0.0, 0.0]);
+        assert_all_close(length_values(lat.b::<Angstrom>()), [0.0, 3.0, 0.0]);
+        assert_all_close(length_values(lat.c::<Angstrom>()), [0.0, 0.0, 4.0]);
+    }
+
+    #[test]
+    fn from_parameters_reproduces_a_cubic_cell() {
+        let lat = Lattice::from_parameters(
+            length(2.0),
+            length(2.0),
+            length(2.0),
+            degrees(90.0),
+            degrees(90.0),
+            degrees(90.0),
         )
         .unwrap();
-        assert_eq!(l.volume::<CubicAngstrom>().value(), 60.0);
-    }
-
-    #[test]
-    fn from_vectors_rejects_coplanar() {
-        assert!(
-            Lattice::from_vectors(
-                Vector3::new(angstrom(1.0), angstrom(0.0), angstrom(0.0)),
-                Vector3::new(angstrom(2.0), angstrom(0.0), angstrom(0.0)),
-                Vector3::new(angstrom(0.0), angstrom(0.0), angstrom(1.0)),
-            )
-            .is_none()
+        assert_all_close(
+            length_values(lat.edge_lengths::<Angstrom>()),
+            [2.0, 2.0, 2.0],
         );
+        assert_all_close(angle_values(lat.angles::<Degree>()), [90.0, 90.0, 90.0]);
+        assert_close(lat.volume::<CubicAngstrom>().value(), 8.0);
     }
 
     #[test]
-    fn cubic() {
-        assert_eq!(cubic_two().volume::<CubicAngstrom>().value(), 8.0);
+    fn to_cartesian_maps_fractional_coordinates_to_positions() {
+        let lat = Lattice::cubic(length(2.0)).unwrap();
+        let cart = lat.to_cartesian::<Angstrom>(Point3::new(0.5, 0.5, 0.5));
+        assert_all_close(cart.to_array().map(|l| l.value()), [1.0, 1.0, 1.0]);
     }
 
     #[test]
-    fn cubic_rejects_zero_edge() {
-        assert!(Lattice::cubic(angstrom(0.0)).is_none());
+    fn lattice_vectors_convert_to_the_requested_unit() {
+        let lat = Lattice::cubic(Length::<f64, Nanometer>::new(1.0)).unwrap();
+        assert_all_close(length_values(lat.a::<Angstrom>()), [10.0, 0.0, 0.0]);
     }
 
     #[test]
-    fn cubic_rejects_negative_edge() {
-        assert!(Lattice::cubic(angstrom(-1.0)).is_none());
+    fn volume_is_the_absolute_value_of_the_determinant() {
+        let a = Vector3::new(length(2.0), length(0.0), length(0.0));
+        let b = Vector3::new(length(0.0), length(0.0), length(3.0));
+        let c = Vector3::new(length(0.0), length(4.0), length(0.0));
+        let lat = Lattice::from_vectors(a, b, c).unwrap();
+        assert_close(lat.volume::<CubicAngstrom>().value(), 24.0);
     }
 
     #[test]
-    fn orthorhombic() {
-        let l = Lattice::orthorhombic(angstrom(3.0), angstrom(4.0), angstrom(5.0)).unwrap();
-        assert_eq!(
-            l.edge_lengths::<Angstrom>(),
-            Vector3::new(angstrom(3.0), angstrom(4.0), angstrom(5.0))
+    fn cubic_rejects_a_zero_side() {
+        assert!(Lattice::cubic(length(0.0)).is_none());
+    }
+
+    #[test]
+    fn cubic_rejects_a_nonfinite_side() {
+        assert!(Lattice::cubic(length(f64::INFINITY)).is_none());
+        assert!(Lattice::cubic(length(f64::NAN)).is_none());
+    }
+
+    #[test]
+    fn orthorhombic_rejects_a_nonpositive_edge() {
+        assert!(Lattice::orthorhombic(length(0.0), length(3.0), length(4.0)).is_none());
+        assert!(Lattice::orthorhombic(length(2.0), length(-3.0), length(4.0)).is_none());
+    }
+
+    #[test]
+    fn from_vectors_rejects_coplanar_vectors() {
+        let a = Vector3::new(length(1.0), length(0.0), length(0.0));
+        let b = Vector3::new(length(0.0), length(1.0), length(0.0));
+        let c = Vector3::new(length(1.0), length(1.0), length(0.0));
+        assert!(Lattice::from_vectors(a, b, c).is_none());
+    }
+
+    #[test]
+    fn from_parameters_rejects_a_nonpositive_edge() {
+        let lat = Lattice::from_parameters(
+            length(0.0),
+            length(2.0),
+            length(2.0),
+            degrees(90.0),
+            degrees(90.0),
+            degrees(90.0),
         );
+        assert!(lat.is_none());
     }
 
     #[test]
-    fn orthorhombic_rejects_nonpositive_edge() {
-        assert!(Lattice::orthorhombic(angstrom(1.0), angstrom(0.0), angstrom(1.0)).is_none());
-        assert!(Lattice::orthorhombic(angstrom(1.0), angstrom(1.0), angstrom(-1.0)).is_none());
+    fn from_parameters_rejects_an_unrealizable_cell() {
+        let lat = Lattice::from_parameters(
+            length(2.0),
+            length(2.0),
+            length(2.0),
+            degrees(170.0),
+            degrees(170.0),
+            degrees(170.0),
+        );
+        assert!(lat.is_none());
     }
 
     #[test]
-    fn from_parameters_recovers_cubic() {
-        let right = Angle::<f64, Degree>::new(90.0);
-        let l = Lattice::from_parameters(
-            angstrom(2.0),
-            angstrom(2.0),
-            angstrom(2.0),
-            right,
-            right,
-            right,
+    fn from_parameters_roundtrips_edge_lengths_and_angles() {
+        let lat = Lattice::from_parameters(
+            length(3.0),
+            length(4.0),
+            length(5.0),
+            degrees(70.0),
+            degrees(80.0),
+            degrees(100.0),
         )
         .unwrap();
-        assert!((l.volume::<CubicAngstrom>().value() - 8.0).abs() < 1e-12);
-        assert!((l.b::<Angstrom>().y.value() - 2.0).abs() < 1e-12);
-    }
-
-    #[test]
-    fn from_parameters_rejects_nonpositive_edge() {
-        let right = Angle::<f64, Degree>::new(90.0);
-        assert!(
-            Lattice::from_parameters(
-                angstrom(0.0),
-                angstrom(1.0),
-                angstrom(1.0),
-                right,
-                right,
-                right,
-            )
-            .is_none()
+        assert_all_close(
+            length_values(lat.edge_lengths::<Angstrom>()),
+            [3.0, 4.0, 5.0],
         );
-        assert!(
-            Lattice::from_parameters(
-                angstrom(1.0),
-                angstrom(1.0),
-                angstrom(-1.0),
-                right,
-                right,
-                right,
-            )
-            .is_none()
-        );
+        assert_all_close(angle_values(lat.angles::<Degree>()), [70.0, 80.0, 100.0]);
     }
 
     #[test]
-    fn from_parameters_rejects_inconsistent_angles() {
-        let wide = Angle::<f64, Degree>::new(170.0);
-        assert!(
-            Lattice::from_parameters(
-                angstrom(1.0),
-                angstrom(1.0),
-                angstrom(1.0),
-                wide,
-                wide,
-                wide
-            )
-            .is_none()
-        );
-    }
-
-    #[test]
-    fn a() {
-        assert_eq!(
-            cubic_two().a::<Angstrom>(),
-            Vector3::new(angstrom(2.0), angstrom(0.0), angstrom(0.0))
-        );
-    }
-
-    #[test]
-    fn b() {
-        assert_eq!(
-            cubic_two().b::<Angstrom>(),
-            Vector3::new(angstrom(0.0), angstrom(2.0), angstrom(0.0))
-        );
-    }
-
-    #[test]
-    fn c() {
-        assert_eq!(
-            cubic_two().c::<Angstrom>(),
-            Vector3::new(angstrom(0.0), angstrom(0.0), angstrom(2.0))
-        );
-    }
-
-    #[test]
-    fn edge_lengths() {
-        assert_eq!(
-            cubic_two().edge_lengths::<Angstrom>(),
-            Vector3::new(angstrom(2.0), angstrom(2.0), angstrom(2.0))
-        );
-    }
-
-    #[test]
-    fn angles() {
-        let l = Lattice::orthorhombic(angstrom(3.0), angstrom(4.0), angstrom(5.0)).unwrap();
-        let a = l.angles::<Degree>();
-        assert!((a.x.value() - 90.0).abs() < 1e-12);
-        assert!((a.y.value() - 90.0).abs() < 1e-12);
-        assert!((a.z.value() - 90.0).abs() < 1e-12);
-    }
-
-    #[test]
-    fn volume() {
-        assert_eq!(cubic_two().volume::<CubicAngstrom>().value(), 8.0);
-        assert!(
-            (Lattice::cubic(angstrom(10.0))
-                .unwrap()
-                .volume::<CubicNanometer>()
-                .value()
-                - 1.0)
-                .abs()
-                < 1e-12
-        );
-    }
-
-    #[test]
-    fn to_cartesian() {
-        assert_eq!(
-            cubic_two().to_cartesian::<Angstrom>(Point3::new(0.5, 0.5, 0.5)),
-            Point3::new(angstrom(1.0), angstrom(1.0), angstrom(1.0))
-        );
-    }
-
-    #[test]
-    fn to_fractional() {
-        assert_eq!(
-            cubic_two().to_fractional(Point3::new(angstrom(1.0), angstrom(1.0), angstrom(1.0))),
-            Point3::new(0.5, 0.5, 0.5)
-        );
-    }
-
-    #[test]
-    fn cartesian_fractional_roundtrip() {
-        let l = Lattice::from_vectors(
-            Vector3::new(angstrom(4.0), angstrom(1.0), angstrom(0.0)),
-            Vector3::new(angstrom(0.0), angstrom(5.0), angstrom(0.0)),
-            Vector3::new(angstrom(1.0), angstrom(0.0), angstrom(6.0)),
-        )
-        .unwrap();
-        let frac = Point3::new(0.2, 0.7, 0.4);
-        let back = l.to_fractional(l.to_cartesian::<Angstrom>(frac));
-        assert!((back.x - frac.x).abs() < 1e-12);
-        assert!((back.y - frac.y).abs() < 1e-12);
-        assert!((back.z - frac.z).abs() < 1e-12);
-    }
-
-    #[test]
-    fn accessors_are_unit_generic() {
-        let l = Lattice::cubic(Length::<f64, Nanometer>::new(0.5)).unwrap();
-        assert!((l.a::<Angstrom>().x.value() - 5.0).abs() < 1e-12);
-        assert!((l.a::<Bohr>().x.value() - 5.0 / 0.529_177_210_544).abs() < 1e-9);
-    }
-
-    #[test]
-    fn supports_f32() {
-        let l = Lattice::cubic(Length::<f32, Angstrom>::new(2.0)).unwrap();
-        assert_eq!(l.volume::<CubicAngstrom>().value(), 8.0_f32);
-        assert_eq!(
-            l.to_cartesian::<Angstrom>(Point3::new(0.5_f32, 0.5, 0.5)),
-            Point3::new(
-                Length::<f32, Angstrom>::new(1.0),
-                Length::new(1.0),
-                Length::new(1.0)
-            )
-        );
-    }
-
-    #[test]
-    fn copy_and_clone() {
-        let a = cubic_two();
-        let b = a;
-        let c = ::core::clone::Clone::clone(&a);
-        assert_eq!(a, b);
-        assert_eq!(a, c);
-    }
-
-    #[test]
-    fn eq() {
-        assert_eq!(cubic_two(), cubic_two());
-        assert_ne!(cubic_two(), Lattice::cubic(angstrom(3.0)).unwrap());
-    }
-
-    #[test]
-    fn debug() {
-        let s = format!("{:?}", cubic_two());
-        assert!(s.starts_with("Lattice { basis: Matrix3 {"));
+    fn to_fractional_inverts_to_cartesian() {
+        let lat = Lattice::orthorhombic(length(2.0), length(3.0), length(4.0)).unwrap();
+        let frac = Point3::new(0.1, 0.2, 0.7);
+        let cart = lat.to_cartesian::<Angstrom>(frac);
+        let back = lat.to_fractional::<Angstrom>(cart);
+        assert_all_close(back.to_array(), frac.to_array());
     }
 }

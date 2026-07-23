@@ -1,0 +1,25 @@
+[package]
+name = "vita-chem"
+version = "0.0.0"
+description = "Cheminformatics algorithms for atomistic and molecular structure."
+keywords = [
+    "atomistic",
+    "molecular",
+    "cheminformatics",
+    "chemistry",
+    "fingerprint",
+]
+categories = ["science", "science::computational-chemistry"]
+readme = "README.md"
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+vita-core = { version = "0.2.0", path = "../vita-core" }
+
+[lib]
+name = "vita_chem"
+path = "src/lib.rs"

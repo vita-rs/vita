@@ -25,23 +25,14 @@
 //! element type, `f32` or `f64`.
 
 mod capability;
-mod element;
-mod id;
-mod isotope;
-mod lattice;
-mod scalar;
+mod primitive;
 
 pub mod tensor;
 pub mod units;
 
 pub mod prelude;
 
-pub use scalar::Scalar;
-
-pub use element::Element;
-pub use id::SiteId;
-pub use isotope::Isotope;
-pub use lattice::Lattice;
+pub use primitive::{Element, Isotope, Lattice, Scalar, SiteId};
 
 pub use capability::{
     HasAccelerations, HasElements, HasIsotopes, HasLattice, HasMasses, HasNetCharge, HasPositions,

@@ -6,8 +6,16 @@ version = 4
 name = "vita"
 version = "0.2.0"
 dependencies = [
+ "vita-chem",
  "vita-core",
  "vita-io",
+]
+
+[[package]]
+name = "vita-chem"
+version = "0.0.0"
+dependencies = [
+ "vita-core",
 ]
 
 [[package]]

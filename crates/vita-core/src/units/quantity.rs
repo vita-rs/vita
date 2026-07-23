@@ -43,7 +43,7 @@ macro_rules! define_quantity {
             }
         }
 
-        impl<V: $crate::scalar::Scalar, U: $UnitTrait> $Qty<V, U> {
+        impl<V: $crate::Scalar, U: $UnitTrait> $Qty<V, U> {
             /// The additive identity: zero quantity in unit `U`.
             pub const ZERO: Self = Self::new(V::ZERO);
 
@@ -64,7 +64,7 @@ macro_rules! define_quantity {
             /// Returns the absolute value.
             #[inline]
             pub fn abs(self) -> Self {
-                Self::new(<V as $crate::scalar::Scalar>::abs(self.0))
+                Self::new(<V as $crate::Scalar>::abs(self.0))
             }
 
             /// Returns the minimum of `self` and `other`, ignoring NaN.
@@ -72,7 +72,7 @@ macro_rules! define_quantity {
             /// If one argument is NaN, then the other argument is returned.
             #[inline]
             pub fn min(self, other: Self) -> Self {
-                Self::new(<V as $crate::scalar::Scalar>::min(self.0, other.0))
+                Self::new(<V as $crate::Scalar>::min(self.0, other.0))
             }
 
             /// Returns the maximum of `self` and `other`, ignoring NaN.
@@ -80,7 +80,7 @@ macro_rules! define_quantity {
             /// If one argument is NaN, then the other argument is returned.
             #[inline]
             pub fn max(self, other: Self) -> Self {
-                Self::new(<V as $crate::scalar::Scalar>::max(self.0, other.0))
+                Self::new(<V as $crate::Scalar>::max(self.0, other.0))
             }
 
             /// Restricts `self` to the interval `[lo, hi]`.
@@ -90,7 +90,7 @@ macro_rules! define_quantity {
             /// Panics if `lo > hi`, `lo` is NaN, or `hi` is NaN.
             #[inline]
             pub fn clamp(self, lo: Self, hi: Self) -> Self {
-                Self::new(<V as $crate::scalar::Scalar>::clamp(
+                Self::new(<V as $crate::Scalar>::clamp(
                     self.0, lo.0, hi.0,
                 ))
             }
@@ -98,107 +98,107 @@ macro_rules! define_quantity {
             /// Returns `1.0`, `-1.0`, or NaN based on the sign of `self`.
             #[inline]
             pub fn signum(self) -> V {
-                <V as $crate::scalar::Scalar>::signum(self.0)
+                <V as $crate::Scalar>::signum(self.0)
             }
 
             /// Returns a quantity with the magnitude of `self` and the sign of `sign`.
             #[inline]
             pub fn copysign(self, sign: Self) -> Self {
-                Self::new(<V as $crate::scalar::Scalar>::copysign(self.0, sign.0))
+                Self::new(<V as $crate::Scalar>::copysign(self.0, sign.0))
             }
 
             /// Returns the largest integer less than or equal to `self`.
             #[inline]
             pub fn floor(self) -> Self {
-                Self::new(<V as $crate::scalar::Scalar>::floor(self.0))
+                Self::new(<V as $crate::Scalar>::floor(self.0))
             }
 
             /// Returns the smallest integer greater than or equal to `self`.
             #[inline]
             pub fn ceil(self) -> Self {
-                Self::new(<V as $crate::scalar::Scalar>::ceil(self.0))
+                Self::new(<V as $crate::Scalar>::ceil(self.0))
             }
 
             /// Returns the nearest integer to `self`, with halves rounded away from zero.
             #[inline]
             pub fn round(self) -> Self {
-                Self::new(<V as $crate::scalar::Scalar>::round(self.0))
+                Self::new(<V as $crate::Scalar>::round(self.0))
             }
 
             /// Returns the nearest integer to `self`, with halves rounded to even.
             #[inline]
             pub fn round_ties_even(self) -> Self {
-                Self::new(<V as $crate::scalar::Scalar>::round_ties_even(self.0))
+                Self::new(<V as $crate::Scalar>::round_ties_even(self.0))
             }
 
             /// Returns the integer part of `self`, truncated toward zero.
             #[inline]
             pub fn trunc(self) -> Self {
-                Self::new(<V as $crate::scalar::Scalar>::trunc(self.0))
+                Self::new(<V as $crate::Scalar>::trunc(self.0))
             }
 
             /// Returns the fractional part of `self`.
             #[inline]
             pub fn fract(self) -> Self {
-                Self::new(<V as $crate::scalar::Scalar>::fract(self.0))
+                Self::new(<V as $crate::Scalar>::fract(self.0))
             }
 
             /// Calculates the Euclidean quotient as a dimensionless scalar; the matching counterpart of `rem_euclid`.
             #[inline]
             pub fn div_euclid(self, rhs: Self) -> V {
-                <V as $crate::scalar::Scalar>::div_euclid(self.0, rhs.0)
+                <V as $crate::Scalar>::div_euclid(self.0, rhs.0)
             }
 
             /// Least nonnegative remainder of `self` divided by `rhs`.
             #[inline]
             pub fn rem_euclid(self, rhs: Self) -> Self {
-                Self::new(<V as $crate::scalar::Scalar>::rem_euclid(self.0, rhs.0))
+                Self::new(<V as $crate::Scalar>::rem_euclid(self.0, rhs.0))
             }
 
             /// Computes `(self * a) + b` with a single rounding error (fused multiply-add).
             #[inline]
             pub fn mul_add(self, a: V, b: Self) -> Self {
-                Self::new(<V as $crate::scalar::Scalar>::mul_add(self.0, a, b.0))
+                Self::new(<V as $crate::Scalar>::mul_add(self.0, a, b.0))
             }
 
             /// Returns `sqrt(self * self + other * other)` without unnecessary overflow or underflow.
             #[inline]
             pub fn hypot(self, other: Self) -> Self {
-                Self::new(<V as $crate::scalar::Scalar>::hypot(self.0, other.0))
+                Self::new(<V as $crate::Scalar>::hypot(self.0, other.0))
             }
 
             /// Returns `true` if `self` is NaN.
             #[inline]
             pub fn is_nan(self) -> bool {
-                <V as $crate::scalar::Scalar>::is_nan(self.0)
+                <V as $crate::Scalar>::is_nan(self.0)
             }
 
             /// Returns `true` if `self` is positive or negative infinity.
             #[inline]
             pub fn is_infinite(self) -> bool {
-                <V as $crate::scalar::Scalar>::is_infinite(self.0)
+                <V as $crate::Scalar>::is_infinite(self.0)
             }
 
             /// Returns `true` if `self` is neither NaN nor infinite.
             #[inline]
             pub fn is_finite(self) -> bool {
-                <V as $crate::scalar::Scalar>::is_finite(self.0)
+                <V as $crate::Scalar>::is_finite(self.0)
             }
 
             /// Returns `true` if `self` has a positive sign, including `+0.0`, `+∞`, and positive NaN.
             #[inline]
             pub fn is_sign_positive(self) -> bool {
-                <V as $crate::scalar::Scalar>::is_sign_positive(self.0)
+                <V as $crate::Scalar>::is_sign_positive(self.0)
             }
 
             /// Returns `true` if `self` has a negative sign, including `-0.0`, `-∞`, and negative NaN.
             #[inline]
             pub fn is_sign_negative(self) -> bool {
-                <V as $crate::scalar::Scalar>::is_sign_negative(self.0)
+                <V as $crate::Scalar>::is_sign_negative(self.0)
             }
         }
 
-        impl<V: $crate::scalar::Scalar, U: $UnitTrait> ::core::default::Default
+        impl<V: $crate::Scalar, U: $UnitTrait> ::core::default::Default
             for $Qty<V, U>
         {
             /// Returns a zero quantity in unit `U`.
@@ -206,7 +206,7 @@ macro_rules! define_quantity {
             fn default() -> Self { Self::new(V::default()) }
         }
 
-        impl<V: $crate::scalar::Scalar, U: $UnitTrait> From<V>
+        impl<V: $crate::Scalar, U: $UnitTrait> From<V>
             for $Qty<V, U>
         {
             /// Wraps a raw scalar as a quantity in unit `U`.
@@ -214,52 +214,52 @@ macro_rules! define_quantity {
             fn from(value: V) -> Self { Self::new(value) }
         }
 
-        impl<V: $crate::scalar::Scalar, U: $UnitTrait> ::core::ops::Neg for $Qty<V, U> {
+        impl<V: $crate::Scalar, U: $UnitTrait> ::core::ops::Neg for $Qty<V, U> {
             type Output = Self;
             #[inline]
             fn neg(self) -> Self { Self::new(-self.0) }
         }
 
-        impl<V: $crate::scalar::Scalar, U: $UnitTrait> ::core::ops::Add for $Qty<V, U> {
+        impl<V: $crate::Scalar, U: $UnitTrait> ::core::ops::Add for $Qty<V, U> {
             type Output = Self;
             #[inline]
             fn add(self, rhs: Self) -> Self { Self::new(self.0 + rhs.0) }
         }
 
-        impl<V: $crate::scalar::Scalar, U: $UnitTrait> ::core::ops::AddAssign
+        impl<V: $crate::Scalar, U: $UnitTrait> ::core::ops::AddAssign
             for $Qty<V, U>
         {
             #[inline]
             fn add_assign(&mut self, rhs: Self) { self.0 += rhs.0; }
         }
 
-        impl<V: $crate::scalar::Scalar, U: $UnitTrait> ::core::ops::Sub for $Qty<V, U> {
+        impl<V: $crate::Scalar, U: $UnitTrait> ::core::ops::Sub for $Qty<V, U> {
             type Output = Self;
             #[inline]
             fn sub(self, rhs: Self) -> Self { Self::new(self.0 - rhs.0) }
         }
 
-        impl<V: $crate::scalar::Scalar, U: $UnitTrait> ::core::ops::SubAssign
+        impl<V: $crate::Scalar, U: $UnitTrait> ::core::ops::SubAssign
             for $Qty<V, U>
         {
             #[inline]
             fn sub_assign(&mut self, rhs: Self) { self.0 -= rhs.0; }
         }
 
-        impl<V: $crate::scalar::Scalar, U: $UnitTrait> ::core::ops::Rem for $Qty<V, U> {
+        impl<V: $crate::Scalar, U: $UnitTrait> ::core::ops::Rem for $Qty<V, U> {
             type Output = Self;
             #[inline]
             fn rem(self, rhs: Self) -> Self { Self::new(self.0 % rhs.0) }
         }
 
-        impl<V: $crate::scalar::Scalar, U: $UnitTrait> ::core::ops::RemAssign
+        impl<V: $crate::Scalar, U: $UnitTrait> ::core::ops::RemAssign
             for $Qty<V, U>
         {
             #[inline]
             fn rem_assign(&mut self, rhs: Self) { self.0 %= rhs.0; }
         }
 
-        impl<V: $crate::scalar::Scalar, U: $UnitTrait> ::core::ops::Mul<V>
+        impl<V: $crate::Scalar, U: $UnitTrait> ::core::ops::Mul<V>
             for $Qty<V, U>
         {
             type Output = Self;
@@ -267,14 +267,14 @@ macro_rules! define_quantity {
             fn mul(self, rhs: V) -> Self { Self::new(self.0 * rhs) }
         }
 
-        impl<V: $crate::scalar::Scalar, U: $UnitTrait> ::core::ops::MulAssign<V>
+        impl<V: $crate::Scalar, U: $UnitTrait> ::core::ops::MulAssign<V>
             for $Qty<V, U>
         {
             #[inline]
             fn mul_assign(&mut self, rhs: V) { self.0 *= rhs; }
         }
 
-        impl<V: $crate::scalar::Scalar, U: $UnitTrait> ::core::ops::Div<V>
+        impl<V: $crate::Scalar, U: $UnitTrait> ::core::ops::Div<V>
             for $Qty<V, U>
         {
             type Output = Self;
@@ -282,14 +282,14 @@ macro_rules! define_quantity {
             fn div(self, rhs: V) -> Self { Self::new(self.0 / rhs) }
         }
 
-        impl<V: $crate::scalar::Scalar, U: $UnitTrait> ::core::ops::DivAssign<V>
+        impl<V: $crate::Scalar, U: $UnitTrait> ::core::ops::DivAssign<V>
             for $Qty<V, U>
         {
             #[inline]
             fn div_assign(&mut self, rhs: V) { self.0 /= rhs; }
         }
 
-        impl<V: $crate::scalar::Scalar, U: $UnitTrait> ::core::ops::Rem<V>
+        impl<V: $crate::Scalar, U: $UnitTrait> ::core::ops::Rem<V>
             for $Qty<V, U>
         {
             type Output = Self;
@@ -297,28 +297,28 @@ macro_rules! define_quantity {
             fn rem(self, rhs: V) -> Self { Self::new(self.0 % rhs) }
         }
 
-        impl<V: $crate::scalar::Scalar, U: $UnitTrait> ::core::ops::RemAssign<V>
+        impl<V: $crate::Scalar, U: $UnitTrait> ::core::ops::RemAssign<V>
             for $Qty<V, U>
         {
             #[inline]
             fn rem_assign(&mut self, rhs: V) { self.0 %= rhs; }
         }
 
-        impl<V: $crate::scalar::Scalar, U: $UnitTrait> ::core::ops::Div for $Qty<V, U> {
+        impl<V: $crate::Scalar, U: $UnitTrait> ::core::ops::Div for $Qty<V, U> {
             type Output = V;
             /// Returns the dimensionless ratio `self / rhs`.
             #[inline]
             fn div(self, rhs: Self) -> V { self.0 / rhs.0 }
         }
 
-        impl<V: $crate::scalar::Scalar, U: $UnitTrait> ::core::iter::Sum for $Qty<V, U> {
+        impl<V: $crate::Scalar, U: $UnitTrait> ::core::iter::Sum for $Qty<V, U> {
             #[inline]
             fn sum<I: ::core::iter::Iterator<Item = Self>>(iter: I) -> Self {
                 iter.fold(Self::new(V::default()), |acc, x| acc + x)
             }
         }
 
-        impl<'__qty, V: $crate::scalar::Scalar, U: $UnitTrait>
+        impl<'__qty, V: $crate::Scalar, U: $UnitTrait>
             ::core::iter::Sum<&'__qty $Qty<V, U>> for $Qty<V, U>
         {
             #[inline]
@@ -327,7 +327,7 @@ macro_rules! define_quantity {
             }
         }
 
-        impl<V: $crate::scalar::Scalar, U: $UnitTrait> ::core::fmt::Display
+        impl<V: $crate::Scalar, U: $UnitTrait> ::core::fmt::Display
             for $Qty<V, U>
         {
             fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
