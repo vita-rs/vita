@@ -31,7 +31,7 @@ fn hill<M: HasElements + HasFormalCharges>(m: &M) -> String {
 
 ```toml
 [dependencies]
-vita-chem = "0.0.0"
+vita-chem = "0.1.0"
 ```
 
 ---

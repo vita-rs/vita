@@ -8,10 +8,10 @@
 
 | crate                             | version  | description                                                                           |
 | --------------------------------- | -------- | ------------------------------------------------------------------------------------- |
-| [`vita`](./crates/vita)           | `v0.2.0` | Umbrella crate re-exporting the ecosystem                                             |
-| [`vita-core`](./crates/vita-core) | `v0.2.0` | Primitives, linear algebra, capabilities, and physical quantities — zero dependencies |
-| [`vita-chem`](./crates/vita-chem) | `v0.0.0` | Cheminformatics: topology, perception, identity, and notation over capabilities       |
-| [`vita-io`](./crates/vita-io)     | `v0.1.0` | Readers and writers for standard atomistic file formats                               |
+| [`vita`](./crates/vita)           | `v0.3.0` | Umbrella crate re-exporting the ecosystem                                             |
+| [`vita-core`](./crates/vita-core) | `v0.3.0` | Primitives, linear algebra, capabilities, and physical quantities — zero dependencies |
+| [`vita-chem`](./crates/vita-chem) | `v0.1.0` | Cheminformatics: topology, perception, identity, and notation over capabilities       |
+| [`vita-io`](./crates/vita-io)     | `v0.2.0` | Readers and writers for standard atomistic file formats                               |
 
 ## Contributing
 

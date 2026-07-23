@@ -1,6 +1,6 @@
 [package]
 name = "vita-chem"
-version = "0.0.0"
+version = "0.1.0"
 description = "Cheminformatics algorithms for atomistic and molecular structure."
 keywords = [
     "atomistic",
@@ -18,7 +18,7 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
-vita-core = { version = "0.2.0", path = "../vita-core" }
+vita-core = { version = "0.3.0", path = "../vita-core" }
 
 [lib]
 name = "vita_chem"

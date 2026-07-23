@@ -4,7 +4,7 @@ version = 4
 
 [[package]]
 name = "vita"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "vita-chem",
  "vita-core",
@@ -13,18 +13,18 @@ dependencies = [
 
 [[package]]
 name = "vita-chem"
-version = "0.0.0"
+version = "0.1.0"
 dependencies = [
  "vita-core",
 ]
 
 [[package]]
 name = "vita-core"
-version = "0.2.0"
+version = "0.3.0"
 
 [[package]]
 name = "vita-io"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "vita-core",
 ]
