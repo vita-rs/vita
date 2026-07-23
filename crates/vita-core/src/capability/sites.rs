@@ -9,7 +9,9 @@ use crate::SiteId;
 ///
 /// # Contract
 ///
-/// [`sites`](HasSites::sites) yields each identifier exactly once, with no duplicates.
+/// [`sites`](HasSites::sites) yields each identifier exactly once, with no duplicates,
+/// in a stable order — the one every per-site capability iterates in, and the one to
+/// zip against for keyed access.
 pub trait HasSites {
     /// Returns an iterator over the identifier of every site.
     fn sites(&self) -> impl Iterator<Item = SiteId> + '_;

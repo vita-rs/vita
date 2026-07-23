@@ -12,7 +12,8 @@ use crate::BondId;
 /// # Contract
 ///
 /// - [`bonds`](HasBonds::bonds) yields each [`BondId`] exactly once, with no
-///   duplicates.
+///   duplicates, in a stable order — the one every per-bond capability
+///   iterates in, and the one to zip against for keyed access.
 /// - [`bond_endpoints`](HasBonds::bond_endpoints) is total over
 ///   [`bonds`](HasBonds::bonds): every bond has exactly two endpoints, both
 ///   of which are in [`sites`](HasSites::sites).

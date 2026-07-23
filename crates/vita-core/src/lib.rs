@@ -15,8 +15,9 @@
 //!
 //! Per-site data is keyed on an opaque [`SiteId`]; [`HasSites`] enumerates those keys and
 //! is the supertrait of every per-site capability. A capability is a keyed getter paired
-//! with a `(SiteId, _)` iterator — storage order is never implied. System-wide quantities
-//! ([`HasLattice`], [`HasNetCharge`]) are standalone, single-valued traits.
+//! with a value iterator in [`sites`](HasSites::sites) order — zip the two for keyed
+//! access. System-wide quantities ([`HasLattice`], [`HasNetCharge`]) are standalone,
+//! single-valued traits.
 //!
 //! # Quantities
 //!
