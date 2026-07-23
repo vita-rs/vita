@@ -1,3 +1,18 @@
+//! Stereochemistry over declared configurations, which never name a
+//! handedness.
+//!
+//! A configuration is a coset: an ordered neighbour list under the symmetry
+//! group of its geometry. On that footing [`perceive`] reads
+//! [`StereoConfigurations`] off coordinates, viewable as
+//! [`WithStereoConfigurations`]; [`stereocenters`] finds the
+//! [`Stereocenters`] where more than one configuration is realisable;
+//! [`form`] canonicalizes constitution and stereochemistry into one
+//! [`StereoForm`] and names the [`StereoRelationship`] between two
+//! molecules; [`stereoisomers`] enumerates the [`Stereoisomers`] no
+//! symmetry equates; [`consistency`] reconciles declarations against
+//! stereogenic loci — unspecified and overspecified alike — as a
+//! [`StereoConsistency`].
+
 mod center;
 mod enumerate;
 mod identity;

@@ -1,3 +1,15 @@
+//! Structural fingerprints: hashed substructure multisets that measure
+//! similarity.
+//!
+//! A [`Fingerprint`] counts hashed local substructures; the overlap between
+//! two is their similarity. Three generators enumerate the substructures —
+//! [`circular`] atom environments of growing radius, [`path`] linear walks,
+//! [`pair`] atom pairs at their topological distance — and a caller's own
+//! enumeration enters through [`Fingerprint::from_codes`]. Comparison runs
+//! through [`FeatureVector`] — Tanimoto, Tversky, cosine — and
+//! [`Fingerprint::fold`] projects onto a fixed-width [`FoldedFingerprint`]
+//! where compactness outweighs counts.
+
 mod circular;
 mod feature;
 mod folded;

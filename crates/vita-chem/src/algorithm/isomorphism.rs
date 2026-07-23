@@ -1,3 +1,11 @@
+//! Structure found inside structure.
+//!
+//! [`matches`](matches()) enumerates every [`Mapping`] of a pattern onto a
+//! subgraph of a target — an injection of sites under which each pattern bond
+//! has its counterpart; [`mcs`] finds the largest connected substructure two
+//! molecules share, as a [`CommonSubgraph`] carrying the correspondence it
+//! induces.
+
 mod mcs;
 mod subgraph;
 

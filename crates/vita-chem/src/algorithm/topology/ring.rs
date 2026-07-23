@@ -1,3 +1,16 @@
+//! Cycle perception, from a yes/no bit to the full ring taxonomy.
+//!
+//! In ascending information: [`membership`] marks which sites and bonds lie
+//! in any ring; [`count`] gives the cycle rank μ = E − V + C without
+//! enumerating a cycle; [`rings`] materialises a minimum cycle basis, each
+//! [`Ring`] read canonically from its smallest site; [`families`] rises
+//! above the basis ambiguity to the unique ring families every relevant
+//! cycle sorts into; [`bridgeheads`] names the atoms where a bridge joins a
+//! ring; and [`Rings::systems`] or [`RingFamilies::systems`] coalesces
+//! either answer into maximal [`RingSystem`]s — fused, bridged, and spiro
+//! rings joining as one [`RingSystems`]. Callers pay for exactly the level
+//! they need.
+
 mod bridgeheads;
 mod count;
 mod families;
