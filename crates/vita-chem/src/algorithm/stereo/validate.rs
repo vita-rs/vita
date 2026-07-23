@@ -5,7 +5,7 @@ use vita_core::SiteId;
 use super::stereocenters;
 use crate::{BondId, HasBondOrders, HasStereoConfigurations, StereoKind, StereoLocus};
 
-/// The disagreements between a molecule's stereocentres and its declared
+/// The disagreements between a molecule's stereocenters and its declared
 /// configurations.
 ///
 /// A stereogenic locus with no configuration is *unspecified*; a configuration at a
@@ -50,19 +50,19 @@ impl StereoConsistency {
         self.overspecified.iter().copied()
     }
 
-    /// Returns `true` if every stereocentre is specified and no configuration is
+    /// Returns `true` if every stereocenter is specified and no configuration is
     /// spurious.
     pub fn is_consistent(&self) -> bool {
         self.unspecified.is_empty() && self.overspecified.is_empty()
     }
 }
 
-/// Reconciles a molecule's stereocentres with the configurations it declares.
+/// Reconciles a molecule's stereocenters with the configurations it declares.
 ///
 /// Detects the stereogenic loci under the caller's coloring and `candidate` (as
 /// [`stereocenters`]), then compares them with the loci [`stereo_configurations`]
-/// speak for: a stereocentre without a configuration is reported unspecified, a
-/// configuration off a stereocentre overspecified.
+/// speak for: a stereocenter without a configuration is reported unspecified, a
+/// configuration off a stereocenter overspecified.
 ///
 /// [`stereo_configurations`]: HasStereoConfigurations::stereo_configurations
 ///

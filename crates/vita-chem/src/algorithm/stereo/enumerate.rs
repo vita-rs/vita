@@ -1,7 +1,7 @@
 use vita_core::SiteId;
 
 use super::{
-    StereoConfigurations, StereoForm, candidate_loci, form, realisable, refined_key, settle,
+    StereoConfigurations, StereoForm, candidate_loci, form, realizable, refined_key, settle,
 };
 use crate::{BondId, HasBondOrders, StereoConfiguration, StereoKind, StereoLocus};
 
@@ -11,8 +11,8 @@ use crate::{BondId, HasBondOrders, StereoConfiguration, StereoKind, StereoLocus}
 /// Each isomer is the set of [`StereoConfigurations`] it bears, over one shared
 /// constitution; bind it to the molecule with [`StereoConfigurations::bind`] to read
 /// it as a whole. Enantiomers appear as distinct isomers, a meso form once, and a
-/// pseudo-asymmetric centre — stereogenic only for a particular pairing of its
-/// neighbours' handedness — is enumerated exactly where it is realised.
+/// pseudo-asymmetric center — stereogenic only for a particular pairing of its
+/// neighbors' handedness — is enumerated exactly where it is realized.
 ///
 /// Obtain via [`stereoisomers`].
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -27,7 +27,7 @@ impl Stereoisomers {
     }
 
     /// Returns `true` if the constitution has no stereoisomers — it never does; a
-    /// molecule with no stereocentres is its own sole isomer.
+    /// molecule with no stereocenters is its own sole isomer.
     pub fn is_empty(&self) -> bool {
         self.isomers.is_empty()
     }
@@ -43,23 +43,23 @@ impl Stereoisomers {
 ///
 /// `candidate`, `site_key`, and `bond_key` are the caller's, exactly as for
 /// [`stereocenters`](super::stereocenters): the first reports which loci could bear
-/// stereochemistry and of which [`StereoKind`], the latter two colour the graph. The
+/// stereochemistry and of which [`StereoKind`], the latter two color the graph. The
 /// stereogenic units are found under the configurations assigned so far and one is
-/// given each of its realisable configurations in turn, recursively — so a
-/// pseudo-asymmetric centre surfaces once the neighbours it depends on are fixed.
+/// given each of its realizable configurations in turn, recursively — so a
+/// pseudo-asymmetric center surfaces once the neighbors it depends on are fixed.
 /// Assignments the molecule's symmetry equates, and the two halves of a meso form,
 /// collapse to one isomer by their [`StereoForm`].
 ///
 /// The molecule's own declared configurations, if any, are ignored: the enumeration
 /// speaks for the constitution alone. Every locus that can ever be stereogenic is
 /// assigned in some isomer, so the assigned loci, unioned over the isomers, are the
-/// constitution's complete potential stereocentres — pseudo-asymmetric ones included.
+/// constitution's complete potential stereocenters — pseudo-asymmetric ones included.
 ///
 /// # Complexity
 ///
 /// O(N · (V + L) · V · (V + E) · log V) time and O(N · k + V + E) space, over the
 /// molecule's `V` sites and `E` bonds, for `L` candidate loci and `N` assignments of
-/// configurations to the `k` stereocentres — up to the product of their configuration
+/// configurations to the `k` stereocenters — up to the product of their configuration
 /// counts, so exponential in `k`. Each search node runs a stereogenic detection as
 /// costly as [`stereocenters`](super::stereocenters); every assignment is held to fold
 /// symmetric and meso duplicates by their [`StereoForm`].
@@ -101,7 +101,7 @@ where
 }
 
 /// Extends a partial assignment: gives the smallest stereogenic unit it leaves open
-/// each of its realisable configurations in turn, or records the assignment once none
+/// each of its realizable configurations in turn, or records the assignment once none
 /// remains.
 fn extend<M, VK, EK>(
     mol: &M,
@@ -124,7 +124,7 @@ fn extend<M, VK, EK>(
         if assigned.iter().any(|config| config.locus() == locus) {
             return None;
         }
-        let configs = realisable(&view, locus, candidate(locus)?, &key, bond_key);
+        let configs = realizable(&view, locus, candidate(locus)?, &key, bond_key);
         (configs.len() > 1).then_some(configs)
     };
 

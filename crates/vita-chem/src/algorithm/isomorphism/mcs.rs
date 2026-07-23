@@ -15,7 +15,7 @@ pub struct CommonSubgraph {
 }
 
 impl CommonSubgraph {
-    /// Number of shared bonds — the size the common substructure maximises.
+    /// Number of shared bonds — the size the common substructure maximizes.
     pub fn len(&self) -> usize {
         self.bonds.len()
     }
@@ -64,7 +64,7 @@ impl CommonSubgraph {
 /// common scaffold a chemist compares structures by — with the atom and bond
 /// correspondence between the two. The match is the caller's to define.
 ///
-/// The substructure is connected and maximises shared bonds; molecules with no
+/// The substructure is connected and maximizes shared bonds; molecules with no
 /// compatible bond share an empty one. When several substructures are maximal, a
 /// deterministic one is returned.
 ///
@@ -183,7 +183,7 @@ where
                 .adjacency
                 .neighbors(xu)
                 .iter()
-                .find(|&&(_, neighbour)| neighbour == xv)
+                .find(|&&(_, neighbor)| neighbor == xv)
                 .map(|&(bond, _)| bond)
                 .unwrap();
             let (s, t) = (small.bonds[e], large.bonds[image]);

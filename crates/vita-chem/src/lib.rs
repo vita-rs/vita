@@ -23,8 +23,8 @@
 //! [`topology`] and [`canonical`], or within a model declared outright —
 //! Hückel's rule for [`aromaticity`], electron-domain counting for
 //! [`hybridization`], p-orbital availability for [`conjugation`]. Where
-//! determination runs out, the answer is honestly absent: a delocalised
-//! bond has no integer order until kekulised, a d-block site no fixed
+//! determination runs out, the answer is honestly absent: a delocalized
+//! bond has no integer order until kekulized, a d-block site no fixed
 //! electron count. Where only convention could choose, nothing is offered:
 //! a configuration is a coset, not a named handedness, and no tautomer is
 //! chosen as dominant. Identity is computed; values are never invented.

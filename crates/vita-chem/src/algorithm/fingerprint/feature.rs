@@ -7,11 +7,11 @@ use crate::algorithm::utils::SortedMap;
 /// A molecule's structural fingerprint: the multiset of hashed local
 /// substructure features whose overlap measures similarity.
 ///
-/// Each feature is an opaque `u64`, a stable hash of one coloured local
+/// Each feature is an opaque `u64`, a stable hash of one colored local
 /// substructure, paired with the number of times it occurs. The codes are
 /// reproducible across runs and machines and comparable across molecules by
 /// construction, so a fingerprint persists and screens against others built the
-/// same way — the same generator, parameters, and colouring, a caller contract
+/// same way — the same generator, parameters, and coloring, a caller contract
 /// the type does not police.
 ///
 /// The empty fingerprint is [`Default`]; [`AddAssign`] pools features — uniting
@@ -49,7 +49,7 @@ impl Fingerprint {
     /// features and dropping those with zero count.
     ///
     /// Reads back what [`iter`](Self::iter) writes out: the pair carries a
-    /// fingerprint through storage and returns it unchanged, no serialisation
+    /// fingerprint through storage and returns it unchanged, no serialization
     /// format required.
     ///
     /// # Complexity

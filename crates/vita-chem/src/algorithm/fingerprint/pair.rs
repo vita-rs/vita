@@ -8,7 +8,7 @@ use crate::algorithm::topology::path::distances;
 ///
 /// Each feature hashes an unordered pair of atoms with the topological distance
 /// between them — `(distance, lesser seed, greater seed)` — using only the atoms'
-/// `site_seed` colouring; bonds enter solely through the distance. A feature's
+/// `site_seed` coloring; bonds enter solely through the distance. A feature's
 /// multiplicity is the number of pairs realising it. Pairs in different connected
 /// components, or farther apart than `max_distance`, are skipped.
 ///
@@ -151,14 +151,14 @@ mod tests {
     }
 
     #[test]
-    fn the_distance_parts_pairs_of_equal_colours() {
+    fn the_distance_parts_pairs_of_equal_colors() {
         let print = fingerprint(&chain([1, 1, 1]), 2);
         assert_eq!(print.len(), 2);
         assert_eq!(print.cardinality(), 3);
     }
 
     #[test]
-    fn a_pair_is_blind_to_which_atom_bears_which_colour() {
+    fn a_pair_is_blind_to_which_atom_bears_which_color() {
         assert_eq!(
             fingerprint(&mol(&[(1, 1), (2, 2)], &[(1, 1, 2)]), 1),
             fingerprint(&mol(&[(1, 2), (2, 1)], &[(1, 1, 2)]), 1),

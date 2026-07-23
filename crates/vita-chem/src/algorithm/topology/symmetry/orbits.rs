@@ -6,11 +6,11 @@ use crate::algorithm::utils::{FxHashMap, SortedMap, labeling};
 /// A set of sites interchangeable by a symmetry of the molecule.
 ///
 /// A relabeling of the molecule onto itself carries any member of the orbit onto
-/// any other. *Which* symmetry — of the bare bond skeleton, or of the coloured
+/// any other. *Which* symmetry — of the bare bond skeleton, or of the colored
 /// molecule — is fixed by the function that produced the orbit, not by this type.
 ///
 /// Obtain from [`Orbits`] (skeleton symmetry) or from a
-/// [`Canonical`](crate::canonical::Canonical) labeling (colour-preserving
+/// [`Canonical`](crate::canonical::Canonical) labeling (color-preserving
 /// symmetry).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Orbit {

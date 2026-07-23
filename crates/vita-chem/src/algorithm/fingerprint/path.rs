@@ -12,7 +12,7 @@ use crate::{BondId, HasBonds};
 /// is the number of paths realising it. Single atoms are the concern of
 /// [`circular`](super::circular) at radius `0`, so paths run from one bond.
 ///
-/// Independent of input order: codes derive from the colouring along the
+/// Independent of input order: codes derive from the coloring along the
 /// direction-folded path, and each undirected path is emitted once, from its
 /// lower-indexed end.
 ///
@@ -216,11 +216,11 @@ mod tests {
     }
 
     #[test]
-    fn bond_colours_enter_the_path() {
+    fn bond_colors_enter_the_path() {
         let m = mol(&[(1, 1), (2, 2)], &[(1, 1, 2)]);
         let plain = path(&m, |x| m.color(x), |_| 0, 1);
-        let recoloured = path(&m, |x| m.color(x), |_| 1, 1);
-        assert_ne!(plain, recoloured);
+        let recolored = path(&m, |x| m.color(x), |_| 1, 1);
+        assert_ne!(plain, recolored);
     }
 
     #[test]

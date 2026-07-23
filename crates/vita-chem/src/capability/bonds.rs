@@ -80,7 +80,7 @@ pub trait HasBonds: HasSites {
         })
     }
 
-    /// Returns an iterator over the site identifiers of every neighbour of
+    /// Returns an iterator over the site identifiers of every neighbor of
     /// `site`.
     ///
     /// The default implementation delegates to

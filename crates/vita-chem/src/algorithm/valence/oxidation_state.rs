@@ -20,8 +20,8 @@ use crate::{BondOrder, HasBondOrders, HasFormalCharges};
 ///
 /// Returns `None` when no exact state exists:
 /// - an incident bond is [`Aromatic`](BondOrder::Aromatic), its electrons not
-///   localised into an integer order (see [`valence`](super::valence) —
-///   kekulise the ring first);
+///   localized into an integer order (see [`valence`](super::valence) —
+///   kekulize the ring first);
 /// - an incident bond reaches an element beyond lawrencium, past every
 ///   measured electronegativity;
 /// - the total leaves `i8`, describing an impossible structure.

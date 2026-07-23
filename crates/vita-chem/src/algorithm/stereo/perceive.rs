@@ -120,14 +120,14 @@ impl<M: HasBonds> HasStereoConfigurations for WithStereoConfigurations<'_, M> {
     }
 }
 
-/// Perceives the stereo configurations a molecule's coordinates realise.
+/// Perceives the stereo configurations a molecule's coordinates realize.
 ///
 /// For each locus the caller's `candidate` admits, reads a [`StereoConfiguration`]
-/// from the geometry: a centre by matching the directions to its substituents onto
+/// from the geometry: a center by matching the directions to its substituents onto
 /// the geometry's reference frame — the pairwise angles fix which substituent fills
 /// which slot, one signed volume the handedness — a double bond or allene by the
 /// sign of a single invariant across its rigid double-bond chain. A locus whose
-/// coordinates are degenerate — coplanar centre substituents, an eclipsed double
+/// coordinates are degenerate — coplanar center substituents, an eclipsed double
 /// bond — fixes no configuration and is skipped.
 ///
 /// The perceived order follows [`StereoConfiguration`]'s convention, and that
@@ -266,7 +266,7 @@ fn orientation<V: Scalar>(vectors: &[Vector3<V>], triple: (usize, usize, usize))
 }
 
 /// The first slot triple the reference vectors span with nonzero volume — the frame
-/// against which a chiral centre's handedness is read.
+/// against which a chiral center's handedness is read.
 fn noncoplanar_triple<V: Scalar>(reference: &[Vector3<V>]) -> Option<(usize, usize, usize)> {
     let n = reference.len();
     let threshold = V::from_f64(1e-3);

@@ -69,7 +69,7 @@ impl From<Isotope> for Constituent {
 /// The coarsest projection of a molecule — atoms counted by species, bonds
 /// dropped — so constitutional isomers share one composition, and the
 /// molecular formula is its rendering. Counts live over [`Constituent`]s, so
-/// natural-mixture atoms and isotopically labelled ones tally separately. The
+/// natural-mixture atoms and isotopically labeled ones tally separately. The
 /// net charge is the sum of the formal charges, on which every Lewis form of
 /// a molecule agrees.
 ///

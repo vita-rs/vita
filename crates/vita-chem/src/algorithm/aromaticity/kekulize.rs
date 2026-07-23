@@ -6,9 +6,9 @@ use crate::{BondId, BondOrder, HasBondOrders, HasFormalCharges, HasRadicalElectr
 
 /// The Kekulé structure resolved for a molecule's aromatic bonds.
 ///
-/// Maps each formerly [`Aromatic`](BondOrder::Aromatic) bond to the localised
+/// Maps each formerly [`Aromatic`](BondOrder::Aromatic) bond to the localized
 /// [`Single`](BondOrder::Single) or [`Double`](BondOrder::Double) order that
-/// stands in for it. Bonds that were already localised are absent and unchanged.
+/// stands in for it. Bonds that were already localized are absent and unchanged.
 ///
 /// Obtain via [`kekulize`].
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -27,7 +27,7 @@ impl Kekule {
         self.orders.is_empty()
     }
 
-    /// Returns the localised order resolved for `bond`.
+    /// Returns the localized order resolved for `bond`.
     ///
     /// Returns `None` if `bond` was not aromatic, or is absent from the
     /// molecule.
@@ -35,7 +35,7 @@ impl Kekule {
         self.orders.get(&bond).copied()
     }
 
-    /// Iterates the resolved bonds and the localised order each took, in
+    /// Iterates the resolved bonds and the localized order each took, in
     /// ascending bond order.
     pub fn orders(&self) -> impl Iterator<Item = (BondId, BondOrder)> + '_ {
         self.orders.iter().map(|(&bond, &order)| (bond, order))
@@ -46,7 +46,7 @@ impl Kekule {
     ///
     /// The view borrows both, so `mol` stays immutable while it is held — the
     /// structure cannot silently fall out of step with the molecule it
-    /// localises. Use it to feed a kekulised molecule to anything that reads the
+    /// localizes. Use it to feed a kekulized molecule to anything that reads the
     /// [`HasBondOrders`] capability.
     pub fn bind<'a, M: HasBondOrders>(&'a self, mol: &'a M) -> WithKekule<'a, M> {
         WithKekule { mol, kekule: self }
@@ -55,9 +55,9 @@ impl Kekule {
 
 /// A molecule viewed together with its resolved [`Kekule`] structure.
 ///
-/// Answers bond orders from the resolution — every aromatic bond localised to
+/// Answers bond orders from the resolution — every aromatic bond localized to
 /// single or double — and forwards every other core and chem capability to the
-/// molecule, so a kekulised result reads as the [`HasBondOrders`] capability its
+/// molecule, so a kekulized result reads as the [`HasBondOrders`] capability its
 /// consumers expect, at no cost beyond the two references it holds.
 ///
 /// Obtain via [`Kekule::bind`].
@@ -105,25 +105,25 @@ impl<M: HasBondOrders> HasBondOrders for WithKekule<'_, M> {
 
 /// Resolves a molecule's aromatic bonds into a Kekulé structure.
 ///
-/// Each [`Aromatic`](BondOrder::Aromatic) bond is localised to a
+/// Each [`Aromatic`](BondOrder::Aromatic) bond is localized to a
 /// [`Single`](BondOrder::Single) or [`Double`](BondOrder::Double) order so that
 /// every atom's valence is met. The choice is a matching: an atom that brings
 /// one electron to the π system — the carbon of benzene, the nitrogen of
 /// pyridine — must take exactly one double bond, while a lone-pair donor (the
-/// nitrogen of pyrrole) or an electron-deficient centre (the cation of
-/// tropylium) takes none. Pairing each demanding atom with a neighbour across a
+/// nitrogen of pyrrole) or an electron-deficient center (the cation of
+/// tropylium) takes none. Pairing each demanding atom with a neighbor across a
 /// shared double bond is a perfect matching of the subgraph they span, blossoms
-/// and all — enough to localise even the odd rings azulene and other
+/// and all — enough to localize even the odd rings azulene and other
 /// non-alternant systems carry.
 ///
 /// Returns `None` when no Kekulé structure exists: an atom that cannot be sp²
 /// aromatic, or a π system left with an odd, unpairable electron. A molecule
-/// with no aromatic bonds is already localised and resolves to an empty
+/// with no aromatic bonds is already localized and resolves to an empty
 /// [`Kekule`].
 ///
-/// Kekulisation is the inverse of [`perceive`](super::perceive())'s
-/// representation: perceive reads the aromatic system a localised structure
-/// stands for; kekulize writes a localised structure an aromatic system stands
+/// Kekulization is the inverse of [`perceive`](super::perceive())'s
+/// representation: perceive reads the aromatic system a localized structure
+/// stands for; kekulize writes a localized structure an aromatic system stands
 /// for.
 ///
 /// # Complexity
@@ -134,7 +134,7 @@ pub fn kekulize<M>(mol: &M) -> Option<Kekule>
 where
     M: HasBondOrders + HasElements + HasFormalCharges + HasRadicalElectrons,
 {
-    // Without aromatic bonds the molecule is already localised.
+    // Without aromatic bonds the molecule is already localized.
     let aromatic: Vec<BondId> = mol
         .bonds()
         .filter(|&bond| mol.bond_order(bond) == BondOrder::Aromatic)
@@ -767,7 +767,7 @@ mod tests {
     }
 
     #[test]
-    fn already_localised_molecule_resolves_to_empty() {
+    fn already_localized_molecule_resolves_to_empty() {
         assert!(kekulize(&ethane()).unwrap().is_empty());
     }
 
@@ -830,7 +830,7 @@ mod tests {
     }
 
     #[test]
-    fn azulene_kekulises_its_non_alternant_rings() {
+    fn azulene_kekulizes_its_non_alternant_rings() {
         assert_eq!(doubles(&kekulize(&azulene()).unwrap()), 5);
     }
 
@@ -840,7 +840,7 @@ mod tests {
     }
 
     #[test]
-    fn biphenyl_kekulises_each_ring_leaving_the_link() {
+    fn biphenyl_kekulizes_each_ring_leaving_the_link() {
         let kekule = kekulize(&biphenyl()).unwrap();
         assert_eq!(doubles(&kekule), 6);
         assert_eq!(kekule.order(b(13)), None);
@@ -855,7 +855,7 @@ mod tests {
     }
 
     #[test]
-    fn every_aromatic_bond_is_localised() {
+    fn every_aromatic_bond_is_localized() {
         let kekule = kekulize(&benzene()).unwrap();
         assert_eq!(kekule.orders().count(), 6);
         assert!(kekule.orders().all(|(_, order)| order != Aromatic));

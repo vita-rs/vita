@@ -59,8 +59,8 @@ impl<VK, EK> Canonical<VK, EK> {
     }
 
     /// Iterates the symmetry classes, each an [`Orbit`] of sites that an
-    /// automorphism *preserving the colouring* can interchange — the equivalent
-    /// atoms of the coloured molecule, not of the bare skeleton. Classes are
+    /// automorphism *preserving the coloring* can interchange — the equivalent
+    /// atoms of the colored molecule, not of the bare skeleton. Classes are
     /// ordered by their sites, ascending within each.
     pub fn orbits(&self) -> impl Iterator<Item = &Orbit> + '_ {
         self.classes.iter()

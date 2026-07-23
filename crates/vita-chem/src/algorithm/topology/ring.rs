@@ -2,7 +2,7 @@
 //!
 //! In ascending information: [`membership`] marks which sites and bonds lie
 //! in any ring; [`count`] gives the cycle rank μ = E − V + C without
-//! enumerating a cycle; [`rings`] materialises a minimum cycle basis, each
+//! enumerating a cycle; [`rings`] materializes a minimum cycle basis, each
 //! [`Ring`] read canonically from its smallest site; [`families`] rises
 //! above the basis ambiguity to the unique ring families every relevant
 //! cycle sorts into; [`bridgeheads`] names the atoms where a bridge joins a

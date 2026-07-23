@@ -13,8 +13,8 @@ use crate::{HasBondOrders, HasFormalCharges, HasRadicalElectrons};
 /// Returns `None` when no exact count exists:
 /// - `site` holds a d- or f-block element, whose valence-electron count is not
 ///   fixed;
-/// - an incident bond is aromatic, so the bonding electrons are not localised
-///   (see [`valence`], which the count builds on — kekulise the ring first);
+/// - an incident bond is aromatic, so the bonding electrons are not localized
+///   (see [`valence`], which the count builds on — kekulize the ring first);
 /// - the arithmetic goes negative, describing an impossible structure.
 ///
 /// # Complexity

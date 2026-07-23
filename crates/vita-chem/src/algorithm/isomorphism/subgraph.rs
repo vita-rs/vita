@@ -47,7 +47,7 @@ impl Mapping {
 /// The match is the caller's to define: `site_match` decides which pattern site
 /// may stand for which target site, and `bond_match` which pattern bond for which
 /// target bond — pass element and bond-order equality to match by constitution,
-/// loosen either to honour a query's own rules, and the library imposes no
+/// loosen either to honor a query's own rules, and the library imposes no
 /// default. Each match injects every pattern site onto a distinct target site so
 /// that every pattern bond meets a `bond_match`-ing target bond; the target may
 /// bear further bonds among the matched sites, so the match is a subgraph, not an

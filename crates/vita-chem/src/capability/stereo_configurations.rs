@@ -12,7 +12,7 @@ use crate::{HasBonds, StereoConfiguration, StereoLocus};
 /// # Contract
 ///
 /// At most one configuration is declared per [`StereoLocus`]; a unit left undefined
-/// is absent, not defaulted. Each configuration's neighbours are the substituents the
+/// is absent, not defaulted. Each configuration's neighbors are the substituents the
 /// locus arranges, ordered as its [`StereoKind`](crate::StereoKind) documents. The
 /// order the configurations are yielded in carries no meaning.
 pub trait HasStereoConfigurations: HasBonds {

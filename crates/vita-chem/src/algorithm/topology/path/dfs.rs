@@ -6,7 +6,7 @@ use crate::algorithm::utils::FxHashSet;
 /// The sites reachable from `start`, in depth-first order.
 ///
 /// Yields `start` first, then follows each branch to its end before taking the
-/// next, visiting a site's neighbours in the order they are reported. Each site
+/// next, visiting a site's neighbors in the order they are reported. Each site
 /// is yielded once; sites in other connected components never appear. The
 /// search is lazy — each step expands one site — so adapters such as
 /// [`take`](Iterator::take) halt it early.

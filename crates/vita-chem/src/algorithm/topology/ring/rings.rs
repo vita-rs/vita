@@ -13,7 +13,7 @@ use crate::{BondId, HasBonds};
 /// The sites are ordered around the ring: `sites()[i]` is joined to
 /// `sites()[i + 1]` (indices wrapping) by `bonds()[i]`. The order is canonical —
 /// it starts at the ring's smallest [`SiteId`] and proceeds toward its smaller
-/// neighbour — so the same ring always reads the same way.
+/// neighbor — so the same ring always reads the same way.
 ///
 /// Obtain via [`Rings`].
 #[derive(Clone, Debug, PartialEq, Eq)]

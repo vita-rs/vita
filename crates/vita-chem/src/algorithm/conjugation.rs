@@ -4,7 +4,7 @@
 //! multiple bond, a lone pair, an unpaired electron, or a vacancy — and
 //! [`systems`] gathers the maximal interacting networks into a
 //! [`ConjugatedSystems`] partition of [`ConjugatedSystem`]s. Orthogonality
-//! the graph itself forces is honoured — a cumulated site parts its two π
+//! the graph itself forces is honored — a cumulated site parts its two π
 //! bonds into perpendicular systems — and every Lewis form of a molecule
 //! yields the same partition.
 

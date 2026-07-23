@@ -135,7 +135,7 @@ impl<M: HasBonds> HasAromaticity for WithAromaticity<'_, M> {
 ///
 /// A cycle is aromatic when it is conjugated all the way round and holds 4*n*+2
 /// π electrons (Hückel's rule). Each ring atom donates a fixed number of
-/// electrons to the perpendicular π system, read from its localised bonding:
+/// electrons to the perpendicular π system, read from its localized bonding:
 ///
 /// - an endocyclic double bond donates one electron;
 /// - an exocyclic double bond to a more electronegative atom donates none, the
@@ -150,13 +150,13 @@ impl<M: HasBonds> HasAromaticity for WithAromaticity<'_, M> {
 ///   an aromatic system, and excludes any cycle running through it.
 ///
 /// The cycles tested are the rings of the [minimum cycle basis](rings) and, for
-/// each fused ring system, its outer perimeter — enough to recognise azulene,
+/// each fused ring system, its outer perimeter — enough to recognize azulene,
 /// whose aromaticity lives on the ten-membered rim and not on either ring.
 ///
-/// Aromaticity is a property of the localised structure: a molecule already
+/// Aromaticity is a property of the localized structure: a molecule already
 /// carrying [`Aromatic`](BondOrder::Aromatic) bonds leaves the electron count
 /// undefined and its atoms non-aromatic, just as [`valence`](crate::valence)
-/// and [`lone_pairs`] report `None`. Kekulise first, then perceive.
+/// and [`lone_pairs`] report `None`. Kekulize first, then perceive.
 ///
 /// # Complexity
 ///
@@ -252,12 +252,12 @@ where
     let mut endocyclic = 0;
     let mut exocyclic = 0;
     let mut across = None;
-    for (bond, neighbour) in mol.bonds_of(site) {
+    for (bond, neighbor) in mol.bonds_of(site) {
         let pi = match mol.bond_order(bond) {
             BondOrder::Single => 0,
             BondOrder::Double => 1,
             BondOrder::Triple => 2,
-            // Delocalised input, or a metal–metal bond: not a localised π system.
+            // Delocalized input, or a metal–metal bond: not a localized π system.
             _ => return None,
         };
         if pi > 0 {
@@ -265,7 +265,7 @@ where
                 endocyclic += pi;
             } else {
                 exocyclic += pi;
-                across = Some(neighbour);
+                across = Some(neighbor);
             }
         }
     }
@@ -280,12 +280,12 @@ where
     }
     if let Some(partner) = across {
         // The exocyclic π leaves an empty p orbital perpendicular to the ring
-        // only when it is polarised toward a more electronegative atom, drawing
-        // the pair off the ring (the carbonyl carbon of tropone); an unpolarised
-        // bond keeps the pair localised within it (the methylene of heptafulvene).
-        let polarised =
+        // only when it is polarized toward a more electronegative atom, drawing
+        // the pair off the ring (the carbonyl carbon of tropone); an unpolarized
+        // bond keeps the pair localized within it (the methylene of heptafulvene).
+        let polarized =
             electronegativity(mol.element(partner))? > electronegativity(mol.element(site))?;
-        return polarised.then_some(0);
+        return polarized.then_some(0);
     }
 
     // No π bond: the perpendicular p orbital holds a lone pair, sits empty, or
@@ -297,7 +297,7 @@ where
         return None; // an unpaired electron, not a closed-shell donor
     }
     if mol.degree(site) <= 3 {
-        return Some(0); // an empty p orbital on an electron-deficient centre
+        return Some(0); // an empty p orbital on an electron-deficient center
     }
     None // four σ bonds: saturated, with no p orbital to offer
 }
@@ -357,7 +357,7 @@ fn perimeter<M: HasBondOrders>(mol: &M, basis: &[&Ring], group: &[usize]) -> Opt
         adjacency.entry(u).or_default().push(v);
         adjacency.entry(v).or_default().push(u);
     }
-    if adjacency.values().any(|neighbours| neighbours.len() != 2) {
+    if adjacency.values().any(|neighbors| neighbors.len() != 2) {
         return None;
     }
 
@@ -535,7 +535,7 @@ mod tests {
         )
     }
 
-    fn delocalised_benzene() -> Mol {
+    fn delocalized_benzene() -> Mol {
         mol(
             &[
                 (1, "C", 0, 0),
@@ -1114,8 +1114,8 @@ mod tests {
     }
 
     #[test]
-    fn delocalised_input_is_not_perceived() {
-        assert!(perceive(&delocalised_benzene()).is_empty());
+    fn delocalized_input_is_not_perceived() {
+        assert!(perceive(&delocalized_benzene()).is_empty());
     }
 
     #[test]

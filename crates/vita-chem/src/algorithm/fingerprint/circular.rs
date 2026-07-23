@@ -10,7 +10,7 @@ use crate::{BondId, HasBonds, StereoConfiguration, StereoDescriptor};
 ///
 /// Each feature hashes a site's environment: at radius `0` the site's own
 /// `site_seed`, and at each further radius the previous feature refined by the
-/// sorted `(bond_seed, neighbour feature)` pairs around it, in the manner of
+/// sorted `(bond_seed, neighbor feature)` pairs around it, in the manner of
 /// Morgan / Weisfeiler–Leman refinement. A feature's multiplicity is the number of
 /// environments realising it — every site at radius `0`, and beyond it every
 /// distinct reach, so a radius that grows no further contributes once, not again
@@ -19,14 +19,14 @@ use crate::{BondId, HasBonds, StereoConfiguration, StereoDescriptor};
 /// The chemistry is the caller's throughout. `site_seed` and `bond_seed` decide
 /// which sites and bonds count as the same; `stereo` supplies the configuration
 /// anchored at a site, if any, which refines that site's feature by the arrangement
-/// its neighbours realise — so a centre and its mirror, alike in the graph, part
+/// its neighbors realize — so a center and its mirror, alike in the graph, part
 /// here. Pass `|_| None` to fingerprint the constitution alone. A configuration
-/// whose neighbours the refinement cannot yet tell apart contributes nothing until a
+/// whose neighbors the refinement cannot yet tell apart contributes nothing until a
 /// radius wide enough to separate them, which is what it means for the arrangement
 /// to be stereogenic at all.
 ///
 /// The result is independent of the order the molecule presents its sites and
-/// bonds. Feature codes derive from the colouring and the *sorted* neighbourhood,
+/// bonds. Feature codes derive from the coloring and the *sorted* neighborhood,
 /// never from indices; a configuration enters as its [`StereoDescriptor`], taken
 /// against that same ranking;
 /// environments that recur are pooled by the bonds they cover, keeping the
@@ -38,7 +38,7 @@ use crate::{BondId, HasBonds, StereoConfiguration, StereoDescriptor};
 /// O(R · (E · log Δ + V · log V + (V + E) · E / w) + V · R · log(V · R)) time and
 /// O(V · R · E / w) space, over the molecule's `V` sites and `E` bonds, for radius
 /// `R`, maximum degree `Δ`, and word width `w = 64` — each round ranks the sites,
-/// sorts every neighbourhood, and grows every site's covered-bond set, whose bits
+/// sorts every neighborhood, and grows every site's covered-bond set, whose bits
 /// both pool the environments and dominate the cost; the surviving codes are counted
 /// at the end.
 pub fn circular<M: HasBonds>(
@@ -82,25 +82,25 @@ pub fn circular<M: HasBonds>(
 
     for r in 1..=radius {
         // The round reads the previous codes and bondsets and writes fresh ones, so
-        // no site sees a neighbour already advanced this round — the guarantee that
+        // no site sees a neighbor already advanced this round — the guarantee that
         // the codes depend on the graph, not the iteration order.
         let mut next_codes = codes.clone();
         let mut next_bondsets = bondsets.clone();
         let ranking = ranking(&codes);
         for i in 0..n {
-            let mut neighbours: Vec<(u64, u64)> = adjacency
+            let mut neighbors: Vec<(u64, u64)> = adjacency
                 .neighbors(i)
                 .iter()
                 .map(|&(edge, j)| (bond_seeds[edge], codes[j]))
                 .collect();
-            neighbours.sort_unstable();
+            neighbors.sort_unstable();
 
-            let mut words = Vec::with_capacity(3 + 2 * neighbours.len());
+            let mut words = Vec::with_capacity(3 + 2 * neighbors.len());
             words.push(r as u64);
             words.push(codes[i]);
-            for (edge_seed, neighbour_code) in neighbours {
+            for (edge_seed, neighbor_code) in neighbors {
                 words.push(edge_seed);
-                words.push(neighbour_code);
+                words.push(neighbor_code);
             }
             if let Some(configuration) = &configurations[i] {
                 let descriptor = configuration.descriptor(|site| ranking[position[&site]]);
@@ -140,7 +140,7 @@ pub fn circular<M: HasBonds>(
 
 /// Ranks each site by its code, densely and by magnitude.
 ///
-/// A configuration ranks its neighbours to fix which arrangement they realise, and
+/// A configuration ranks its neighbors to fix which arrangement they realize, and
 /// takes their order alone. Ranking the codes densely rather than passing them as
 /// they are keeps that order faithful on a target whose `usize` is narrower than a
 /// code.
@@ -269,14 +269,14 @@ mod tests {
         )
     }
 
-    fn star(neighbours: [u64; 4]) -> Mol {
+    fn star(neighbors: [u64; 4]) -> Mol {
         mol(
             &[
                 (1, 0),
-                (2, neighbours[0]),
-                (3, neighbours[1]),
-                (4, neighbours[2]),
-                (5, neighbours[3]),
+                (2, neighbors[0]),
+                (3, neighbors[1]),
+                (4, neighbors[2]),
+                (5, neighbors[3]),
             ],
             &[(1, 1, 2), (2, 1, 3), (3, 1, 4), (4, 1, 5)],
         )
@@ -314,21 +314,21 @@ mod tests {
     }
 
     #[test]
-    fn a_radius_zero_fingerprint_counts_the_sites_by_colour() {
+    fn a_radius_zero_fingerprint_counts_the_sites_by_color() {
         let print = fingerprint(&mol(&[(1, 1), (2, 2), (3, 1)], &[(1, 1, 2), (2, 2, 3)]), 0);
         assert_eq!(print.len(), 2);
         assert_eq!(print.cardinality(), 3);
     }
 
     #[test]
-    fn sites_of_one_colour_share_a_feature() {
+    fn sites_of_one_color_share_a_feature() {
         let print = fingerprint(&mol(&[(1, 7), (2, 7)], &[]), 0);
         assert_eq!(print.len(), 1);
         assert_eq!(print.cardinality(), 2);
     }
 
     #[test]
-    fn sites_of_different_colours_have_distinct_features() {
+    fn sites_of_different_colors_have_distinct_features() {
         assert_eq!(fingerprint(&mol(&[(1, 7), (2, 8)], &[]), 0).len(), 2);
     }
 
@@ -340,11 +340,11 @@ mod tests {
     }
 
     #[test]
-    fn bond_colours_enter_the_environment() {
+    fn bond_colors_enter_the_environment() {
         let m = dumbbell();
         let plain = circular(&m, |x| m.color(x), |_| 0, |_| None, 1);
-        let recoloured = circular(&m, |x| m.color(x), |_| 1, |_| None, 1);
-        assert_ne!(plain, recoloured);
+        let recolored = circular(&m, |x| m.color(x), |_| 1, |_| None, 1);
+        assert_ne!(plain, recolored);
     }
 
     #[test]
@@ -377,7 +377,7 @@ mod tests {
     }
 
     #[test]
-    fn a_configuration_refines_its_centres_feature() {
+    fn a_configuration_refines_its_centers_feature() {
         let m = star([2, 3, 4, 5]);
         assert_ne!(configured(&m, 1, [2, 3, 4, 5], 1), fingerprint(&m, 1));
     }
@@ -392,7 +392,7 @@ mod tests {
     }
 
     #[test]
-    fn a_configuration_among_indistinguishable_neighbours_separates_nothing() {
+    fn a_configuration_among_indistinguishable_neighbors_separates_nothing() {
         let m = star([7, 7, 7, 7]);
         assert_eq!(
             configured(&m, 1, [2, 3, 4, 5], 1),
@@ -401,7 +401,7 @@ mod tests {
     }
 
     #[test]
-    fn a_configuration_parts_mirror_forms_once_the_radius_resolves_its_neighbours() {
+    fn a_configuration_parts_mirror_forms_once_the_radius_resolves_its_neighbors() {
         let m = tailed_star();
         assert_eq!(
             configured(&m, 1, [2, 3, 4, 5], 1),

@@ -1,17 +1,17 @@
 use vita_core::SiteId;
 
-use super::{candidate_loci, realisable, refined_key, settle};
+use super::{candidate_loci, realizable, refined_key, settle};
 use crate::{BondId, HasBondOrders, HasStereoConfigurations, StereoKind, StereoLocus};
 
 /// The stereogenic units of a molecule: the loci whose substituents symmetry cannot
-/// interchange, so more than one configuration is realisable.
+/// interchange, so more than one configuration is realizable.
 ///
 /// Membership is a function of the graph, the caller's coloring, and the
 /// configurations the molecule declares — the last because a pseudo-asymmetric
-/// centre is stereogenic only for a particular pairing of its neighbours' handedness.
-/// A locus survives when the substituent classes its geometry admits realise more
+/// center is stereogenic only for a particular pairing of its neighbors' handedness.
+/// A locus survives when the substituent classes its geometry admits realize more
 /// than one distinct arrangement, so repeated substituents are weighed correctly: an
-/// octahedral MA₄B₂ centre is stereogenic (cis and trans), an MA₅B one is not.
+/// octahedral MA₄B₂ center is stereogenic (cis and trans), an MA₅B one is not.
 ///
 /// Obtain via [`stereocenters`].
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -47,17 +47,17 @@ impl Stereocenters {
 /// The stereogenic loci of a molecule.
 ///
 /// `candidate` is the caller's: it reports which loci could bear stereochemistry and
-/// of which [`StereoKind`] — a centre's coordination geometry — which the library
+/// of which [`StereoKind`] — a center's coordination geometry — which the library
 /// cannot know. The library then keeps only those a symmetry does *not* neutralise:
-/// `site_key` and `bond_key` colour the graph as for [`canonicalize`](crate::canonical::canonicalize),
-/// the declared configurations refine that colouring to a fixpoint — so a centre whose
-/// stereogenicity turns on its neighbours' handedness is resolved — and a candidate
+/// `site_key` and `bond_key` color the graph as for [`canonicalize`](crate::canonical::canonicalize),
+/// the declared configurations refine that coloring to a fixpoint — so a center whose
+/// stereogenicity turns on its neighbors' handedness is resolved — and a candidate
 /// survives when, once its frame is individualised, its substituent classes admit
 /// more than one arrangement under the geometry's group.
 ///
-/// A molecule that declares no configurations is coloured by its constitution alone,
+/// A molecule that declares no configurations is colored by its constitution alone,
 /// and detection is then purely topological. The substituents are taken from the
-/// bonds present; a stereocentre bearing an implicit hydrogen must give it
+/// bonds present; a stereocenter bearing an implicit hydrogen must give it
 /// explicitly, or fold the coordination into `site_key`. A bond's or axis's
 /// substituents hang off the termini of its rigid double-bond chain, so a plain
 /// double bond and a cumulene resolve alike.
@@ -87,7 +87,7 @@ where
 
     let surviving = |locus| {
         let kind = candidate(locus)?;
-        (realisable(mol, locus, kind, &key, &bond_key).len() > 1).then_some(locus)
+        (realizable(mol, locus, kind, &key, &bond_key).len() > 1).then_some(locus)
     };
     let mut loci: Vec<StereoLocus> = candidate_loci(mol).filter_map(surviving).collect();
     loci.sort_unstable();

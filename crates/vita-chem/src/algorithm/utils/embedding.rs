@@ -18,7 +18,7 @@ const UNPLACED: usize = usize::MAX;
 /// in turn, so the first match, a count, or all of them each cost only the
 /// search they need. Pattern vertices are placed in a connected order — each
 /// after the first adjacent to one already placed — so every step draws its
-/// candidates from a placed neighbour's images, the restriction that keeps the
+/// candidates from a placed neighbor's images, the restriction that keeps the
 /// search fast on the sparse, connected patterns chemistry poses.
 ///
 /// # Complexity
@@ -131,7 +131,7 @@ impl<VC: Fn(usize, usize) -> bool, EC: Fn(usize, usize) -> bool> Iterator for Em
 
 impl<VC: Fn(usize, usize) -> bool, EC: Fn(usize, usize) -> bool> Embeddings<VC, EC> {
     /// The target vertices to try for the pattern vertex due at `depth`: the
-    /// neighbours of an already-placed neighbour's image, or — for the first
+    /// neighbors of an already-placed neighbor's image, or — for the first
     /// vertex of a component — every target vertex.
     fn candidates(&self, depth: usize) -> Vec<usize> {
         match self.parents[depth].first() {
@@ -139,14 +139,14 @@ impl<VC: Fn(usize, usize) -> bool, EC: Fn(usize, usize) -> bool> Embeddings<VC, 
                 .target
                 .neighbors(self.forward[parent])
                 .iter()
-                .map(|&(_, neighbour)| neighbour)
+                .map(|&(_, neighbor)| neighbor)
                 .collect(),
             None => (0..self.target.len()).collect(),
         }
     }
 
     /// Whether the pattern vertex due at `depth` may map to `target_vertex`:
-    /// their colours agree, and every edge back to an already-placed neighbour
+    /// their colors agree, and every edge back to an already-placed neighbor
     /// meets a compatible target edge.
     fn feasible(&self, vertex: usize, target_vertex: usize, depth: usize) -> bool {
         (self.vertex_compat)(vertex, target_vertex)
@@ -163,7 +163,7 @@ impl<VC: Fn(usize, usize) -> bool, EC: Fn(usize, usize) -> bool> Embeddings<VC, 
         self.target
             .neighbors(from)
             .iter()
-            .find(|&&(_, neighbour)| neighbour == to)
+            .find(|&&(_, neighbor)| neighbor == to)
             .map(|&(edge, _)| edge)
     }
 
@@ -176,13 +176,13 @@ impl<VC: Fn(usize, usize) -> bool, EC: Fn(usize, usize) -> bool> Embeddings<VC, 
 }
 
 /// A connected order to place the pattern vertices in, with each position's
-/// already-ordered neighbours.
+/// already-ordered neighbors.
 ///
 /// Breadth-first from the lowest-indexed vertex of each component, so every
-/// vertex after a component's first has a neighbour earlier in the order.
-/// Returns the order and, for each of its positions, the `(neighbour, edge)`
+/// vertex after a component's first has a neighbor earlier in the order.
+/// Returns the order and, for each of its positions, the `(neighbor, edge)`
 /// pairs of the vertex there that precede it — the edges a candidate must
-/// honour, the first also naming the placed image its candidates are drawn from.
+/// honor, the first also naming the placed image its candidates are drawn from.
 fn match_order(pattern: &AdjacencyList) -> (Vec<usize>, Vec<Vec<(usize, usize)>>) {
     let count = pattern.len();
     let mut order = Vec::with_capacity(count);
@@ -195,11 +195,11 @@ fn match_order(pattern: &AdjacencyList) -> (Vec<usize>, Vec<Vec<(usize, usize)>>
         order.push(root);
         let mut queue = VecDeque::from([root]);
         while let Some(vertex) = queue.pop_front() {
-            for &(_, neighbour) in pattern.neighbors(vertex) {
-                if position[neighbour] == UNPLACED {
-                    position[neighbour] = order.len();
-                    order.push(neighbour);
-                    queue.push_back(neighbour);
+            for &(_, neighbor) in pattern.neighbors(vertex) {
+                if position[neighbor] == UNPLACED {
+                    position[neighbor] = order.len();
+                    order.push(neighbor);
+                    queue.push_back(neighbor);
                 }
             }
         }
@@ -212,8 +212,8 @@ fn match_order(pattern: &AdjacencyList) -> (Vec<usize>, Vec<Vec<(usize, usize)>>
             pattern
                 .neighbors(vertex)
                 .iter()
-                .filter(|&&(_, neighbour)| position[neighbour] < depth)
-                .map(|&(edge, neighbour)| (neighbour, edge))
+                .filter(|&&(_, neighbor)| position[neighbor] < depth)
+                .map(|&(edge, neighbor)| (neighbor, edge))
                 .collect()
         })
         .collect();
@@ -283,12 +283,12 @@ mod tests {
 
     #[test]
     fn incompatible_vertices_are_rejected() {
-        let pattern_colour = [0usize];
-        let target_colour = [0usize, 1, 0];
+        let pattern_color = [0usize];
+        let target_color = [0usize, 1, 0];
         let found: Vec<Vec<usize>> = embeddings(
             &vertex(),
             triangle(),
-            |p, t| pattern_colour[p] == target_colour[t],
+            |p, t| pattern_color[p] == target_color[t],
             |_, _| true,
         )
         .collect();
@@ -297,13 +297,13 @@ mod tests {
 
     #[test]
     fn incompatible_edges_are_rejected() {
-        let pattern_colour = [0usize];
-        let target_colour = [0usize, 1, 1];
+        let pattern_color = [0usize];
+        let target_color = [0usize, 1, 1];
         let found: Vec<Vec<usize>> = embeddings(
             &edge(),
             triangle(),
             |_, _| true,
-            |pe, te| pattern_colour[pe] == target_colour[te],
+            |pe, te| pattern_color[pe] == target_color[te],
         )
         .collect();
         assert_eq!(found, vec![vec![0, 1], vec![1, 0]]);
@@ -315,7 +315,7 @@ mod tests {
     }
 
     #[test]
-    fn a_cyclic_pattern_embeds_honouring_every_edge() {
+    fn a_cyclic_pattern_embeds_honoring_every_edge() {
         assert_eq!(all(&triangle(), triangle()).len(), 6);
     }
 

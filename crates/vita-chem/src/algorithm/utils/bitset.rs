@@ -4,7 +4,7 @@
 /// In-place XOR (`^=`) is GF(2) addition — the symmetric difference, and the row
 /// operation for Gaussian elimination over GF(2) vector spaces; in-place OR (`|=`)
 /// is set union, and [`count_and`](Self::count_and) sizes the intersection without
-/// materialising it.
+/// materializing it.
 ///
 /// Obtain via [`zeros`](Self::zeros).
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]

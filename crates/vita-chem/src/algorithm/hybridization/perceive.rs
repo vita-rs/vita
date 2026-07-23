@@ -21,7 +21,7 @@ pub struct Hybridizations {
 }
 
 impl Hybridizations {
-    /// Number of labelled sites.
+    /// Number of labeled sites.
     pub fn len(&self) -> usize {
         self.labels.len()
     }
@@ -39,7 +39,7 @@ impl Hybridizations {
         self.labels.get(&site).copied()
     }
 
-    /// Iterates the labelled sites with their hybridizations, in ascending
+    /// Iterates the labeled sites with their hybridizations, in ascending
     /// site order.
     pub fn hybridizations(&self) -> impl Iterator<Item = (SiteId, Hybridization)> + '_ {
         self.labels.iter().map(|(&site, &label)| (site, label))
@@ -63,7 +63,7 @@ impl Hybridizations {
 /// A molecule viewed together with its perceived [`Hybridizations`].
 ///
 /// Answers hybridization from the perception — the catch-all
-/// [`Other`](Hybridization::Other) for unlabelled sites — and forwards every
+/// [`Other`](Hybridization::Other) for unlabeled sites — and forwards every
 /// other core and chem capability to the molecule, so a computed result reads
 /// as the [`HasHybridizations`] capability its consumers expect, at no cost
 /// beyond the two references it holds.
@@ -113,8 +113,8 @@ impl<M: HasSites> HasHybridizations for WithHybridizations<'_, M> {
 
 /// Perceives the hybridization of every site from the molecular graph.
 ///
-/// A site hybridises the orbitals its electrons keep in the σ-frame: the
-/// electron domains — bonded neighbours plus lone pairs — minus the lone
+/// A site hybridizes the orbitals its electrons keep in the σ-frame: the
+/// electron domains — bonded neighbors plus lone pairs — minus the lone
 /// pairs it donates into a conjugated system, which relocate to pure
 /// p-orbitals. An amide nitrogen counts four domains, donates one pair, and
 /// comes out [`Sp2`](Hybridization::Sp2); an azide is [`Sp`](Hybridization::Sp)
@@ -130,7 +130,7 @@ impl<M: HasSites> HasHybridizations for WithHybridizations<'_, M> {
 /// [`systems`]): it reports the idealised, maximally planar answer — square
 /// planar [`Sp2d`](Hybridization::Sp2d) is only reachable from geometry — and
 /// it is independent of the drawn resonance form, the donation exactly
-/// offsetting the shifted bonds and charges. A site is left unlabelled when
+/// offsetting the shifted bonds and charges. A site is left unlabeled when
 /// no exact count exists: a d- or f-block element, or arithmetic describing
 /// an impossible structure.
 ///
@@ -650,16 +650,16 @@ mod tests {
 
     #[test]
     fn expanded_octets_map_to_d_labels() {
-        for (centre, neighbours, label) in [
+        for (center, neighbors, label) in [
             ("P", 5, Hybridization::Sp3d),
             ("S", 6, Hybridization::Sp3d2),
             ("I", 7, Hybridization::Sp3d3),
             ("Xe", 8, Hybridization::Other),
         ] {
-            let atoms: Vec<(u32, &str, i8, u8)> = once((1, centre, 0, 0))
-                .chain((2..=neighbours + 1).map(|id| (id, "F", 0, 0)))
+            let atoms: Vec<(u32, &str, i8, u8)> = once((1, center, 0, 0))
+                .chain((2..=neighbors + 1).map(|id| (id, "F", 0, 0)))
                 .collect();
-            let bonds: Vec<(u32, u32, u32, BondOrder)> = (2..=neighbours + 1)
+            let bonds: Vec<(u32, u32, u32, BondOrder)> = (2..=neighbors + 1)
                 .map(|id| (id - 1, 1, id, BondOrder::Single))
                 .collect();
             let fluoride = molecule(&atoms, &bonds);
@@ -716,14 +716,14 @@ mod tests {
     }
 
     #[test]
-    fn a_hypervalent_centre_keeps_its_domain_count() {
+    fn a_hypervalent_center_keeps_its_domain_count() {
         let perceived = perceive(&dimethyl_sulfone());
         assert_eq!(perceived.hybridization(s(1)), Some(Hybridization::Sp3));
         assert_eq!(perceived.hybridization(s(2)), Some(Hybridization::Sp2));
     }
 
     #[test]
-    fn a_radical_or_carbenium_centre_is_sp2() {
+    fn a_radical_or_carbenium_center_is_sp2() {
         let radical = perceive(&allyl(0, 1));
         let cation = perceive(&allyl(1, 0));
         assert_eq!(radical.hybridization(s(3)), Some(Hybridization::Sp2));
@@ -742,14 +742,14 @@ mod tests {
     }
 
     #[test]
-    fn a_d_block_site_is_unlabelled() {
+    fn a_d_block_site_is_unlabeled() {
         let perceived = perceive(&iron_vinyl());
         assert_eq!(perceived.hybridization(s(1)), None);
         assert_eq!(perceived.hybridization(s(2)), Some(Hybridization::Sp2));
     }
 
     #[test]
-    fn an_overbonded_hydrogen_is_unlabelled() {
+    fn an_overbonded_hydrogen_is_unlabeled() {
         assert_eq!(perceive(&bridged_hydrogen()).hybridization(s(1)), None);
     }
 
@@ -771,7 +771,7 @@ mod tests {
     }
 
     #[test]
-    fn the_table_holds_only_the_labelled_sites() {
+    fn the_table_holds_only_the_labeled_sites() {
         let mol = iron_vinyl();
         let perceived = perceive(&mol);
         assert_eq!(perceived.len(), mol.sites().count() - 1);

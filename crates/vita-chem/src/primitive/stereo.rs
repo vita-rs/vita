@@ -2,14 +2,14 @@ use vita_core::SiteId;
 
 use crate::BondId;
 
-/// The largest neighbour count of any geometry — six, the octahedron or trigonal
+/// The largest neighbor count of any geometry — six, the octahedron or trigonal
 /// prism. The fixed-size slot buffers hold this many; unused entries stay zero.
 const MAX_SLOTS: usize = 6;
 
 /// Where a stereogenic unit is anchored in a molecule.
 ///
 /// Stereochemistry is carried by the arrangement of a site's substituents (a
-/// coordination centre), of the substituents across a bond (a double bond's two
+/// coordination center), of the substituents across a bond (a double bond's two
 /// ends), or across an axis (an allene's two termini); `StereoLocus` names that
 /// anchor. It labels a unit for reporting and reconciliation and carries no meaning
 /// of its own — the arrangement that fixes which orderings are equivalent is the
@@ -29,7 +29,7 @@ pub enum StereoLocus {
 
 impl StereoLocus {
     /// Whether this locus is the anchor `kind` lives on: a site for a coordination
-    /// centre, a bond for a double bond, an axis for an allene.
+    /// center, a bond for a double bond, an axis for an allene.
     #[inline]
     pub const fn anchors(self, kind: StereoKind) -> bool {
         matches!(
@@ -49,43 +49,43 @@ impl StereoLocus {
 }
 
 /// The kind of a stereogenic unit: the idealised local geometry whose rotation
-/// group fixes which of its neighbour orderings are equivalent.
+/// group fixes which of its neighbor orderings are equivalent.
 ///
 /// A kind is a pure data key. It selects the permutation group under which a
-/// configuration's neighbour ordering reduces, and the geometric reference against
+/// configuration's neighbor ordering reduces, and the geometric reference against
 /// which coordinates are perceived.
 ///
-/// The kinds order by neighbour count, then configuration count, then locus —
-/// a centre before a bond before an axis.
+/// The kinds order by neighbor count, then configuration count, then locus —
+/// a center before a bond before an axis.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum StereoKind {
-    /// A tetrahedral centre (4 neighbours, 2 configurations).
+    /// A tetrahedral center (4 neighbors, 2 configurations).
     Tetrahedral,
-    /// A double bond (4 neighbours, 2 configurations).
+    /// A double bond (4 neighbors, 2 configurations).
     CisTrans,
-    /// An allene axis (4 neighbours, 2 configurations).
+    /// An allene axis (4 neighbors, 2 configurations).
     Allene,
-    /// A square-planar centre (4 neighbours, 3 configurations).
+    /// A square-planar center (4 neighbors, 3 configurations).
     SquarePlanar,
-    /// A trigonal-bipyramidal centre (5 neighbours, 20 configurations).
+    /// A trigonal-bipyramidal center (5 neighbors, 20 configurations).
     TrigonalBipyramidal,
-    /// A square-pyramidal centre (5 neighbours, 30 configurations).
+    /// A square-pyramidal center (5 neighbors, 30 configurations).
     SquarePyramidal,
-    /// An octahedral centre (6 neighbours, 30 configurations).
+    /// An octahedral center (6 neighbors, 30 configurations).
     Octahedral,
-    /// A trigonal-prismatic centre (6 neighbours, 120 configurations).
+    /// A trigonal-prismatic center (6 neighbors, 120 configurations).
     TrigonalPrismatic,
 }
 
 impl StereoKind {
-    /// Returns the number of neighbour slots the geometry arranges.
+    /// Returns the number of neighbor slots the geometry arranges.
     #[inline]
     pub const fn slot_count(self) -> usize {
         geometry(self).slot_count()
     }
 
     /// Returns the number of distinct configurations the geometry admits — the
-    /// stereoisomers its slots realise when every substituent differs.
+    /// stereoisomers its slots realize when every substituent differs.
     #[inline]
     pub const fn configuration_count(self) -> usize {
         geometry(self).configuration_count()
@@ -113,20 +113,20 @@ impl StereoKind {
     }
 
     /// The number of independent ends the slots split into — one freely permuted
-    /// centre, or the two ends of a rigid edge whose substituents cannot cross.
+    /// center, or the two ends of a rigid edge whose substituents cannot cross.
     #[inline]
     pub(crate) const fn ends(self) -> usize {
         geometry(self).ends
     }
 }
 
-/// A stereodescriptor: which of a geometry's configurations a unit realises, read
+/// A stereodescriptor: which of a geometry's configurations a unit realizes, read
 /// against a ranking of its substituents.
 ///
-/// A configuration is a coset of neighbour orderings under the geometry's rotation
+/// A configuration is a coset of neighbor orderings under the geometry's rotation
 /// group — the orderings a rotation cannot tell apart. Its descriptor is that
-/// coset's canonical representative, computed from the neighbours' *ranks* rather
-/// than the neighbours themselves, so symmetry-equivalent units reduce alike and
+/// coset's canonical representative, computed from the neighbors' *ranks* rather
+/// than the neighbors themselves, so symmetry-equivalent units reduce alike and
 /// two units of the same kind are comparable. It is opaque and relative: it
 /// distinguishes a configuration from the geometry's others and from its
 /// [`mirror`](Self::mirror), but names none of them — no descriptor is "R" or "Λ".
@@ -161,16 +161,16 @@ impl StereoDescriptor {
 
 /// A stereo configuration at one [`StereoLocus`].
 ///
-/// The *order* of the neighbours fixes the configuration: it is a reference
+/// The *order* of the neighbors fixes the configuration: it is a reference
 /// arrangement, and every reordering the unit's [`StereoKind`] treats as equivalent
 /// denotes the same one. The library reads this order and never invents it — a
 /// source (a wedge, coordinates, a SMILES `@`) already committed to it, and must
 /// commit to the convention here. Equal configurations compare equal however their
-/// neighbours were listed: a rotation of the reference order is the same
+/// neighbors were listed: a rotation of the reference order is the same
 /// configuration, and [`new`](Self::new) stores every configuration in one canonical
 /// order so `==`, `Ord`, and `Hash` see through the choice.
 ///
-/// Each kind fills its slots from the neighbour list; a chiral kind's reference order
+/// Each kind fills its slots from the neighbor list; a chiral kind's reference order
 /// is additionally the one whose positions span a positive signed volume, its mirror
 /// the order the kind's reflection gives. An achiral kind — a double bond, a square
 /// plane — equates an arrangement with its mirror, so its order fixes no handedness.
@@ -208,7 +208,7 @@ impl StereoConfiguration {
     /// order the kind's contract prescribes.
     ///
     /// Returns `None` unless `locus` [anchors](StereoLocus::anchors) `kind` and its
-    /// neighbour count is the kind's [`StereoKind::slot_count`].
+    /// neighbor count is the kind's [`StereoKind::slot_count`].
     #[inline]
     pub fn new(
         locus: StereoLocus,
@@ -235,7 +235,7 @@ impl StereoConfiguration {
         self.kind
     }
 
-    /// The neighbours in canonical reference order (see the type's contract).
+    /// The neighbors in canonical reference order (see the type's contract).
     #[inline]
     pub fn neighbors(&self) -> &[SiteId] {
         &self.neighbors
@@ -258,7 +258,7 @@ impl StereoConfiguration {
 }
 
 /// The idealised local geometry a [`StereoKind`] denotes, looked up once by
-/// [`geometry`]: the proper-rotation group over its neighbour slots, the reflection
+/// [`geometry`]: the proper-rotation group over its neighbor slots, the reflection
 /// that mirrors it, the reference directions coordinates align onto, and how many
 /// independent ends its slots split into. Every fact about a kind is a function of
 /// this one datum — a further geometry is new data here, not new logic.
@@ -270,18 +270,18 @@ struct Geometry {
     /// mirror image: outside [`group`](Self::group) for a chiral geometry, inside it
     /// for an achiral one, so the mirror is well defined on cosets.
     reflection: &'static [u8],
-    /// The reference unit directions, slot by slot, a centre's coordinates align
+    /// The reference unit directions, slot by slot, a center's coordinates align
     /// onto; empty for a geometry read from a dihedral instead — a double bond or an
     /// allene.
     directions: &'static [[f64; 3]],
     /// The number of independent ends the slots split into: one freely permuted
-    /// centre, or two ends of a rigid frame — a double bond, an allene — whose
+    /// center, or two ends of a rigid frame — a double bond, an allene — whose
     /// substituents cannot cross between them.
     ends: usize,
 }
 
 impl Geometry {
-    /// The number of neighbour slots — the length of any group element.
+    /// The number of neighbor slots — the length of any group element.
     const fn slot_count(&self) -> usize {
         self.reflection.len()
     }
@@ -500,9 +500,9 @@ static TRIGONAL_PRISMATIC: Geometry = Geometry {
     ends: 1,
 };
 
-/// The lexicographically least neighbour ordering in a configuration's rotation
+/// The lexicographically least neighbor ordering in a configuration's rotation
 /// orbit — the canonical presentation, so equal configurations store equal
-/// neighbours and `==`, `Ord`, and `Hash` follow from the stored order. Only proper
+/// neighbors and `==`, `Ord`, and `Hash` follow from the stored order. Only proper
 /// rotations act, leaving intact the handedness a chiral kind fixes.
 fn normalized(kind: StereoKind, neighbors: Vec<SiteId>) -> Vec<SiteId> {
     geometry(kind)
@@ -536,11 +536,11 @@ fn apply(permutation: &[u8], order: [u8; MAX_SLOTS]) -> [u8; MAX_SLOTS] {
     image
 }
 
-/// The neighbours' ranks relabelled to their relative order — each slot the count
-/// of neighbours of strictly lower rank.
+/// The neighbors' ranks relabeled to their relative order — each slot the count
+/// of neighbors of strictly lower rank.
 ///
 /// Ties collapse: equal ranks share a slot value, so the result is a function of
-/// the ranks alone, blind to the order the neighbours were given in. Ranks a
+/// the ranks alone, blind to the order the neighbors were given in. Ranks a
 /// symmetry cannot yet tell apart therefore reduce alike, which is what lets a
 /// descriptor refine a coloring — where the ranks are the current symmetry classes,
 /// not a total labeling — without depending on that labeling.

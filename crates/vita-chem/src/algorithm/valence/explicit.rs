@@ -6,8 +6,8 @@ use crate::{BondOrder, HasBondOrders};
 ///
 /// A double bond counts two, a triple three, and so on; a site with no bonds has
 /// valence zero. Returns `None` when any incident bond is
-/// [`Aromatic`](BondOrder::Aromatic): a delocalised bond has no localised integer
-/// order, leaving the valence undefined until the ring is kekulised.
+/// [`Aromatic`](BondOrder::Aromatic): a delocalized bond has no localized integer
+/// order, leaving the valence undefined until the ring is kekulized.
 ///
 /// # Complexity
 ///
@@ -117,7 +117,7 @@ mod tests {
     }
 
     #[test]
-    fn one_aromatic_among_localised_bonds_is_undefined() {
+    fn one_aromatic_among_localized_bonds_is_undefined() {
         let mol = hub(&[BondOrder::Single, BondOrder::Aromatic, BondOrder::Double]);
         assert_eq!(valence(&mol, s(1)), None);
     }

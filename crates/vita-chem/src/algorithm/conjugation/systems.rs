@@ -51,12 +51,12 @@ impl ConjugatedSystem {
     }
 
     /// Number of electrons the contributions supply to the system: two per
-    /// π-bond and donated lone pair, one per delocalised radical, none from a
+    /// π-bond and donated lone pair, one per delocalized radical, none from a
     /// vacant orbital.
     ///
     /// Returns `None` when the system holds
-    /// [`Aromatic`](BondOrder::Aromatic) bonds, whose delocalised electrons
-    /// have no per-system count until the ring is kekulised.
+    /// [`Aromatic`](BondOrder::Aromatic) bonds, whose delocalized electrons
+    /// have no per-system count until the ring is kekulized.
     pub fn pi_electrons(&self) -> Option<u32> {
         self.electrons
     }
@@ -150,25 +150,25 @@ impl ConjugatedSystems {
 /// and vacancies extend a π-system, never one another — and every maximal
 /// interacting set of two or more contributions is a system. One contribution
 /// alone — an isolated double bond, a lone pair beside a saturated
-/// neighbour — conjugates nothing,
+/// neighbor — conjugates nothing,
 /// σ-electrons themselves never participate (hyperconjugation is a separate
 /// phenomenon), and a site whose arithmetic exceeds its orbitals — hypervalent
 /// sulfur or phosphorus, say — neither contributes nor lets conjugation
 /// cross. d- and f-block sites carry no fixed valence-electron count and
 /// never participate.
 ///
-/// Orthogonality forced by the graph itself is honoured: a cumulated sp
-/// centre parts its two π-bonds into perpendicular networks — an even
+/// Orthogonality forced by the graph itself is honored: a cumulated sp
+/// center parts its two π-bonds into perpendicular networks — an even
 /// cumulene's ends stay insulated, an odd cumulene's conjugate — and a triple
 /// bond runs one network per plane, so a site or bond can lie in two systems
 /// at once. Everything else is taken maximally planar: the perception reports
 /// what idealised geometry admits, leaving the overlap any one conformer
-/// realises to geometric analysis; a cumulated cycle admitting no consistent
+/// realizes to geometric analysis; a cumulated cycle admitting no consistent
 /// alternation collapses into a single system.
 ///
 /// [`Aromatic`](BondOrder::Aromatic) bonds join their ring as one
-/// declared-delocalised block — aromatic implies conjugated — whose electron
-/// count stays indeterminate until kekulised (see
+/// declared-delocalized block — aromatic implies conjugated — whose electron
+/// count stays indeterminate until kekulized (see
 /// [`ConjugatedSystem::pi_electrons`]).
 ///
 /// # Complexity
@@ -283,7 +283,7 @@ pub fn systems<M: HasBondOrders + HasElements + HasFormalCharges + HasRadicalEle
     }
 
     // Rigid clusters: units sharing a site sit on perpendicular planes, so
-    // 2-colour each cluster; a cluster its cycle leaves uncolourable is
+    // 2-color each cluster; a cluster its cycle leaves uncolorable is
     // geometrically frustrated and collapses into one channel.
     let mut adjacent: Vec<Vec<usize>> = vec![Vec::new(); units.len()];
     for host in &hosted {
@@ -359,8 +359,8 @@ pub fn systems<M: HasBondOrders + HasElements + HasFormalCharges + HasRadicalEle
         }
     };
 
-    // Units of one cluster and colour share a channel; frustration merges
-    // both colours.
+    // Units of one cluster and color share a channel; frustration merges
+    // both colors.
     let mut leaders: FxHashMap<(usize, u8), usize> = FxHashMap::default();
     for unit in 0..units.len() {
         let key = (
@@ -396,7 +396,7 @@ pub fn systems<M: HasBondOrders + HasElements + HasFormalCharges + HasRadicalEle
         }
     }
 
-    // Slot attachment: a pure donor offers its slots to the neighbouring
+    // Slot attachment: a pure donor offers its slots to the neighboring
     // planes in order; the leftover slot of a π-bearing terminus reaches only
     // the plane perpendicular to its own π-bond.
     let mut slot_targets: Vec<[Vec<usize>; 2]> = (0..n).map(|_| Default::default()).collect();
@@ -441,7 +441,7 @@ pub fn systems<M: HasBondOrders + HasElements + HasFormalCharges + HasRadicalEle
     }
 
     // Gather channels, keep those with at least two contributions, and
-    // materialise canonically ordered systems.
+    // materialize canonically ordered systems.
     let mut bucket_index: FxHashMap<usize, usize> = FxHashMap::default();
     let mut buckets: Vec<Bucket> = Vec::new();
     let mut bucket = |root: usize, buckets: &mut Vec<Bucket>| -> usize {
@@ -562,7 +562,7 @@ type Bucket = (u32, Vec<usize>, Option<u32>, Vec<usize>);
 type Channel = (Vec<usize>, Option<u32>, Vec<(usize, u32)>);
 
 /// Bonding orbitals an order engages at each end beyond its σ — π, δ, and φ
-/// components alike; `None` for the delocalised aromatic order.
+/// components alike; `None` for the delocalized aromatic order.
 fn beyond_sigma(order: BondOrder) -> Option<u32> {
     match order {
         BondOrder::Single => Some(0),
@@ -1681,7 +1681,7 @@ mod tests {
     }
 
     #[test]
-    fn conjugation_does_not_cross_a_hypervalent_centre() {
+    fn conjugation_does_not_cross_a_hypervalent_center() {
         assert!(systems(&dimethyl_sulfone()).is_empty());
     }
 
