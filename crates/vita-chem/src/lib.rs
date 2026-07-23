@@ -2,6 +2,8 @@ mod algorithm;
 mod capability;
 mod primitive;
 
+pub mod prelude;
+
 pub use primitive::{
     BondId, BondOrder, Hybridization, StereoConfiguration, StereoDescriptor, StereoKind,
     StereoLocus,
