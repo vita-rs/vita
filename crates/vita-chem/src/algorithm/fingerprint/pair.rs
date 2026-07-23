@@ -31,12 +31,12 @@ pub fn pair<M: HasBonds>(
     let mut codes: Vec<u64> = Vec::new();
     for i in 0..sites.len() {
         for j in (i + 1)..sites.len() {
-            if let Some(distance) = matrix.get(sites[i], sites[j])
-                && (1..=max_distance).contains(&distance)
-            {
-                let lesser = seeds[i].min(seeds[j]);
-                let greater = seeds[i].max(seeds[j]);
-                codes.push(combine([distance as u64, lesser, greater]));
+            if let Some(distance) = matrix.get(sites[i], sites[j]) {
+                if (1..=max_distance).contains(&distance) {
+                    let lesser = seeds[i].min(seeds[j]);
+                    let greater = seeds[i].max(seeds[j]);
+                    codes.push(combine([distance as u64, lesser, greater]));
+                }
             }
         }
     }

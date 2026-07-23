@@ -319,10 +319,10 @@ pub fn systems<M: HasBondOrders + HasElements + HasFormalCharges + HasRadicalEle
     // Order each pair of hosted units principal plane first, so junctions and
     // slots meet the two planes of both sides in matching order.
     for host in &mut hosted {
-        if let [Some(a), Some(b)] = *host
-            && color[a] > color[b]
-        {
-            host.swap(0, 1);
+        if let [Some(a), Some(b)] = *host {
+            if color[a] > color[b] {
+                host.swap(0, 1);
+            }
         }
     }
 
@@ -411,10 +411,10 @@ pub fn systems<M: HasBondOrders + HasElements + HasFormalCharges + HasRadicalEle
             let reachable = presence(to);
             if hosted[from][0].is_none() {
                 for (k, target) in reachable.into_iter().enumerate() {
-                    if slots[from][k].is_some()
-                        && let Some(node) = target
-                    {
-                        slot_targets[from][k].push(node);
+                    if let Some(node) = target {
+                        if slots[from][k].is_some() {
+                            slot_targets[from][k].push(node);
+                        }
                     }
                 }
             } else {
