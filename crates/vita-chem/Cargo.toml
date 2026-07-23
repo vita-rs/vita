@@ -1,8 +1,14 @@
 [package]
 name = "vita-chem"
 version = "0.0.0"
-description = ""
-keywords = []
+description = "Cheminformatics algorithms for atomistic and molecular structure."
+keywords = [
+    "atomistic",
+    "molecular",
+    "cheminformatics",
+    "chemistry",
+    "fingerprint",
+]
 categories = ["science", "science::computational-chemistry"]
 readme = "README.md"
 edition.workspace = true
