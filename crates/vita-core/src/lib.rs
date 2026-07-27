@@ -33,7 +33,7 @@ pub mod units;
 
 pub mod prelude;
 
-pub use primitive::{Element, Isotope, Lattice, Scalar, SiteId};
+pub use primitive::{Element, Isotope, Lattice, ReciprocalLattice, Scalar, SiteId};
 
 pub use capability::{
     HasAccelerations, HasElements, HasIsotopes, HasLattice, HasMasses, HasNetCharge, HasPositions,
