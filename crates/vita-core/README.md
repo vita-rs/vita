@@ -11,7 +11,7 @@
 | **primitives**     | `Element`, `Isotope`, `SiteId`, … — what is at each site                                |
 | **linear algebra** | `Scalar`, `Point3`, `Vector3`, `Matrix3` — abstract 3‑D math                            |
 | **capability**     | `HasSites`, `HasPositions`, `HasElements`, … — questions a system can answer            |
-| **dimensions**     | 20 physical dimension modules, each with a `Quantity<V, U>` newtype — no unit confusion |
+| **dimensions**     | 23 physical dimension modules, each with a `Quantity<V, U>` newtype — no unit confusion |
 
 A system is never a concrete type in this crate. Everything is a trait bound — code declares the capabilities it needs and stays blind to the storage behind them:
 
