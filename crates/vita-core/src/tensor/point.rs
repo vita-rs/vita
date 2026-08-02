@@ -1,9 +1,13 @@
-use core::ops::{Add, AddAssign, Index, IndexMut, Mul, Sub, SubAssign};
+use core::ops::{Add, AddAssign, Index, IndexMut, Sub, SubAssign};
 
 use super::Vector3;
-use crate::Scalar;
+use crate::{Quantity, Scalar};
 
 /// A point with three coordinates `x`, `y`, and `z`.
+///
+/// A point is a location, not a displacement: it translates by a [`Vector3`]
+/// and subtracts from another point, but it does not scale or negate.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct Point3<T> {
     /// The first coordinate.
     pub x: T,
@@ -11,36 +15,6 @@ pub struct Point3<T> {
     pub y: T,
     /// The third coordinate.
     pub z: T,
-}
-
-impl<T: ::core::marker::Copy> ::core::marker::Copy for Point3<T> {}
-
-impl<T: ::core::clone::Clone> ::core::clone::Clone for Point3<T> {
-    #[inline]
-    fn clone(&self) -> Self {
-        Self {
-            x: self.x.clone(),
-            y: self.y.clone(),
-            z: self.z.clone(),
-        }
-    }
-}
-
-impl<T: ::core::fmt::Debug> ::core::fmt::Debug for Point3<T> {
-    fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
-        f.debug_struct("Point3")
-            .field("x", &self.x)
-            .field("y", &self.y)
-            .field("z", &self.z)
-            .finish()
-    }
-}
-
-impl<T: ::core::cmp::PartialEq> ::core::cmp::PartialEq for Point3<T> {
-    #[inline]
-    fn eq(&self, other: &Self) -> bool {
-        self.x == other.x && self.y == other.y && self.z == other.z
-    }
 }
 
 impl<T> Point3<T> {
@@ -194,18 +168,6 @@ impl<T> IndexMut<usize> for Point3<T> {
     }
 }
 
-impl<T: Default> Default for Point3<T> {
-    /// Returns the origin.
-    #[inline]
-    fn default() -> Self {
-        Self {
-            x: T::default(),
-            y: T::default(),
-            z: T::default(),
-        }
-    }
-}
-
 impl<T: Add<Output = T>> Add<Vector3<T>> for Point3<T> {
     type Output = Self;
     /// Translates the point by the displacement `rhs`.
@@ -251,42 +213,14 @@ impl<T: Sub<Output = T>> Sub for Point3<T> {
     }
 }
 
-impl<T: Add<Output = T> + Sub<Output = T> + Copy> Point3<T> {
-    /// Linearly interpolates from `self` toward `rhs` by the factor `t`.
-    ///
-    /// `t == 0` yields `self`, `t == 1` yields `rhs`.
-    #[inline]
-    pub fn lerp<S: Scalar>(self, rhs: Self, t: S) -> Self
-    where
-        T: Mul<S, Output = T>,
-    {
-        self + (rhs - self) * t
-    }
-}
-
-impl<V: Scalar> Point3<V> {
+impl<Q: Quantity> Point3<Q> {
     /// The origin, `(0, 0, 0)`.
-    pub const ORIGIN: Self = Self::new(V::ZERO, V::ZERO, V::ZERO);
-
-    /// Returns the squared Euclidean distance between `self` and `rhs`.
-    ///
-    /// Cheaper than [`distance`][Self::distance] and sufficient whenever only
-    /// relative distances are compared.
-    #[inline]
-    pub fn distance_squared(self, rhs: Self) -> V {
-        (self - rhs).norm_squared()
-    }
+    pub const ORIGIN: Self = Self::new(Q::ZERO, Q::ZERO, Q::ZERO);
 
     /// Returns the Euclidean distance between `self` and `rhs`.
     #[inline]
-    pub fn distance(self, rhs: Self) -> V {
+    pub fn distance(self, rhs: Self) -> Q {
         (self - rhs).norm()
-    }
-
-    /// Returns the midpoint of the segment between `self` and `rhs`.
-    #[inline]
-    pub fn midpoint(self, rhs: Self) -> Self {
-        self + (rhs - self) * V::from_f64(0.5)
     }
 
     /// Returns the centroid (arithmetic mean) of `points`, or the
@@ -296,26 +230,47 @@ impl<V: Scalar> Point3<V> {
         if points.is_empty() {
             return Self::ORIGIN;
         }
-        let mut sum = Vector3::<V>::ZERO;
-        for p in points {
-            sum += p.to_vector();
+        let mut sum = Vector3::<Q>::ZERO;
+        for point in points {
+            sum += point.to_vector();
         }
-        Self::from_vector(sum / V::from_f64(points.len() as f64))
+        Self::from_vector(sum / Q::Value::from_f64(points.len() as f64))
     }
 
-    /// Returns the component-wise minimum of `self` and `rhs`.
+    /// Linearly interpolates from `self` toward `rhs` by the dimensionless
+    /// factor `t`.
+    ///
+    /// `t == 0` yields `self`, `t == 1` yields `rhs`.
     #[inline]
-    pub fn min(self, rhs: Self) -> Self {
-        Self::new(self.x.min(rhs.x), self.y.min(rhs.y), self.z.min(rhs.z))
+    pub fn lerp(self, rhs: Self, t: Q::Value) -> Self {
+        self + (rhs - self) * t
     }
 
-    /// Returns the component-wise maximum of `self` and `rhs`.
+    /// Returns the coordinate-wise absolute value.
     #[inline]
-    pub fn max(self, rhs: Self) -> Self {
-        Self::new(self.x.max(rhs.x), self.y.max(rhs.y), self.z.max(rhs.z))
+    pub fn abs(self) -> Self {
+        self.map(Quantity::abs)
     }
 
-    /// Restricts every coordinate to the interval `[min, max]`, confining the
+    /// Returns the coordinate-wise minimum of `self` and `other`, ignoring
+    /// NaN.
+    ///
+    /// Where one of the two is NaN, the other is taken.
+    #[inline]
+    pub fn min(self, other: Self) -> Self {
+        self.zip_map(other, Quantity::min)
+    }
+
+    /// Returns the coordinate-wise maximum of `self` and `other`, ignoring
+    /// NaN.
+    ///
+    /// Where one of the two is NaN, the other is taken.
+    #[inline]
+    pub fn max(self, other: Self) -> Self {
+        self.zip_map(other, Quantity::max)
+    }
+
+    /// Restricts every coordinate to the interval `[lo, hi]`, confining the
     /// point to an axis-aligned bounding box.
     ///
     /// # Panics
@@ -323,62 +278,115 @@ impl<V: Scalar> Point3<V> {
     /// Panics if any coordinate of `min` exceeds the corresponding coordinate
     /// of `max`.
     #[inline]
-    pub fn clamp(self, min: Self, max: Self) -> Self {
+    pub fn clamp(self, lo: Self, hi: Self) -> Self {
         Self::new(
-            self.x.clamp(min.x, max.x),
-            self.y.clamp(min.y, max.y),
-            self.z.clamp(min.z, max.z),
+            self.x.clamp(lo.x, hi.x),
+            self.y.clamp(lo.y, hi.y),
+            self.z.clamp(lo.z, hi.z),
         )
     }
 
-    /// Returns the component-wise floor (largest integer not exceeding each
+    /// Returns the midpoint of the segment between `self` and `other`.
+    #[inline]
+    pub fn midpoint(self, other: Self) -> Self {
+        self.zip_map(other, Quantity::midpoint)
+    }
+
+    /// Returns the smallest of the three coordinates.
+    #[inline]
+    pub fn min_element(self) -> Q {
+        self.x.min(self.y).min(self.z)
+    }
+
+    /// Returns the largest of the three coordinates.
+    #[inline]
+    pub fn max_element(self) -> Q {
+        self.x.max(self.y).max(self.z)
+    }
+
+    /// Returns the coordinate-wise sign, each `1.0`, `-1.0`, or NaN.
+    #[inline]
+    pub fn signum(self) -> Point3<Q::Value> {
+        self.map(Quantity::signum)
+    }
+
+    /// Returns a point with the magnitudes of `self` and the coordinate-wise
+    /// signs of `sign`.
+    #[inline]
+    pub fn copysign(self, sign: Self) -> Self {
+        self.zip_map(sign, Quantity::copysign)
+    }
+
+    /// Returns the coordinate-wise floor (largest integer not exceeding each
     /// coordinate).
     #[inline]
     pub fn floor(self) -> Self {
-        Self::new(self.x.floor(), self.y.floor(), self.z.floor())
+        self.map(Quantity::floor)
     }
 
-    /// Returns the component-wise ceiling (smallest integer not less than each
+    /// Returns the coordinate-wise ceiling (smallest integer not less than each
     /// coordinate).
     #[inline]
     pub fn ceil(self) -> Self {
-        Self::new(self.x.ceil(), self.y.ceil(), self.z.ceil())
+        self.map(Quantity::ceil)
     }
 
-    /// Returns the component-wise nearest integer, rounding halves away from
+    /// Returns the coordinate-wise nearest integer, rounding halves away from
     /// zero.
     #[inline]
     pub fn round(self) -> Self {
-        Self::new(self.x.round(), self.y.round(), self.z.round())
+        self.map(Quantity::round)
     }
 
-    /// Returns the component-wise nearest integer, rounding halves to even.
+    /// Returns the coordinate-wise nearest integer, rounding halves to even.
     #[inline]
     pub fn round_ties_even(self) -> Self {
-        Self::new(
-            self.x.round_ties_even(),
-            self.y.round_ties_even(),
-            self.z.round_ties_even(),
-        )
+        self.map(Quantity::round_ties_even)
     }
 
-    /// Returns the component-wise truncation toward zero.
+    /// Returns the coordinate-wise truncation toward zero.
     #[inline]
     pub fn trunc(self) -> Self {
-        Self::new(self.x.trunc(), self.y.trunc(), self.z.trunc())
+        self.map(Quantity::trunc)
     }
 
-    /// Returns the component-wise fractional part, i.e. the position of
+    /// Returns the coordinate-wise fractional part, i.e. the position of
     /// `self` within the unit-grid cell it occupies.
     #[inline]
     pub fn fract(self) -> Self {
-        Self::new(self.x.fract(), self.y.fract(), self.z.fract())
+        self.map(Quantity::fract)
     }
 
-    /// Returns `true` if every coordinate is finite.
+    /// Returns the coordinate-wise Euclidean quotient against `rhs`.
     #[inline]
-    pub fn is_finite(self) -> bool {
-        self.x.is_finite() && self.y.is_finite() && self.z.is_finite()
+    pub fn div_euclid(self, rhs: Self) -> Point3<Q::Value> {
+        self.zip_map(rhs, Quantity::div_euclid)
+    }
+
+    /// Returns the coordinate-wise least nonnegative remainder against `rhs`.
+    #[inline]
+    pub fn rem_euclid(self, rhs: Self) -> Self {
+        self.zip_map(rhs, Quantity::rem_euclid)
+    }
+
+    /// Returns the coordinate-wise fused multiply-add `self * a + b`, each computed with a
+    /// single rounding error.
+    #[inline]
+    pub fn mul_add(self, a: Q::Value, b: Self) -> Self {
+        self.zip_map(b, |factor, addend| factor.mul_add(a, addend))
+    }
+
+    /// Returns the coordinate-wise hypotenuse of `self` and `other`, each computed without
+    /// unnecessary overflow or underflow.
+    #[inline]
+    pub fn hypot(self, other: Self) -> Self {
+        self.zip_map(other, Quantity::hypot)
+    }
+
+    /// Returns `true` if any coordinate is NaN.
+    #[inline]
+    pub fn is_nan(self) -> bool {
+        self.x.is_nan() || self.y.is_nan() || self.z.is_nan()
     }
 
     /// Returns `true` if any coordinate is positive or negative infinity.
@@ -387,10 +395,34 @@ impl<V: Scalar> Point3<V> {
         self.x.is_infinite() || self.y.is_infinite() || self.z.is_infinite()
     }
 
-    /// Returns `true` if any coordinate is `NaN`.
+    /// Returns `true` if every coordinate is finite.
     #[inline]
-    pub fn is_nan(self) -> bool {
-        self.x.is_nan() || self.y.is_nan() || self.z.is_nan()
+    pub fn is_finite(self) -> bool {
+        self.x.is_finite() && self.y.is_finite() && self.z.is_finite()
+    }
+
+    /// Returns `true` if every coordinate is neither zero, subnormal, infinite,
+    /// nor NaN.
+    #[inline]
+    pub fn is_normal(self) -> bool {
+        self.x.is_normal() && self.y.is_normal() && self.z.is_normal()
+    }
+
+    /// Returns `true` if any coordinate is subnormal.
+    #[inline]
+    pub fn is_subnormal(self) -> bool {
+        self.x.is_subnormal() || self.y.is_subnormal() || self.z.is_subnormal()
+    }
+}
+
+impl<V: Scalar> Point3<V> {
+    /// Returns the squared Euclidean distance between `self` and `rhs`.
+    ///
+    /// Cheaper than [`distance`][Self::distance] and sufficient whenever only
+    /// relative distances are compared.
+    #[inline]
+    pub fn distance_squared(self, rhs: Self) -> V {
+        (self - rhs).norm_squared()
     }
 }
 
@@ -398,183 +430,24 @@ impl<V: Scalar> Point3<V> {
 mod tests {
     use super::*;
 
-    #[test]
-    fn new_sets_the_three_coordinates() {
-        let p = Point3::new(1.0, 2.0, 3.0);
-        assert_eq!(p.x, 1.0);
-        assert_eq!(p.y, 2.0);
-        assert_eq!(p.z, 3.0);
+    use crate::units::length::{Angstrom, Length};
+
+    const TOL: f64 = 1e-12;
+
+    fn close(a: f64, b: f64) -> bool {
+        (a - b).abs() <= TOL
     }
 
-    #[test]
-    fn splat_repeats_one_value_across_all_coordinates() {
-        assert_eq!(Point3::splat(5.0), Point3::new(5.0, 5.0, 5.0));
+    fn points_close(a: Point3<f64>, b: Point3<f64>) -> bool {
+        close(a.x, b.x) && close(a.y, b.y) && close(a.z, b.z)
     }
 
-    #[test]
-    fn from_array_takes_coordinates_in_order() {
-        assert_eq!(
-            Point3::from_array([1.0, 2.0, 3.0]),
-            Point3::new(1.0, 2.0, 3.0)
-        );
+    fn length(value: f64) -> Length<f64, Angstrom> {
+        Length::new(value)
     }
 
-    #[test]
-    fn to_array_returns_coordinates_in_order() {
-        assert_eq!(Point3::new(1.0, 2.0, 3.0).to_array(), [1.0, 2.0, 3.0]);
-    }
-
-    #[test]
-    fn from_slice_reads_the_first_three_elements() {
-        assert_eq!(
-            Point3::from_slice(&[1.0, 2.0, 3.0, 4.0]),
-            Point3::new(1.0, 2.0, 3.0),
-        );
-    }
-
-    #[test]
-    #[should_panic]
-    fn from_slice_shorter_than_three_panics() {
-        let _ = Point3::from_slice(&[1.0_f64, 2.0]);
-    }
-
-    #[test]
-    fn with_x_replaces_only_the_x_coordinate() {
-        assert_eq!(
-            Point3::new(1.0, 2.0, 3.0).with_x(9.0),
-            Point3::new(9.0, 2.0, 3.0),
-        );
-    }
-
-    #[test]
-    fn with_y_replaces_only_the_y_coordinate() {
-        assert_eq!(
-            Point3::new(1.0, 2.0, 3.0).with_y(9.0),
-            Point3::new(1.0, 9.0, 3.0),
-        );
-    }
-
-    #[test]
-    fn with_z_replaces_only_the_z_coordinate() {
-        assert_eq!(
-            Point3::new(1.0, 2.0, 3.0).with_z(9.0),
-            Point3::new(1.0, 2.0, 9.0),
-        );
-    }
-
-    #[test]
-    fn from_vector_reinterprets_a_displacement_as_a_point() {
-        assert_eq!(
-            Point3::from_vector(Vector3::new(1.0, 2.0, 3.0)),
-            Point3::new(1.0, 2.0, 3.0),
-        );
-    }
-
-    #[test]
-    fn to_vector_returns_the_position_relative_to_the_origin() {
-        assert_eq!(
-            Point3::new(1.0, 2.0, 3.0).to_vector(),
-            Vector3::new(1.0, 2.0, 3.0),
-        );
-    }
-
-    #[test]
-    fn index_reads_the_coordinate_at_each_position() {
-        let p = Point3::new(1.0, 2.0, 3.0);
-        assert_eq!(p[0], 1.0);
-        assert_eq!(p[1], 2.0);
-        assert_eq!(p[2], 3.0);
-    }
-
-    #[test]
-    fn index_mut_writes_the_coordinate_at_each_position() {
-        let mut p = Point3::new(0.0, 0.0, 0.0);
-        p[0] = 1.0;
-        p[1] = 2.0;
-        p[2] = 3.0;
-        assert_eq!(p, Point3::new(1.0, 2.0, 3.0));
-    }
-
-    #[test]
-    #[should_panic(expected = "index out of bounds")]
-    fn index_out_of_bounds_panics() {
-        let _ = Point3::new(1.0_f64, 2.0, 3.0)[3];
-    }
-
-    #[test]
-    #[should_panic(expected = "index out of bounds")]
-    fn index_mut_out_of_bounds_panics() {
-        let mut p = Point3::new(1.0_f64, 2.0, 3.0);
-        p[3] = 0.0;
-    }
-
-    #[test]
-    fn map_applies_the_function_to_every_coordinate() {
-        assert_eq!(
-            Point3::new(1.0, 2.0, 3.0).map(|c| c * 2.0),
-            Point3::new(2.0, 4.0, 6.0),
-        );
-    }
-
-    #[test]
-    fn zip_map_combines_the_two_points_coordinate_wise() {
-        let a = Point3::new(1.0, 2.0, 3.0);
-        let b = Point3::new(4.0, 5.0, 6.0);
-        assert_eq!(a.zip_map(b, |x, y| x * y), Point3::new(4.0, 10.0, 18.0));
-    }
-
-    #[test]
-    fn adding_a_vector_translates_the_point() {
-        let p = Point3::new(1.0, 2.0, 3.0);
-        assert_eq!(
-            p + Vector3::new(10.0, 20.0, 30.0),
-            Point3::new(11.0, 22.0, 33.0),
-        );
-    }
-
-    #[test]
-    fn subtracting_a_vector_translates_the_point_in_reverse() {
-        let p = Point3::new(11.0, 22.0, 33.0);
-        assert_eq!(
-            p - Vector3::new(10.0, 20.0, 30.0),
-            Point3::new(1.0, 2.0, 3.0),
-        );
-    }
-
-    #[test]
-    fn add_assign_translates_in_place() {
-        let mut p = Point3::new(1.0, 2.0, 3.0);
-        p += Vector3::new(10.0, 20.0, 30.0);
-        assert_eq!(p, Point3::new(11.0, 22.0, 33.0));
-    }
-
-    #[test]
-    fn sub_assign_translates_in_place() {
-        let mut p = Point3::new(11.0, 22.0, 33.0);
-        p -= Vector3::new(10.0, 20.0, 30.0);
-        assert_eq!(p, Point3::new(1.0, 2.0, 3.0));
-    }
-
-    #[test]
-    fn subtracting_two_points_yields_the_displacement_between_them() {
-        let a = Point3::new(3.0, 4.0, 7.0);
-        let b = Point3::new(1.0, 1.0, 1.0);
-        assert_eq!(a - b, Vector3::new(2.0, 3.0, 6.0));
-    }
-
-    #[test]
-    fn lerp_at_one_half_returns_the_midpoint() {
-        let a = Point3::new(0.0, 0.0, 0.0);
-        let b = Point3::new(10.0, 20.0, 30.0);
-        assert_eq!(a.lerp(b, 0.5), Point3::new(5.0, 10.0, 15.0));
-    }
-
-    #[test]
-    fn lerp_at_the_endpoints_returns_each_bound() {
-        let a = Point3::new(1.0, 2.0, 3.0);
-        let b = Point3::new(4.0, 5.0, 6.0);
-        assert_eq!(a.lerp(b, 0.0), a);
-        assert_eq!(a.lerp(b, 1.0), b);
+    fn point() -> Point3<f64> {
+        Point3::new(1.0, 2.0, 3.0)
     }
 
     #[test]
@@ -583,39 +456,8 @@ mod tests {
     }
 
     #[test]
-    fn origin_has_zero_coordinates() {
+    fn the_origin_has_zero_coordinates() {
         assert_eq!(Point3::<f64>::ORIGIN, Point3::new(0.0, 0.0, 0.0));
-    }
-
-    #[test]
-    fn distance_squared_is_the_squared_separation() {
-        let a = Point3::new(1.0, 1.0, 1.0);
-        let b = Point3::new(3.0, 4.0, 7.0);
-        assert_eq!(a.distance_squared(b), 49.0);
-    }
-
-    #[test]
-    fn distance_is_the_euclidean_separation() {
-        let a = Point3::new(1.0, 1.0, 1.0);
-        let b = Point3::new(3.0, 4.0, 7.0);
-        assert_eq!(a.distance(b), 7.0);
-    }
-
-    #[test]
-    fn midpoint_is_the_average_of_the_two_points() {
-        let a = Point3::new(1.0, 2.0, 3.0);
-        let b = Point3::new(3.0, 4.0, 5.0);
-        assert_eq!(a.midpoint(b), Point3::new(2.0, 3.0, 4.0));
-    }
-
-    #[test]
-    fn centroid_averages_the_points() {
-        let points = [
-            Point3::new(1.0, 2.0, 3.0),
-            Point3::new(4.0, 5.0, 6.0),
-            Point3::new(7.0, 8.0, 9.0),
-        ];
-        assert_eq!(Point3::centroid(&points), Point3::new(4.0, 5.0, 6.0));
     }
 
     #[test]
@@ -624,172 +466,554 @@ mod tests {
     }
 
     #[test]
-    fn min_selects_the_smaller_of_each_coordinate() {
-        let a = Point3::new(1.0, 5.0, 2.0);
-        let b = Point3::new(4.0, 2.0, 3.0);
-        assert_eq!(a.min(b), Point3::new(1.0, 2.0, 2.0));
-    }
-
-    #[test]
-    fn max_selects_the_larger_of_each_coordinate() {
-        let a = Point3::new(1.0, 5.0, 2.0);
-        let b = Point3::new(4.0, 2.0, 3.0);
-        assert_eq!(a.max(b), Point3::new(4.0, 5.0, 3.0));
-    }
-
-    #[test]
-    fn clamp_confines_each_coordinate_to_the_box() {
-        let p = Point3::new(-1.0, 5.0, 2.0);
-        let lo = Point3::new(0.0, 0.0, 0.0);
-        let hi = Point3::new(3.0, 3.0, 3.0);
-        assert_eq!(p.clamp(lo, hi), Point3::new(0.0, 3.0, 2.0));
-    }
-
-    #[test]
-    #[should_panic]
-    fn clamp_with_min_above_max_panics() {
-        let _ = Point3::new(1.0_f64, 2.0, 3.0).clamp(Point3::splat(5.0), Point3::splat(0.0));
-    }
-
-    #[test]
-    fn floor_rounds_each_coordinate_down() {
-        assert_eq!(
-            Point3::new(1.5, -1.5, 2.9).floor(),
-            Point3::new(1.0, -2.0, 2.0),
-        );
-    }
-
-    #[test]
-    fn ceil_rounds_each_coordinate_up() {
-        assert_eq!(
-            Point3::new(1.1, -1.9, 2.5).ceil(),
-            Point3::new(2.0, -1.0, 3.0),
-        );
-    }
-
-    #[test]
-    fn round_rounds_halves_away_from_zero() {
-        assert_eq!(
-            Point3::new(0.5, 2.5, -0.5).round(),
-            Point3::new(1.0, 3.0, -1.0),
-        );
-    }
-
-    #[test]
-    fn round_ties_even_rounds_halves_to_even() {
-        assert_eq!(
-            Point3::new(0.5, 2.5, -1.5).round_ties_even(),
-            Point3::new(0.0, 2.0, -2.0),
-        );
-    }
-
-    #[test]
-    fn trunc_discards_each_fractional_part() {
-        assert_eq!(
-            Point3::new(1.7, -1.7, 2.2).trunc(),
-            Point3::new(1.0, -1.0, 2.0),
-        );
-    }
-
-    #[test]
-    fn fract_keeps_each_fractional_part() {
-        assert_eq!(
-            Point3::new(1.25, -1.25, 2.5).fract(),
-            Point3::new(0.25, -0.25, 0.5),
-        );
-    }
-
-    #[test]
-    fn is_finite_is_true_when_all_coordinates_are_finite() {
-        assert!(Point3::new(1.0, 2.0, 3.0).is_finite());
-    }
-
-    #[test]
-    fn is_finite_is_false_when_a_coordinate_is_infinite() {
-        assert!(!Point3::new(1.0, f64::INFINITY, 3.0).is_finite());
-    }
-
-    #[test]
-    fn is_infinite_is_true_when_a_coordinate_is_infinite() {
-        assert!(Point3::new(1.0, f64::INFINITY, 3.0).is_infinite());
-    }
-
-    #[test]
-    fn is_infinite_is_false_when_all_coordinates_are_finite() {
-        assert!(!Point3::new(1.0, 2.0, 3.0).is_infinite());
-    }
-
-    #[test]
-    fn is_nan_is_true_when_a_coordinate_is_nan() {
-        assert!(Point3::new(1.0, f64::NAN, 3.0).is_nan());
-    }
-
-    #[test]
-    fn is_nan_is_false_when_no_coordinate_is_nan() {
-        assert!(!Point3::new(1.0, 2.0, 3.0).is_nan());
-    }
-
-    #[test]
-    fn array_roundtrip_preserves_the_point() {
-        let p = Point3::new(1.0, 2.0, 3.0);
-        assert_eq!(Point3::from_array(p.to_array()), p);
-    }
-
-    #[test]
-    fn vector_roundtrip_preserves_the_point() {
-        let p = Point3::new(1.0, 2.0, 3.0);
-        assert_eq!(Point3::from_vector(p.to_vector()), p);
-    }
-
-    #[test]
-    fn the_displacement_between_points_translates_one_to_the_other() {
-        let a = Point3::new(1.0, 2.0, 3.0);
-        let b = Point3::new(4.0, 6.0, 8.0);
-        assert_eq!(a + (b - a), b);
-    }
-
-    #[test]
-    fn translating_by_a_vector_and_back_returns_the_point() {
-        let p = Point3::new(1.0, 2.0, 3.0);
-        let v = Vector3::new(10.0, 20.0, 30.0);
-        assert_eq!((p + v) - v, p);
-    }
-
-    #[test]
-    fn distance_is_symmetric() {
-        let a = Point3::new(1.0, 2.0, 3.0);
-        let b = Point3::new(4.0, 6.0, 8.0);
-        assert_eq!(a.distance(b), b.distance(a));
+    fn centroid_of_one_point_is_that_point() {
+        assert_eq!(Point3::centroid(&[point()]), point());
     }
 
     #[test]
     fn distance_from_a_point_to_itself_is_zero() {
+        assert_eq!(point().distance(point()), 0.0);
+    }
+
+    #[test]
+    fn distance_squared_from_a_point_to_itself_is_zero() {
+        assert_eq!(point().distance_squared(point()), 0.0);
+    }
+
+    #[test]
+    fn subtracting_a_point_from_itself_yields_the_zero_vector() {
+        assert_eq!(point() - point(), Vector3::ZERO);
+    }
+
+    #[test]
+    fn lerp_at_zero_yields_the_starting_point() {
+        assert_eq!(point().lerp(Point3::new(4.0, 8.0, 12.0), 0.0), point());
+    }
+
+    #[test]
+    fn lerp_at_one_yields_the_ending_point() {
+        let target = Point3::new(4.0, 8.0, 12.0);
+        assert_eq!(point().lerp(target, 1.0), target);
+    }
+
+    #[test]
+    fn new_sets_the_three_coordinates() {
         let p = Point3::new(1.0, 2.0, 3.0);
-        assert_eq!(p.distance(p), 0.0);
+        assert_eq!((p.x, p.y, p.z), (1.0, 2.0, 3.0));
+    }
+
+    #[test]
+    fn from_array_takes_coordinates_in_order() {
+        assert_eq!(Point3::from_array([1.0, 2.0, 3.0]), point());
+    }
+
+    #[test]
+    fn to_array_yields_coordinates_in_order() {
+        assert_eq!(point().to_array(), [1.0, 2.0, 3.0]);
+    }
+
+    #[test]
+    fn with_x_replaces_only_the_first_coordinate() {
+        assert_eq!(point().with_x(9.0), Point3::new(9.0, 2.0, 3.0));
+    }
+
+    #[test]
+    fn with_y_replaces_only_the_second_coordinate() {
+        assert_eq!(point().with_y(9.0), Point3::new(1.0, 9.0, 3.0));
+    }
+
+    #[test]
+    fn with_z_replaces_only_the_third_coordinate() {
+        assert_eq!(point().with_z(9.0), Point3::new(1.0, 2.0, 9.0));
+    }
+
+    #[test]
+    fn from_vector_reinterprets_a_displacement_as_a_point() {
+        assert_eq!(Point3::from_vector(Vector3::new(1.0, 2.0, 3.0)), point());
+    }
+
+    #[test]
+    fn to_vector_yields_the_position_relative_to_the_origin() {
+        assert_eq!(point().to_vector(), Vector3::new(1.0, 2.0, 3.0));
+    }
+
+    #[test]
+    fn map_applies_the_function_to_every_coordinate() {
+        assert_eq!(point().map(|c| c as i32), Point3::new(1, 2, 3));
+    }
+
+    #[test]
+    fn zip_map_combines_the_two_points_coordinate_wise() {
+        let other = Point3::new(4.0, 5.0, 6.0);
+        let combined = point().zip_map(other, |a, b| (a + b) as i32);
+        assert_eq!(combined, Point3::new(5, 7, 9));
+    }
+
+    #[test]
+    fn splat_repeats_one_value_across_all_coordinates() {
+        assert_eq!(Point3::splat(5.0), Point3::new(5.0, 5.0, 5.0));
+    }
+
+    #[test]
+    fn from_slice_takes_the_first_three_elements() {
+        assert_eq!(Point3::from_slice(&[1.0, 2.0, 3.0, 4.0]), point());
+    }
+
+    #[test]
+    fn indexing_yields_the_coordinate_at_that_position() {
+        let p = point();
+        assert_eq!((p[0], p[1], p[2]), (1.0, 2.0, 3.0));
+    }
+
+    #[test]
+    fn index_mut_replaces_the_coordinate_at_that_position() {
+        let mut p = point();
+        p[1] = 9.0;
+        assert_eq!(p, Point3::new(1.0, 9.0, 3.0));
+    }
+
+    #[test]
+    fn adding_a_vector_translates_the_point() {
+        assert_eq!(
+            point() + Vector3::new(1.0, 1.0, 1.0),
+            Point3::new(2.0, 3.0, 4.0)
+        );
+    }
+
+    #[test]
+    fn add_assign_translates_the_point_in_place() {
+        let mut p = point();
+        p += Vector3::new(1.0, 1.0, 1.0);
+        assert_eq!(p, Point3::new(2.0, 3.0, 4.0));
+    }
+
+    #[test]
+    fn subtracting_a_vector_translates_the_point_backward() {
+        assert_eq!(
+            point() - Vector3::new(1.0, 1.0, 1.0),
+            Point3::new(0.0, 1.0, 2.0)
+        );
+    }
+
+    #[test]
+    fn sub_assign_translates_the_point_in_place() {
+        let mut p = point();
+        p -= Vector3::new(1.0, 1.0, 1.0);
+        assert_eq!(p, Point3::new(0.0, 1.0, 2.0));
+    }
+
+    #[test]
+    fn subtracting_two_points_yields_the_displacement_between_them() {
+        let from = Point3::new(1.0, 1.0, 1.0);
+        assert_eq!(point() - from, Vector3::new(0.0, 1.0, 2.0));
+    }
+
+    #[test]
+    fn distance_is_the_euclidean_distance_between_the_points() {
+        assert_eq!(Point3::ORIGIN.distance(Point3::new(3.0, 4.0, 0.0)), 5.0);
+    }
+
+    #[test]
+    fn distance_squared_is_the_squared_euclidean_distance() {
+        assert_eq!(
+            Point3::ORIGIN.distance_squared(Point3::new(3.0, 4.0, 0.0)),
+            25.0
+        );
+    }
+
+    #[test]
+    fn centroid_is_the_arithmetic_mean_of_the_points() {
+        let points = [
+            Point3::new(0.0, 0.0, 0.0),
+            Point3::new(3.0, 6.0, 9.0),
+            Point3::new(6.0, 12.0, 18.0),
+        ];
+        assert_eq!(Point3::centroid(&points), Point3::new(3.0, 6.0, 9.0));
+    }
+
+    #[test]
+    fn lerp_interpolates_between_the_points() {
+        let target = Point3::new(4.0, 8.0, 12.0);
+        assert_eq!(
+            Point3::ORIGIN.lerp(target, 0.25),
+            Point3::new(1.0, 2.0, 3.0)
+        );
+    }
+
+    #[test]
+    fn abs_takes_the_magnitude_of_every_coordinate() {
+        let p = Point3::new(-1.0, 2.0, -3.0);
+        assert_eq!(p.abs(), point());
+    }
+
+    #[test]
+    fn min_takes_the_smaller_of_each_pair_of_coordinates() {
+        let other = Point3::new(4.0, 2.0, 3.0);
+        assert_eq!(Point3::new(1.0, 5.0, 3.0).min(other), point());
+    }
+
+    #[test]
+    fn max_takes_the_larger_of_each_pair_of_coordinates() {
+        let other = Point3::new(4.0, 2.0, 3.0);
+        assert_eq!(
+            Point3::new(1.0, 5.0, 3.0).max(other),
+            Point3::new(4.0, 5.0, 3.0)
+        );
+    }
+
+    #[test]
+    fn clamp_raises_a_coordinate_below_the_interval_to_the_lower_bound() {
+        let p = Point3::new(-1.0, 2.0, 3.0);
+        assert_eq!(
+            p.clamp(Point3::ORIGIN, Point3::splat(9.0)),
+            Point3::new(0.0, 2.0, 3.0)
+        );
+    }
+
+    #[test]
+    fn clamp_leaves_a_coordinate_inside_the_interval_unchanged() {
+        assert_eq!(point().clamp(Point3::ORIGIN, Point3::splat(9.0)), point());
+    }
+
+    #[test]
+    fn clamp_lowers_a_coordinate_above_the_interval_to_the_upper_bound() {
+        let p = Point3::new(1.0, 2.0, 99.0);
+        assert_eq!(
+            p.clamp(Point3::ORIGIN, Point3::splat(9.0)),
+            Point3::new(1.0, 2.0, 9.0)
+        );
+    }
+
+    #[test]
+    fn midpoint_is_halfway_between_the_points() {
+        let target = Point3::new(2.0, 4.0, 6.0);
+        assert_eq!(Point3::ORIGIN.midpoint(target), Point3::new(1.0, 2.0, 3.0));
+    }
+
+    #[test]
+    fn min_element_is_the_smallest_coordinate() {
+        assert_eq!(Point3::new(3.0, -1.0, 2.0).min_element(), -1.0);
+    }
+
+    #[test]
+    fn max_element_is_the_largest_coordinate() {
+        assert_eq!(Point3::new(3.0, -1.0, 2.0).max_element(), 3.0);
+    }
+
+    #[test]
+    fn signum_takes_the_sign_of_every_coordinate() {
+        let p = Point3::new(-2.0, 0.5, -3.0);
+        assert_eq!(p.signum(), Point3::new(-1.0, 1.0, -1.0));
+    }
+
+    #[test]
+    fn copysign_keeps_the_magnitudes_and_takes_the_signs_of_its_argument() {
+        let p = Point3::new(3.0, -4.0, 5.0);
+        let signs = Point3::new(-1.0, 1.0, -1.0);
+        assert_eq!(p.copysign(signs), Point3::new(-3.0, 4.0, -5.0));
+    }
+
+    #[test]
+    fn floor_rounds_every_coordinate_toward_negative_infinity() {
+        let p = Point3::new(-2.5, 2.5, 3.0);
+        assert_eq!(p.floor(), Point3::new(-3.0, 2.0, 3.0));
+    }
+
+    #[test]
+    fn ceil_rounds_every_coordinate_toward_positive_infinity() {
+        let p = Point3::new(-2.5, 2.5, 3.0);
+        assert_eq!(p.ceil(), Point3::new(-2.0, 3.0, 3.0));
+    }
+
+    #[test]
+    fn round_sends_a_half_away_from_zero() {
+        let p = Point3::new(2.5, 3.5, -2.5);
+        assert_eq!(p.round(), Point3::new(3.0, 4.0, -3.0));
+    }
+
+    #[test]
+    fn round_ties_even_sends_a_half_to_the_even_integer() {
+        let p = Point3::new(2.5, 3.5, -2.5);
+        assert_eq!(p.round_ties_even(), Point3::new(2.0, 4.0, -2.0));
+    }
+
+    #[test]
+    fn trunc_drops_the_fractional_part_of_every_coordinate() {
+        let p = Point3::new(-2.75, 2.75, 3.0);
+        assert_eq!(p.trunc(), Point3::new(-2.0, 2.0, 3.0));
+    }
+
+    #[test]
+    fn fract_keeps_the_fractional_part_of_every_coordinate() {
+        let p = Point3::new(-2.75, 2.75, 3.0);
+        assert_eq!(p.fract(), Point3::new(-0.75, 0.75, 0.0));
+    }
+
+    #[test]
+    fn div_euclid_is_the_euclidean_quotient_of_every_coordinate() {
+        let p = Point3::new(7.0, -7.0, 0.0);
+        assert_eq!(
+            p.div_euclid(Point3::splat(3.0)),
+            Point3::new(2.0, -3.0, 0.0)
+        );
+    }
+
+    #[test]
+    fn rem_euclid_is_nonnegative_for_a_negative_coordinate() {
+        let p = Point3::new(-1.0, 7.0, 5.0);
+        assert_eq!(p.rem_euclid(Point3::splat(3.0)), Point3::new(2.0, 1.0, 2.0));
+    }
+
+    #[test]
+    fn mul_add_scales_then_offsets_every_coordinate() {
+        let offset = Point3::new(10.0, 20.0, 30.0);
+        assert_eq!(point().mul_add(2.0, offset), Point3::new(12.0, 24.0, 36.0));
+    }
+
+    #[test]
+    fn hypot_combines_the_coordinates_pairwise() {
+        let legs = Point3::new(4.0, 0.0, 5.0);
+        let combined = Point3::new(3.0, 4.0, 12.0).hypot(legs);
+        assert!(points_close(combined, Point3::new(5.0, 4.0, 13.0)));
+    }
+
+    #[test]
+    fn is_nan_holds_when_a_coordinate_is_not_a_number() {
+        assert!(Point3::new(1.0, f64::NAN, 3.0).is_nan());
+    }
+
+    #[test]
+    fn is_infinite_holds_when_a_coordinate_is_infinite() {
+        assert!(Point3::new(1.0, f64::INFINITY, 3.0).is_infinite());
+    }
+
+    #[test]
+    fn is_finite_holds_when_every_coordinate_is_finite() {
+        assert!(point().is_finite());
+    }
+
+    #[test]
+    fn is_normal_holds_when_every_coordinate_is_normal() {
+        assert!(point().is_normal());
+    }
+
+    #[test]
+    fn is_subnormal_holds_when_a_coordinate_is_subnormal() {
+        assert!(Point3::new(1.0, f64::MIN_POSITIVE / 2.0, 3.0).is_subnormal());
+    }
+
+    #[test]
+    fn signum_of_a_length_point_is_dimensionless() {
+        let p = Point3::new(length(-2.0), length(0.5), length(-3.0));
+        assert_eq!(p.signum(), Point3::new(-1.0, 1.0, -1.0));
+    }
+
+    #[test]
+    fn div_euclid_of_length_points_is_dimensionless() {
+        let p = Point3::new(length(7.0), length(-7.0), length(0.0));
+        let divisor = Point3::splat(length(3.0));
+        assert_eq!(p.div_euclid(divisor), Point3::new(2.0, -3.0, 0.0));
+    }
+
+    #[test]
+    fn mul_add_of_length_points_takes_a_dimensionless_factor() {
+        let p = Point3::new(length(1.0), length(2.0), length(3.0));
+        let offset = Point3::new(length(10.0), length(20.0), length(30.0));
+        let expected = Point3::new(length(12.0), length(24.0), length(36.0));
+        assert_eq!(p.mul_add(2.0, offset), expected);
+    }
+
+    #[test]
+    fn hypot_of_length_points_stays_a_length() {
+        let p = Point3::new(length(3.0), length(4.0), length(12.0));
+        let legs = Point3::new(length(4.0), length(0.0), length(5.0));
+        let combined = p.hypot(legs).map(Quantity::value);
+        assert!(points_close(combined, Point3::new(5.0, 4.0, 13.0)));
+    }
+
+    #[test]
+    fn lerp_of_length_points_takes_a_dimensionless_factor() {
+        let target = Point3::new(length(2.0), length(4.0), length(6.0));
+        let expected = Point3::new(length(1.0), length(2.0), length(3.0));
+        assert_eq!(Point3::ORIGIN.lerp(target, 0.5), expected);
+    }
+
+    #[test]
+    #[should_panic(expected = "index out of bounds")]
+    fn from_slice_shorter_than_three_panics() {
+        let _ = Point3::from_slice(&[1.0_f64, 2.0]);
+    }
+
+    #[test]
+    #[should_panic(expected = "index out of bounds")]
+    fn indexing_out_of_bounds_panics() {
+        let _ = point()[3];
+    }
+
+    #[test]
+    #[should_panic(expected = "index out of bounds")]
+    fn index_mut_out_of_bounds_panics() {
+        point()[3] = 0.0;
+    }
+
+    #[test]
+    #[should_panic(expected = "min > max")]
+    fn clamp_with_an_inverted_interval_panics() {
+        let _ = point().clamp(Point3::splat(9.0), Point3::ORIGIN);
+    }
+
+    #[test]
+    fn min_ignores_a_not_a_number_coordinate() {
+        let nan = Point3::new(f64::NAN, f64::NAN, f64::NAN);
+        assert_eq!(nan.min(point()), point());
+    }
+
+    #[test]
+    fn max_ignores_a_not_a_number_coordinate() {
+        let nan = Point3::new(f64::NAN, f64::NAN, f64::NAN);
+        assert_eq!(nan.max(point()), point());
+    }
+
+    #[test]
+    fn is_nan_does_not_hold_when_no_coordinate_is_not_a_number() {
+        assert!(!point().is_nan());
+    }
+
+    #[test]
+    fn is_infinite_does_not_hold_when_every_coordinate_is_finite() {
+        assert!(!point().is_infinite());
+    }
+
+    #[test]
+    fn is_finite_does_not_hold_when_a_coordinate_is_infinite() {
+        assert!(!Point3::new(1.0, f64::INFINITY, 3.0).is_finite());
+    }
+
+    #[test]
+    fn is_normal_does_not_hold_when_a_coordinate_is_zero() {
+        assert!(!Point3::new(1.0, 0.0, 3.0).is_normal());
+    }
+
+    #[test]
+    fn is_subnormal_does_not_hold_when_every_coordinate_is_normal() {
+        assert!(!point().is_subnormal());
+    }
+
+    #[test]
+    fn from_slice_of_exactly_three_elements_yields_the_point() {
+        assert_eq!(Point3::from_slice(&[1.0, 2.0, 3.0]), point());
+    }
+
+    #[test]
+    fn floor_leaves_an_integer_coordinate_unchanged() {
+        assert_eq!(point().floor(), point());
+    }
+
+    #[test]
+    fn ceil_leaves_an_integer_coordinate_unchanged() {
+        assert_eq!(point().ceil(), point());
+    }
+
+    #[test]
+    fn fract_of_an_integer_coordinate_is_zero() {
+        assert_eq!(point().fract(), Point3::ORIGIN);
+    }
+
+    #[test]
+    fn signum_of_a_negative_zero_coordinate_is_minus_one() {
+        assert_eq!(Point3::new(-0.0, 1.0, 1.0).signum().x, -1.0);
+    }
+
+    #[test]
+    fn lerp_beyond_one_extrapolates_past_the_ending_point() {
+        let target = Point3::new(4.0, 8.0, 12.0);
+        assert_eq!(
+            Point3::ORIGIN.lerp(target, 2.0),
+            Point3::new(8.0, 16.0, 24.0)
+        );
+    }
+
+    #[test]
+    fn array_roundtrip_preserves_the_point() {
+        assert_eq!(Point3::from_array(point().to_array()), point());
+    }
+
+    #[test]
+    fn vector_roundtrip_preserves_the_point() {
+        assert_eq!(Point3::from_vector(point().to_vector()), point());
+    }
+
+    #[test]
+    fn translating_by_a_vector_and_back_returns_the_point() {
+        let displacement = Vector3::new(4.0, -5.0, 6.0);
+        assert_eq!(point() + displacement - displacement, point());
+    }
+
+    #[test]
+    fn the_displacement_between_points_translates_one_to_the_other() {
+        let other = Point3::new(4.0, -5.0, 6.0);
+        assert_eq!(point() + (other - point()), other);
+    }
+
+    #[test]
+    fn distance_is_symmetric() {
+        let other = Point3::new(4.0, -5.0, 6.0);
+        assert_eq!(point().distance(other), other.distance(point()));
+    }
+
+    #[test]
+    fn distance_squared_is_the_square_of_the_distance() {
+        let other = Point3::new(4.0, 6.0, 3.0);
+        let distance = point().distance(other);
+        assert_eq!(point().distance_squared(other), distance * distance);
     }
 
     #[test]
     fn midpoint_is_equidistant_from_both_points() {
-        let a = Point3::new(1.0, 2.0, 3.0);
-        let b = Point3::new(3.0, 4.0, 5.0);
-        let m = a.midpoint(b);
-        assert_eq!(a.distance(m), b.distance(m));
+        let other = Point3::new(4.0, 8.0, 12.0);
+        let middle = point().midpoint(other);
+        assert_eq!(point().distance(middle), other.distance(middle));
     }
 
     #[test]
-    fn equality_holds_only_when_all_coordinates_match() {
-        let p = Point3::new(1.0, 2.0, 3.0);
-        assert_eq!(p, Point3::new(1.0, 2.0, 3.0));
-        assert_ne!(p, Point3::new(9.0, 2.0, 3.0));
-        assert_ne!(p, Point3::new(1.0, 9.0, 3.0));
-        assert_ne!(p, Point3::new(1.0, 2.0, 9.0));
+    fn midpoint_agrees_with_interpolating_halfway() {
+        let other = Point3::new(4.0, 8.0, 12.0);
+        assert_eq!(point().midpoint(other), point().lerp(other, 0.5));
     }
 
     #[test]
-    fn the_operations_are_generic_over_f32() {
-        let a = Point3::new(1.0_f32, 1.0, 1.0);
-        let b = Point3::new(3.0, 4.0, 7.0);
-        assert_eq!(a.distance(b), 7.0);
-        assert_eq!(a - b, Vector3::new(-2.0, -3.0, -6.0));
+    fn centroid_is_independent_of_the_order_of_the_points() {
+        let a = Point3::new(0.0, 0.0, 0.0);
+        let b = Point3::new(2.0, 4.0, 6.0);
+        let c = Point3::new(4.0, 8.0, 12.0);
+        assert_eq!(Point3::centroid(&[a, b, c]), Point3::centroid(&[c, a, b]));
+    }
+
+    #[test]
+    fn truncating_and_the_fractional_part_reconstruct_the_point() {
+        let p = Point3::new(-2.75, 2.75, 3.0);
+        assert_eq!(p.trunc() + p.fract().to_vector(), p);
+    }
+
+    #[test]
+    fn min_of_a_point_with_itself_is_that_point() {
+        assert_eq!(point().min(point()), point());
+    }
+
+    #[test]
+    fn max_of_a_point_with_itself_is_that_point() {
+        assert_eq!(point().max(point()), point());
+    }
+
+    #[test]
+    fn clamp_agrees_with_taking_the_maximum_then_the_minimum() {
+        let (lo, hi) = (Point3::splat(1.5), Point3::splat(2.5));
+        assert_eq!(point().clamp(lo, hi), point().max(lo).min(hi));
+    }
+
+    #[test]
+    fn points_are_equal_exactly_when_all_coordinates_match() {
+        assert_eq!(point(), Point3::new(1.0, 2.0, 3.0));
+        assert_ne!(point(), Point3::new(1.0, 2.0, 4.0));
     }
 }

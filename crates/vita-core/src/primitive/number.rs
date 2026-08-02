@@ -578,6 +578,17 @@ mod tests {
     }
 
     #[test]
+    fn a_double_on_the_left_scales_a_quantity() {
+        assert_eq!(2.0 * length(2.5), length(5.0));
+    }
+
+    #[test]
+    fn a_single_on_the_left_scales_a_quantity() {
+        let single = Length::<f32, Angstrom>::new(2.5);
+        assert_eq!(2.0_f32 * single, Length::new(5.0_f32));
+    }
+
+    #[test]
     fn abs_of_a_negative_quantity_is_its_magnitude() {
         assert_eq!(length(-2.5).abs(), length(2.5));
     }

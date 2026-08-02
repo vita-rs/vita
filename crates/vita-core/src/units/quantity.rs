@@ -131,6 +131,18 @@ macro_rules! define_quantity {
             fn mul(self, rhs: V) -> Self { Self::new(self.0 * rhs) }
         }
 
+        impl<U: $UnitTrait> ::core::ops::Mul<$Qty<f32, U>> for f32 {
+            type Output = $Qty<f32, U>;
+            #[inline]
+            fn mul(self, rhs: $Qty<f32, U>) -> $Qty<f32, U> { rhs * self }
+        }
+
+        impl<U: $UnitTrait> ::core::ops::Mul<$Qty<f64, U>> for f64 {
+            type Output = $Qty<f64, U>;
+            #[inline]
+            fn mul(self, rhs: $Qty<f64, U>) -> $Qty<f64, U> { rhs * self }
+        }
+
         impl<V: $crate::Scalar, U: $UnitTrait> ::core::ops::MulAssign<V>
             for $Qty<V, U>
         {
