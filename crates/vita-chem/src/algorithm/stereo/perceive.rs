@@ -2,7 +2,7 @@ use std::cmp::Ordering;
 
 use vita_core::tensor::{Point3, Vector3};
 use vita_core::units::length::Angstrom;
-use vita_core::{HasPositions, Scalar, SiteId};
+use vita_core::{HasPositions, Quantity, Scalar, SiteId};
 
 use super::{candidate_loci, frame};
 use crate::capability::delegation::forward_capabilities;

@@ -6,12 +6,13 @@
 
 `vita-core` is a zero-dependency vocabulary for atomistic and molecular computation.
 
-| layer              | what it provides                                                                        |
-| :----------------- | :-------------------------------------------------------------------------------------- |
-| **primitives**     | `Element`, `Isotope`, `SiteId`, … — what is at each site                                |
-| **linear algebra** | `Scalar`, `Point3`, `Vector3`, `Matrix3` — abstract 3‑D math                            |
-| **capability**     | `HasSites`, `HasPositions`, `HasElements`, … — questions a system can answer            |
-| **dimensions**     | 23 physical dimension modules, each with a `Quantity<V, U>` newtype — no unit confusion |
+| layer              | what it provides                                                                   |
+| :----------------- | :--------------------------------------------------------------------------------- |
+| **primitives**     | `Element`, `Isotope`, `SiteId`, … — what is at each site                           |
+| **numerics**       | `Quantity`, `Scalar` — dimension-preserving arithmetic, and the dimensionless case |
+| **linear algebra** | `Point3`, `Vector3`, `Matrix3` — abstract 3‑D math over either                     |
+| **capability**     | `HasSites`, `HasPositions`, `HasElements`, … — questions a system can answer       |
+| **dimensions**     | 23 physical dimension modules, each a `Quantity` newtype tagged with its unit      |
 
 A system is never a concrete type in this crate. Everything is a trait bound — code declares the capabilities it needs and stays blind to the storage behind them:
 

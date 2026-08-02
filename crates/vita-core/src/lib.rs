@@ -22,8 +22,9 @@
 //! # Quantities
 //!
 //! Physical values carry their dimension and unit in the type via [`units`]; geometry uses
-//! the three-dimensional primitives in [`tensor`]. Both are generic over the [`Scalar`]
-//! element type, `f32` or `f64`.
+//! the three-dimensional primitives in [`tensor`]. [`Quantity`] names what the two share —
+//! the operations that leave a dimension unchanged — so a tensor's element may be a bare
+//! [`Scalar`] (`f32` or `f64`) or any dimensioned quantity.
 
 mod capability;
 mod primitive;
@@ -33,7 +34,7 @@ pub mod units;
 
 pub mod prelude;
 
-pub use primitive::{Element, Isotope, Lattice, ReciprocalLattice, Scalar, SiteId};
+pub use primitive::{Element, Isotope, Lattice, Quantity, ReciprocalLattice, Scalar, SiteId};
 
 pub use capability::{
     HasAccelerations, HasElements, HasIsotopes, HasLattice, HasMasses, HasNetCharge, HasPositions,

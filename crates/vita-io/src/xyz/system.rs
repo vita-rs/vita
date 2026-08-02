@@ -87,6 +87,7 @@ impl<V: Scalar> HasPositions<V> for System<V> {
 mod tests {
     use super::*;
 
+    use vita_core::Quantity;
     use vita_core::units::length::Nanometer;
 
     fn s(n: u32) -> SiteId {
