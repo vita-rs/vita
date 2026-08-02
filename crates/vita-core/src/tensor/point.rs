@@ -855,7 +855,7 @@ mod tests {
 
     #[test]
     #[should_panic(expected = "index out of bounds")]
-    fn indexing_out_of_bounds_panics() {
+    fn index_out_of_bounds_panics() {
         let _ = point()[3];
     }
 
