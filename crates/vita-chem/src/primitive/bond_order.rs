@@ -33,7 +33,7 @@ pub enum BondOrder {
 impl BondOrder {
     /// Returns the bond order as a floating-point number.
     #[inline]
-    pub fn as_f64(self) -> f64 {
+    pub fn to_f64(self) -> f64 {
         match self {
             Self::Single => 1.0,
             Self::Aromatic => 1.5,
@@ -52,16 +52,16 @@ mod tests {
 
     #[test]
     fn integer_orders_map_to_their_multiplicity() {
-        assert_eq!(BondOrder::Single.as_f64(), 1.0);
-        assert_eq!(BondOrder::Double.as_f64(), 2.0);
-        assert_eq!(BondOrder::Triple.as_f64(), 3.0);
-        assert_eq!(BondOrder::Quadruple.as_f64(), 4.0);
-        assert_eq!(BondOrder::Quintuple.as_f64(), 5.0);
-        assert_eq!(BondOrder::Hextuple.as_f64(), 6.0);
+        assert_eq!(BondOrder::Single.to_f64(), 1.0);
+        assert_eq!(BondOrder::Double.to_f64(), 2.0);
+        assert_eq!(BondOrder::Triple.to_f64(), 3.0);
+        assert_eq!(BondOrder::Quadruple.to_f64(), 4.0);
+        assert_eq!(BondOrder::Quintuple.to_f64(), 5.0);
+        assert_eq!(BondOrder::Hextuple.to_f64(), 6.0);
     }
 
     #[test]
     fn aromatic_maps_to_one_and_a_half() {
-        assert_eq!(BondOrder::Aromatic.as_f64(), 1.5);
+        assert_eq!(BondOrder::Aromatic.to_f64(), 1.5);
     }
 }
