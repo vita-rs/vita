@@ -43,7 +43,7 @@ impl<K: Ord, V> SortedMap<K, V> {
     }
 
     /// Returns `true` if `key` is present.
-    #[allow(dead_code)]
+    #[cfg(test)]
     pub fn contains_key(&self, key: &K) -> bool {
         self.entries.binary_search_by(|(k, _)| k.cmp(key)).is_ok()
     }

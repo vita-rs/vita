@@ -28,19 +28,19 @@ impl DisjointSet {
     }
 
     /// The number of elements.
-    #[allow(dead_code)]
+    #[cfg(test)]
     pub fn len(&self) -> usize {
         self.parent.len()
     }
 
     /// Returns `true` if there are no elements.
-    #[allow(dead_code)]
+    #[cfg(test)]
     pub fn is_empty(&self) -> bool {
         self.parent.is_empty()
     }
 
     /// The number of disjoint sets.
-    #[allow(dead_code)]
+    #[cfg(test)]
     pub fn set_count(&self) -> usize {
         self.sets
     }
@@ -75,7 +75,7 @@ impl DisjointSet {
     }
 
     /// Returns `true` if `a` and `b` are in the same set.
-    #[allow(dead_code)]
+    #[cfg(test)]
     pub fn connected(&mut self, a: usize, b: usize) -> bool {
         self.find(a) == self.find(b)
     }

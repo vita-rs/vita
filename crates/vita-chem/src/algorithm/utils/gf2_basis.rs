@@ -28,13 +28,13 @@ impl Gf2Basis {
     }
 
     /// The number of basis vectors — the rank of the spanned subspace.
-    #[allow(dead_code)]
+    #[cfg(test)]
     pub fn len(&self) -> usize {
         self.rank
     }
 
     /// Returns `true` if the basis holds no vectors.
-    #[allow(dead_code)]
+    #[cfg(test)]
     pub fn is_empty(&self) -> bool {
         self.rank == 0
     }
