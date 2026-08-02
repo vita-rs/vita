@@ -51,7 +51,7 @@ impl FrequencyUnit for AtomicFrequency {
 
 /// The terahertz (THz).
 ///
-/// 1 THz ≈ 33.3564095198152 cm⁻¹ (exact, c = 299792458 m s⁻¹).
+/// 1 THz ≈ 33.3564095198152 cm⁻¹ (exact, computed from c = 299 792 458 m s⁻¹).
 pub struct Terahertz;
 
 impl FrequencyUnit for Terahertz {
