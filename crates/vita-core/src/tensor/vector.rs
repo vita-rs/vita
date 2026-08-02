@@ -292,9 +292,18 @@ impl<Q: Quantity> Vector3<Q> {
     pub const ZERO: Self = Self::new(Q::ZERO, Q::ZERO, Q::ZERO);
 
     /// Returns the Euclidean norm (length) of the vector.
+    ///
+    /// The norm is representable whenever the components are, so it is computed by the
+    /// direct route only while the sum of squares stays normal, and by a pairwise
+    /// [`hypot`](Quantity::hypot) otherwise — squaring alone would halve the usable range.
     #[inline]
     pub fn norm(self) -> Q {
-        Q::from_value(self.values().norm_squared().sqrt())
+        let values = self.values();
+        let square = values.norm_squared();
+        if square.is_normal() {
+            return Q::from_value(square.sqrt());
+        }
+        Q::from_value(values.x.hypot(values.y).hypot(values.z))
     }
 
     /// Returns the unit vector along `self`, whose components carry no
@@ -331,18 +340,35 @@ impl<Q: Quantity> Vector3<Q> {
     /// `[0, π]`.
     ///
     /// The computation is numerically stable across the whole range, including
-    /// near-parallel and near-antiparallel inputs.
+    /// near-parallel and near-antiparallel inputs. An angle depends only on the two
+    /// directions, so once the products carrying it leave the representable range — which
+    /// the angle itself never does — the directions are taken first instead.
     #[inline]
     pub fn angle_between(self, rhs: Self) -> Q::Value {
         let (left, right) = (self.values(), rhs.values());
+        let (perpendicular, parallel) = (left.cross(right).norm(), left.dot(right));
+        if perpendicular.max(parallel.abs()).is_normal() {
+            return perpendicular.atan2(parallel);
+        }
+        let (left, right) = (self.normalize(), rhs.normalize());
         left.cross(right).norm().atan2(left.dot(right))
     }
 
     /// Returns the vector projection of `self` onto `onto`.
+    ///
+    /// The projection depends on `onto` only through its direction, so once the dot
+    /// products carrying it leave the representable range — which the projection itself
+    /// never does — that direction is taken first instead.
     #[inline]
     pub fn project_onto(self, onto: Self) -> Self {
         let values = onto.values();
-        onto * (self.values().dot(values) / values.norm_squared())
+        let (square, along) = (values.norm_squared(), self.values().dot(values));
+        if square.is_normal() && along.is_finite() {
+            return onto * (along / square);
+        }
+        let direction = onto.normalize();
+        let length = self.x * direction.x + self.y * direction.y + self.z * direction.z;
+        direction.map(|component| length * component)
     }
 
     /// Returns the component of `self` orthogonal to `from`.
@@ -366,7 +392,8 @@ impl<Q: Quantity> Vector3<Q> {
     /// `t == 0` yields `self`, `t == 1` yields `rhs`.
     #[inline]
     pub fn lerp(self, rhs: Self, t: Q::Value) -> Self {
-        self + (rhs - self) * t
+        let complement = Q::Value::ONE - t;
+        self.zip_map(rhs, |start, end| start * complement + end * t)
     }
 
     /// Returns the component-wise absolute value.
@@ -1352,6 +1379,72 @@ mod tests {
     fn norm_squared_is_the_square_of_the_norm() {
         let norm = vector().norm();
         assert!(close(vector().norm_squared(), norm * norm));
+    }
+
+    #[test]
+    fn norm_holds_above_the_squared_range() {
+        let scale = 2.0_f64.powi(600);
+        let v = Vector3::new(3.0 * scale, 4.0 * scale, 0.0);
+        assert!(close(v.norm() / scale, 5.0));
+    }
+
+    #[test]
+    fn norm_holds_below_the_squared_range() {
+        let scale = 2.0_f64.powi(-600);
+        let v = Vector3::new(3.0 * scale, 4.0 * scale, 0.0);
+        assert!(close(v.norm() / scale, 5.0));
+    }
+
+    #[test]
+    fn project_onto_holds_above_the_squared_range() {
+        let scale = 2.0_f64.powi(600);
+        let v = Vector3::new(3.0 * scale, 4.0 * scale, 0.0);
+        let projected = v.project_onto(Vector3::new(scale, 0.0, 0.0));
+        assert!(close(projected.x / scale, 3.0) && projected.y == 0.0);
+    }
+
+    #[test]
+    fn reject_from_holds_above_the_squared_range() {
+        let scale = 2.0_f64.powi(600);
+        let v = Vector3::new(3.0 * scale, 4.0 * scale, 0.0);
+        let rejected = v.reject_from(Vector3::new(scale, 0.0, 0.0));
+        assert!(close(rejected.y / scale, 4.0) && rejected.x == 0.0);
+    }
+
+    #[test]
+    fn norm_of_a_vector_with_an_infinite_component_is_infinite() {
+        assert_eq!(Vector3::new(f64::INFINITY, 1.0, 2.0).norm(), f64::INFINITY);
+    }
+
+    #[test]
+    fn norm_of_a_vector_with_a_not_a_number_component_is_not_a_number() {
+        assert!(Vector3::new(f64::NAN, 1.0, 2.0).norm().is_nan());
+    }
+
+    #[test]
+    fn angle_between_is_unchanged_by_a_scale_beyond_the_squared_range() {
+        let scale = 2.0_f64.powi(600);
+        let far =
+            Vector3::new(scale, 2.0 * scale, 0.0).angle_between(Vector3::new(scale, 0.0, 0.0));
+        let near = Vector3::new(1.0, 2.0, 0.0).angle_between(Vector3::X);
+        assert!(close(far, near));
+    }
+
+    #[test]
+    fn angle_between_is_unchanged_by_a_scale_below_the_squared_range() {
+        let scale = 2.0_f64.powi(-600);
+        let near =
+            Vector3::new(scale, 2.0 * scale, 0.0).angle_between(Vector3::new(scale, 0.0, 0.0));
+        assert!(close(
+            near,
+            Vector3::new(1.0, 2.0, 0.0).angle_between(Vector3::X)
+        ));
+    }
+
+    #[test]
+    fn lerp_holds_when_the_displacement_between_the_ends_overflows() {
+        let start = Vector3::splat(-f64::MAX);
+        assert_eq!(start.lerp(Vector3::splat(f64::MAX), 0.5), Vector3::ZERO);
     }
 
     #[test]

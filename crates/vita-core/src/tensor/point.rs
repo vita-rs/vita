@@ -230,11 +230,19 @@ impl<Q: Quantity> Point3<Q> {
         if points.is_empty() {
             return Self::ORIGIN;
         }
+        let count = Q::Value::from_f64(points.len() as f64);
         let mut sum = Vector3::<Q>::ZERO;
         for point in points {
             sum += point.to_vector();
         }
-        Self::from_vector(sum / Q::Value::from_f64(points.len() as f64))
+        if sum.is_finite() {
+            return Self::from_vector(sum / count);
+        }
+        let mut mean = Vector3::<Q>::ZERO;
+        for point in points {
+            mean += point.to_vector() / count;
+        }
+        Self::from_vector(mean)
     }
 
     /// Linearly interpolates from `self` toward `rhs` by the dimensionless
@@ -243,7 +251,8 @@ impl<Q: Quantity> Point3<Q> {
     /// `t == 0` yields `self`, `t == 1` yields `rhs`.
     #[inline]
     pub fn lerp(self, rhs: Self, t: Q::Value) -> Self {
-        self + (rhs - self) * t
+        let complement = Q::Value::ONE - t;
+        self.zip_map(rhs, |start, end| start * complement + end * t)
     }
 
     /// Returns the coordinate-wise absolute value.
@@ -987,6 +996,25 @@ mod tests {
         let b = Point3::new(2.0, 4.0, 6.0);
         let c = Point3::new(4.0, 8.0, 12.0);
         assert_eq!(Point3::centroid(&[a, b, c]), Point3::centroid(&[c, a, b]));
+    }
+
+    #[test]
+    fn centroid_holds_when_the_sum_of_the_points_overflows() {
+        let far = Point3::splat(f64::MAX);
+        assert_eq!(Point3::centroid(&[far; 4]), far);
+    }
+
+    #[test]
+    fn distance_holds_above_the_squared_range() {
+        let scale = 2.0_f64.powi(600);
+        let p = Point3::new(3.0 * scale, 4.0 * scale, 0.0);
+        assert!(close(p.distance(Point3::ORIGIN) / scale, 5.0));
+    }
+
+    #[test]
+    fn lerp_holds_when_the_displacement_between_the_ends_overflows() {
+        let start = Point3::splat(-f64::MAX);
+        assert_eq!(start.lerp(Point3::splat(f64::MAX), 0.5), Point3::ORIGIN);
     }
 
     #[test]

@@ -337,7 +337,8 @@ impl<Q: Quantity> Matrix3<Q> {
     /// `t == 0` yields `self`, `t == 1` yields `rhs`.
     #[inline]
     pub fn lerp(self, rhs: Self, t: Q::Value) -> Self {
-        self + (rhs - self) * t
+        let complement = Q::Value::ONE - t;
+        self.zip_map(rhs, |start, end| start * complement + end * t)
     }
 
     /// Returns the element-wise absolute value.
@@ -1311,6 +1312,13 @@ mod tests {
     #[test]
     fn lerp_beyond_one_extrapolates_past_the_ending_matrix() {
         assert_eq!(Matrix3::ZERO.lerp(matrix(), 2.0), matrix() * 2.0);
+    }
+
+    #[test]
+    fn lerp_holds_when_the_difference_between_the_ends_overflows() {
+        let start = Matrix3::from_diagonal(Vector3::splat(-f64::MAX));
+        let end = Matrix3::from_diagonal(Vector3::splat(f64::MAX));
+        assert_eq!(start.lerp(end, 0.5), Matrix3::ZERO);
     }
 
     #[test]
