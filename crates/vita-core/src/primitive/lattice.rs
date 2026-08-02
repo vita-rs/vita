@@ -1373,6 +1373,16 @@ mod tests {
     }
 
     #[test]
+    fn from_vectors_rejects_a_cell_too_large_to_resolve() {
+        let lattice = Lattice::from_vectors(
+            vector(1e160, 0.0, 0.0),
+            vector(0.0, 1e160, 0.0),
+            vector(0.0, 0.0, 1e160),
+        );
+        assert!(lattice.is_none());
+    }
+
+    #[test]
     fn from_parameters_rejects_a_nonpositive_edge() {
         let lattice = Lattice::from_parameters(
             length(0.0),
@@ -1399,6 +1409,12 @@ mod tests {
     }
 
     #[test]
+    #[should_panic(expected = "dual basis is representable")]
+    fn reciprocal_of_a_cell_too_small_to_invert_panics() {
+        let _ = Lattice::cubic(length(1e-104)).unwrap().reciprocal();
+    }
+
+    #[test]
     fn a_reciprocal_lattice_rejects_a_nonpositive_edge() {
         assert!(ReciprocalLattice::cubic(reciprocal_length(0.0)).is_none());
         assert!(
@@ -1419,6 +1435,24 @@ mod tests {
             wavevector(1.0, 1.0, 0.0),
         );
         assert!(reciprocal.is_none());
+    }
+
+    #[test]
+    fn a_reciprocal_lattice_rejects_a_cell_too_large_to_resolve() {
+        let reciprocal = ReciprocalLattice::from_vectors(
+            wavevector(1e160, 0.0, 0.0),
+            wavevector(0.0, 1e160, 0.0),
+            wavevector(0.0, 0.0, 1e160),
+        );
+        assert!(reciprocal.is_none());
+    }
+
+    #[test]
+    #[should_panic(expected = "dual basis is representable")]
+    fn reciprocal_of_a_reciprocal_cell_too_small_to_invert_panics() {
+        let _ = ReciprocalLattice::cubic(reciprocal_length(1e-104))
+            .unwrap()
+            .reciprocal();
     }
 
     #[test]
