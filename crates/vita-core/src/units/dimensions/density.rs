@@ -48,7 +48,7 @@ impl DensityUnit for KilogramPerCubicMeter {
     const SYMBOL: &'static str = "kg m⁻³";
 }
 
-/// The dalton per cubic ångström (Da Å⁻³) — atomic unit of density (CODATA 2022, derived).
+/// The dalton per cubic ångström (Da Å⁻³) — atomic unit of density (CODATA 2022, computed).
 ///
 /// 1 Da Å⁻³ ≈ 1.66053906892 g cm⁻³.
 pub struct DaltonPerCubicAngstrom;

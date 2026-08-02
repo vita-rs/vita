@@ -42,7 +42,7 @@ impl VolumeUnit for CubicAngstrom {
     const SYMBOL: &'static str = "Å³";
 }
 
-/// The cubic bohr (a₀³) — atomic unit of volume (CODATA 2022, derived).
+/// The cubic bohr (a₀³) — atomic unit of volume (CODATA 2022, computed).
 ///
 /// 1 a₀³ ≈ 0.148184711171 Å³.
 pub struct CubicBohr;

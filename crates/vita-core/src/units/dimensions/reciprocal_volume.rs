@@ -44,7 +44,7 @@ impl ReciprocalVolumeUnit for ReciprocalCubicAngstrom {
 }
 
 /// The reciprocal cubic bohr (a₀⁻³) — atomic unit of reciprocal volume
-/// (CODATA 2022, derived).
+/// (CODATA 2022, computed).
 ///
 /// 1 a₀⁻³ ≈ 6.748334508335 Å⁻³.
 pub struct ReciprocalCubicBohr;

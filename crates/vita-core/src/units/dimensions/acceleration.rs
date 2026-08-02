@@ -70,7 +70,7 @@ impl AccelerationUnit for MeterPerSquareSecond {
     const SYMBOL: &'static str = "m s⁻²";
 }
 
-/// The atomic acceleration unit (a₀ atu⁻²) — atomic unit of acceleration (CODATA 2022, derived).
+/// The atomic acceleration unit (a₀ atu⁻²) — atomic unit of acceleration (CODATA 2022, computed).
 ///
 /// 1 a₀ atu⁻² ≈ 9.04421612109e8 Å ps⁻².
 pub struct AtomicAcceleration;

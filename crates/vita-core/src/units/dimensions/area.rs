@@ -40,7 +40,7 @@ impl AreaUnit for SquareAngstrom {
     const SYMBOL: &'static str = "Å²";
 }
 
-/// The square bohr (a₀²) — atomic unit of area (CODATA 2022, derived).
+/// The square bohr (a₀²) — atomic unit of area (CODATA 2022, computed).
 ///
 /// 1 a₀² ≈ 0.280028520159 Å².
 pub struct SquareBohr;

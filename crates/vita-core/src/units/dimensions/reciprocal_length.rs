@@ -42,7 +42,7 @@ impl ReciprocalLengthUnit for ReciprocalAngstrom {
 }
 
 /// The reciprocal bohr (a₀⁻¹) — atomic unit of reciprocal length
-/// (CODATA 2022, derived).
+/// (CODATA 2022, computed).
 ///
 /// 1 a₀⁻¹ ≈ 1.889726125908 Å⁻¹.
 pub struct ReciprocalBohr;
