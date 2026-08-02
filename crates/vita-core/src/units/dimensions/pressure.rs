@@ -51,7 +51,7 @@ impl PressureUnit for Atmosphere {
     const SYMBOL: &'static str = "atm";
 }
 
-/// The pascal (Pa) — SI base unit of pressure.
+/// The pascal (Pa) — SI derived unit of pressure.
 ///
 /// 1 Pa = 1e-5 bar (exact).
 pub struct Pascal;

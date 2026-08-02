@@ -40,7 +40,7 @@ impl AreaUnit for SquareAngstrom {
     const SYMBOL: &'static str = "Å²";
 }
 
-/// The square bohr (a₀²) — atomic unit of area (CODATA 2022, derived).
+/// The square bohr (a₀²) — atomic unit of area (CODATA 2022, computed).
 ///
 /// 1 a₀² ≈ 0.280028520159 Å².
 pub struct SquareBohr;
@@ -70,7 +70,7 @@ impl AreaUnit for SquarePicometer {
     const SYMBOL: &'static str = "pm²";
 }
 
-/// The square meter (m²) — SI base unit of area.
+/// The square meter (m²) — SI derived unit of area.
 ///
 /// 1 m² = 1e20 Å².
 pub struct SquareMeter;

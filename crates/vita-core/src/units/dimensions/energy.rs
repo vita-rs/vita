@@ -44,7 +44,7 @@ impl EnergyUnit for Hartree {
 
 /// The kilocalorie per mole (kcal mol⁻¹).
 ///
-/// 1 kcal mol⁻¹ ≈ 1 / 627.509474063 Eₕ (CODATA 2022, derived).
+/// 1 kcal mol⁻¹ ≈ 1 / 627.509474063 Eₕ (CODATA 2022, computed).
 pub struct KilocaloriePerMole;
 
 impl EnergyUnit for KilocaloriePerMole {
@@ -54,7 +54,7 @@ impl EnergyUnit for KilocaloriePerMole {
 
 /// The kilojoule per mole (kJ mol⁻¹).
 ///
-/// 1 kJ mol⁻¹ ≈ 1 / 2625.49963948 Eₕ (CODATA 2022, derived).
+/// 1 kJ mol⁻¹ ≈ 1 / 2625.49963948 Eₕ (CODATA 2022, computed).
 pub struct KilojoulePerMole;
 
 impl EnergyUnit for KilojoulePerMole {
@@ -92,7 +92,7 @@ impl EnergyUnit for MilliElectronVolt {
     const SYMBOL: &'static str = "meV";
 }
 
-/// The joule (J) — SI base unit of energy (CODATA 2022).
+/// The joule (J) — SI derived unit of energy (CODATA 2022).
 ///
 /// 1 J ≈ 1 / 4.3597447222060e-18 Eₕ.
 pub struct Joule;

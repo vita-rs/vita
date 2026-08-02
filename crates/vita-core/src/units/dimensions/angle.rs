@@ -31,7 +31,7 @@ define_quantity!(
 
 /// The radian (rad) — canonical angle unit.
 ///
-/// 1 rad is the SI unit of plane angle.
+/// SI derived unit of plane angle.
 pub struct Radian;
 
 impl AngleUnit for Radian {

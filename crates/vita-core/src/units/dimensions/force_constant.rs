@@ -44,7 +44,7 @@ impl ForceConstantUnit for HartreePerSquareBohr {
 
 /// The kilocalorie per mole per square ångström (kcal mol⁻¹ Å⁻²).
 ///
-/// 1 kcal mol⁻¹ Å⁻² ≈ 0.529177210544² / 627.509474063 Eₕ a₀⁻² (CODATA 2022, derived).
+/// 1 kcal mol⁻¹ Å⁻² ≈ 0.529177210544² / 627.509474063 Eₕ a₀⁻² (CODATA 2022, computed).
 pub struct KilocaloriePerMolePerSquareAngstrom;
 
 impl ForceConstantUnit for KilocaloriePerMolePerSquareAngstrom {
@@ -54,7 +54,7 @@ impl ForceConstantUnit for KilocaloriePerMolePerSquareAngstrom {
 
 /// The kilojoule per mole per square nanometer (kJ mol⁻¹ nm⁻²).
 ///
-/// 1 kJ mol⁻¹ nm⁻² ≈ 0.0529177210544² / 2625.49963948 Eₕ a₀⁻² (CODATA 2022, derived).
+/// 1 kJ mol⁻¹ nm⁻² ≈ 0.0529177210544² / 2625.49963948 Eₕ a₀⁻² (CODATA 2022, computed).
 pub struct KilojoulePerMolePerSquareNanometer;
 
 impl ForceConstantUnit for KilojoulePerMolePerSquareNanometer {
@@ -64,7 +64,7 @@ impl ForceConstantUnit for KilojoulePerMolePerSquareNanometer {
 
 /// The electronvolt per square ångström (eV Å⁻²).
 ///
-/// 1 eV Å⁻² ≈ 0.529177210544² / 27.211386245981 Eₕ a₀⁻² (CODATA 2022, derived).
+/// 1 eV Å⁻² ≈ 0.529177210544² / 27.211386245981 Eₕ a₀⁻² (CODATA 2022, computed).
 pub struct ElectronVoltPerSquareAngstrom;
 
 impl ForceConstantUnit for ElectronVoltPerSquareAngstrom {
@@ -72,7 +72,7 @@ impl ForceConstantUnit for ElectronVoltPerSquareAngstrom {
     const SYMBOL: &'static str = "eV Å⁻²";
 }
 
-/// The newton per meter (N m⁻¹) — SI unit of force constant (CODATA 2022).
+/// The newton per meter (N m⁻¹) — SI derived unit of force constant (CODATA 2022).
 ///
 /// 1 N m⁻¹ ≈ 5.29177210544e-11 / 8.2387235038e-8 Eₕ a₀⁻².
 pub struct NewtonPerMeter;

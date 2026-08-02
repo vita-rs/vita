@@ -22,13 +22,13 @@ impl MaximumMatching {
     }
 
     /// Number of matched pairs.
-    #[allow(dead_code)]
+    #[cfg(test)]
     pub fn len(&self) -> usize {
         self.mate.iter().flatten().count() / 2
     }
 
     /// Returns `true` if no vertex is matched.
-    #[allow(dead_code)]
+    #[cfg(test)]
     pub fn is_empty(&self) -> bool {
         self.mate.iter().all(Option::is_none)
     }

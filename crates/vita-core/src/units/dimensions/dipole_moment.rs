@@ -30,7 +30,7 @@ define_quantity!(
 
 /// The debye (D) — canonical dipole-moment unit.
 ///
-/// 1 D = 3.335640951981521e-30 C·m (exact, derived from c = 299 792 458 m s⁻¹).
+/// 1 D = 3.335640951981521e-30 C·m (exact, computed from c = 299 792 458 m s⁻¹).
 pub struct Debye;
 
 impl DipoleMomentUnit for Debye {
@@ -48,9 +48,9 @@ impl DipoleMomentUnit for ElectronBohr {
     const SYMBOL: &'static str = "ea₀";
 }
 
-/// The coulomb meter (C·m) — SI unit of electric dipole moment.
+/// The coulomb meter (C·m) — SI derived unit of electric dipole moment.
 ///
-/// 1 C·m = 2.997924580e29 D (exact, derived from c = 299 792 458 m s⁻¹).
+/// 1 C·m = 2.997924580e29 D (exact, computed from c = 299 792 458 m s⁻¹).
 pub struct CoulombMeter;
 
 impl DipoleMomentUnit for CoulombMeter {

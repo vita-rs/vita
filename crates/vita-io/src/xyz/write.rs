@@ -1,7 +1,7 @@
 use std::io::{self, Write};
 
 use vita_core::units::length::LengthUnit;
-use vita_core::{HasElements, HasPositions, Scalar};
+use vita_core::{HasElements, HasPositions, Quantity, Scalar};
 
 use super::Error;
 

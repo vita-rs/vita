@@ -42,7 +42,7 @@ impl ReciprocalLengthUnit for ReciprocalAngstrom {
 }
 
 /// The reciprocal bohr (a₀⁻¹) — atomic unit of reciprocal length
-/// (CODATA 2022, derived).
+/// (CODATA 2022, computed).
 ///
 /// 1 a₀⁻¹ ≈ 1.889726125908 Å⁻¹.
 pub struct ReciprocalBohr;
@@ -72,7 +72,7 @@ impl ReciprocalLengthUnit for ReciprocalPicometer {
     const SYMBOL: &'static str = "pm⁻¹";
 }
 
-/// The reciprocal meter (m⁻¹) — SI base unit of reciprocal length.
+/// The reciprocal meter (m⁻¹) — SI derived unit of reciprocal length.
 ///
 /// 1 m⁻¹ = 1e-10 Å⁻¹.
 pub struct ReciprocalMeter;

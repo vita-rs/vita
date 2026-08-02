@@ -41,7 +41,7 @@ impl ReciprocalAreaUnit for ReciprocalSquareAngstrom {
 }
 
 /// The reciprocal square bohr (a₀⁻²) — atomic unit of reciprocal area
-/// (CODATA 2022, derived).
+/// (CODATA 2022, computed).
 ///
 /// 1 a₀⁻² ≈ 3.571064830938 Å⁻².
 pub struct ReciprocalSquareBohr;
@@ -71,7 +71,7 @@ impl ReciprocalAreaUnit for ReciprocalSquarePicometer {
     const SYMBOL: &'static str = "pm⁻²";
 }
 
-/// The reciprocal square meter (m⁻²) — SI base unit of reciprocal area.
+/// The reciprocal square meter (m⁻²) — SI derived unit of reciprocal area.
 ///
 /// 1 m⁻² = 1e-20 Å⁻².
 pub struct ReciprocalSquareMeter;

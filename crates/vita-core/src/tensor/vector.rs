@@ -3,9 +3,13 @@ use core::ops::{
     Add, AddAssign, Div, DivAssign, Index, IndexMut, Mul, MulAssign, Neg, Sub, SubAssign,
 };
 
-use crate::Scalar;
+use crate::{Quantity, Scalar};
 
 /// A vector of three components `x`, `y`, and `z`.
+///
+/// A vector is a displacement: it adds to another vector, scales by a number,
+/// and negates. Its length and direction are intrinsic, its position is not.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct Vector3<T> {
     /// The first component.
     pub x: T,
@@ -13,36 +17,6 @@ pub struct Vector3<T> {
     pub y: T,
     /// The third component.
     pub z: T,
-}
-
-impl<T: ::core::marker::Copy> ::core::marker::Copy for Vector3<T> {}
-
-impl<T: ::core::clone::Clone> ::core::clone::Clone for Vector3<T> {
-    #[inline]
-    fn clone(&self) -> Self {
-        Self {
-            x: self.x.clone(),
-            y: self.y.clone(),
-            z: self.z.clone(),
-        }
-    }
-}
-
-impl<T: ::core::fmt::Debug> ::core::fmt::Debug for Vector3<T> {
-    fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
-        f.debug_struct("Vector3")
-            .field("x", &self.x)
-            .field("y", &self.y)
-            .field("z", &self.z)
-            .finish()
-    }
-}
-
-impl<T: ::core::cmp::PartialEq> ::core::cmp::PartialEq for Vector3<T> {
-    #[inline]
-    fn eq(&self, other: &Self) -> bool {
-        self.x == other.x && self.y == other.y && self.z == other.z
-    }
 }
 
 impl<T> Vector3<T> {
@@ -180,18 +154,6 @@ impl<T> IndexMut<usize> for Vector3<T> {
     }
 }
 
-impl<T: Default> Default for Vector3<T> {
-    /// Returns the zero vector.
-    #[inline]
-    fn default() -> Self {
-        Self {
-            x: T::default(),
-            y: T::default(),
-            z: T::default(),
-        }
-    }
-}
-
 impl<T: Neg<Output = T>> Neg for Vector3<T> {
     type Output = Self;
     /// Returns the component-wise negation of `self`.
@@ -237,19 +199,20 @@ impl<T: SubAssign> SubAssign for Vector3<T> {
     }
 }
 
-impl<T, S: Scalar> Mul<S> for Vector3<T>
+impl<T, S: Quantity> Mul<S> for Vector3<T>
 where
-    T: Mul<S, Output = T>,
+    T: Mul<S>,
 {
-    type Output = Self;
-    /// Scales every component by the scalar `rhs`, preserving the element's unit.
+    type Output = Vector3<T::Output>;
+    /// Scales every component by `rhs`, whose dimension multiplies into the
+    /// component's.
     #[inline]
-    fn mul(self, rhs: S) -> Self {
-        Self::new(self.x * rhs, self.y * rhs, self.z * rhs)
+    fn mul(self, rhs: S) -> Self::Output {
+        Vector3::new(self.x * rhs, self.y * rhs, self.z * rhs)
     }
 }
 
-impl<T, S: Scalar> MulAssign<S> for Vector3<T>
+impl<T, S: Quantity> MulAssign<S> for Vector3<T>
 where
     T: MulAssign<S>,
 {
@@ -261,19 +224,44 @@ where
     }
 }
 
-impl<T, S: Scalar> Div<S> for Vector3<T>
+impl<T> Mul<Vector3<T>> for f32
 where
-    T: Div<S, Output = T>,
+    f32: Mul<T>,
 {
-    type Output = Self;
-    /// Divides every component by the scalar `rhs`, preserving the element's unit.
+    type Output = Vector3<<f32 as Mul<T>>::Output>;
+    /// Scales every component of `rhs` by `self`.
     #[inline]
-    fn div(self, rhs: S) -> Self {
-        Self::new(self.x / rhs, self.y / rhs, self.z / rhs)
+    fn mul(self, rhs: Vector3<T>) -> Self::Output {
+        rhs.map(|component| self * component)
     }
 }
 
-impl<T, S: Scalar> DivAssign<S> for Vector3<T>
+impl<T> Mul<Vector3<T>> for f64
+where
+    f64: Mul<T>,
+{
+    type Output = Vector3<<f64 as Mul<T>>::Output>;
+    /// Scales every component of `rhs` by `self`.
+    #[inline]
+    fn mul(self, rhs: Vector3<T>) -> Self::Output {
+        rhs.map(|component| self * component)
+    }
+}
+
+impl<T, S: Quantity> Div<S> for Vector3<T>
+where
+    T: Div<S>,
+{
+    type Output = Vector3<T::Output>;
+    /// Divides every component by `rhs`, whose dimension divides out of the
+    /// component's.
+    #[inline]
+    fn div(self, rhs: S) -> Self::Output {
+        Vector3::new(self.x / rhs, self.y / rhs, self.z / rhs)
+    }
+}
+
+impl<T, S: Quantity> DivAssign<S> for Vector3<T>
 where
     T: DivAssign<S>,
 {
@@ -285,7 +273,7 @@ where
     }
 }
 
-impl<T: Add<Output = T> + Default + Copy> Sum for Vector3<T> {
+impl<T: Add<Output = T> + Default> Sum for Vector3<T> {
     #[inline]
     fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
         iter.fold(Self::default(), |acc, v| acc + v)
@@ -299,31 +287,293 @@ impl<'a, T: Add<Output = T> + Default + Copy> Sum<&'a Vector3<T>> for Vector3<T>
     }
 }
 
-impl<T: Add<Output = T>> Vector3<T> {
-    /// Returns the sum of the three components, `x + y + z`.
-    #[inline]
-    pub fn element_sum(self) -> T {
-        self.x + self.y + self.z
-    }
-}
+impl<Q: Quantity> Vector3<Q> {
+    /// The zero vector, `(0, 0, 0)`.
+    pub const ZERO: Self = Self::new(Q::ZERO, Q::ZERO, Q::ZERO);
 
-impl<T: Add<Output = T> + Sub<Output = T> + Copy> Vector3<T> {
-    /// Linearly interpolates from `self` toward `rhs` by the factor `t`.
+    /// Returns the Euclidean norm (length) of the vector.
+    ///
+    /// The norm is representable whenever the components are, so it is computed by the
+    /// direct route only while the sum of squares stays normal, and by a pairwise
+    /// [`hypot`](Quantity::hypot) otherwise — squaring alone would halve the usable range.
+    #[inline]
+    pub fn norm(self) -> Q {
+        let values = self.values();
+        let square = values.norm_squared();
+        if square.is_normal() {
+            return Q::from_value(square.sqrt());
+        }
+        Q::from_value(values.x.hypot(values.y).hypot(values.z))
+    }
+
+    /// Returns the unit vector along `self`, whose components carry no
+    /// dimension.
+    ///
+    /// Yields a non-finite vector when the norm is zero or non-finite; use
+    /// [`try_normalize`][Self::try_normalize] or
+    /// [`normalize_or_zero`][Self::normalize_or_zero] to handle those cases.
+    #[inline]
+    pub fn normalize(self) -> Vector3<Q::Value> {
+        self.values() / self.norm().value()
+    }
+
+    /// Returns the unit vector along `self`, or `None` if the result would not
+    /// be finite (e.g. for the zero vector).
+    #[inline]
+    pub fn try_normalize(self) -> Option<Vector3<Q::Value>> {
+        let norm = self.norm().value();
+        if norm.is_finite() && norm > Q::Value::ZERO {
+            Some(self.values() / norm)
+        } else {
+            None
+        }
+    }
+
+    /// Returns the unit vector along `self`, or the zero vector if the result
+    /// would not be finite.
+    #[inline]
+    pub fn normalize_or_zero(self) -> Vector3<Q::Value> {
+        self.try_normalize().unwrap_or(Vector3::ZERO)
+    }
+
+    /// Returns the unsigned angle between `self` and `rhs`, in radians within
+    /// `[0, π]`.
+    ///
+    /// The computation is numerically stable across the whole range, including
+    /// near-parallel and near-antiparallel inputs. An angle depends only on the two
+    /// directions, so once the products carrying it leave the representable range — which
+    /// the angle itself never does — the directions are taken first instead.
+    #[inline]
+    pub fn angle_between(self, rhs: Self) -> Q::Value {
+        let (left, right) = (self.values(), rhs.values());
+        let (perpendicular, parallel) = (left.cross(right).norm(), left.dot(right));
+        if perpendicular.max(parallel.abs()).is_normal() {
+            return perpendicular.atan2(parallel);
+        }
+        let (left, right) = (self.normalize(), rhs.normalize());
+        left.cross(right).norm().atan2(left.dot(right))
+    }
+
+    /// Returns the vector projection of `self` onto `onto`.
+    ///
+    /// The projection depends on `onto` only through its direction, so once the dot
+    /// products carrying it leave the representable range — which the projection itself
+    /// never does — that direction is taken first instead.
+    #[inline]
+    pub fn project_onto(self, onto: Self) -> Self {
+        let values = onto.values();
+        let (square, along) = (values.norm_squared(), self.values().dot(values));
+        if square.is_normal() && along.is_finite() {
+            return onto * (along / square);
+        }
+        let direction = onto.normalize();
+        let length = self.x * direction.x + self.y * direction.y + self.z * direction.z;
+        direction.map(|component| length * component)
+    }
+
+    /// Returns the component of `self` orthogonal to `from`.
+    #[inline]
+    pub fn reject_from(self, from: Self) -> Self {
+        self - self.project_onto(from)
+    }
+
+    /// Reflects `self` across the plane through the origin with dimensionless
+    /// unit normal `normal`.
+    #[inline]
+    pub fn reflect(self, normal: Vector3<Q::Value>) -> Self {
+        let values = self.values();
+        let twice = Q::Value::ONE + Q::Value::ONE;
+        self - (normal * (values.dot(normal) * twice)).map(Q::from_value)
+    }
+
+    /// Linearly interpolates from `self` toward `rhs` by the dimensionless
+    /// factor `t`.
     ///
     /// `t == 0` yields `self`, `t == 1` yields `rhs`.
     #[inline]
-    pub fn lerp<S: Scalar>(self, rhs: Self, t: S) -> Self
-    where
-        T: Mul<S, Output = T>,
-    {
-        self + (rhs - self) * t
+    pub fn lerp(self, rhs: Self, t: Q::Value) -> Self {
+        let complement = Q::Value::ONE - t;
+        self.zip_map(rhs, |start, end| start * complement + end * t)
+    }
+
+    /// Returns the component-wise absolute value.
+    #[inline]
+    pub fn abs(self) -> Self {
+        self.map(Quantity::abs)
+    }
+
+    /// Returns the component-wise minimum of `self` and `other`, ignoring
+    /// NaN.
+    ///
+    /// Where one of the two is NaN, the other is taken.
+    #[inline]
+    pub fn min(self, other: Self) -> Self {
+        self.zip_map(other, Quantity::min)
+    }
+
+    /// Returns the component-wise maximum of `self` and `other`, ignoring
+    /// NaN.
+    ///
+    /// Where one of the two is NaN, the other is taken.
+    #[inline]
+    pub fn max(self, other: Self) -> Self {
+        self.zip_map(other, Quantity::max)
+    }
+
+    /// Restricts every component to the interval `[lo, hi]`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if any component of `lo` exceeds the corresponding component of
+    /// `hi`, or if either is NaN.
+    #[inline]
+    pub fn clamp(self, lo: Self, hi: Self) -> Self {
+        Self::new(
+            self.x.clamp(lo.x, hi.x),
+            self.y.clamp(lo.y, hi.y),
+            self.z.clamp(lo.z, hi.z),
+        )
+    }
+
+    /// Returns the component-wise midpoint of `self` and `other`.
+    #[inline]
+    pub fn midpoint(self, other: Self) -> Self {
+        self.zip_map(other, Quantity::midpoint)
+    }
+
+    /// Returns the smallest of the three components.
+    #[inline]
+    pub fn min_element(self) -> Q {
+        self.x.min(self.y).min(self.z)
+    }
+
+    /// Returns the largest of the three components.
+    #[inline]
+    pub fn max_element(self) -> Q {
+        self.x.max(self.y).max(self.z)
+    }
+
+    /// Returns the sum of the three components, `x + y + z`.
+    #[inline]
+    pub fn element_sum(self) -> Q {
+        self.x + self.y + self.z
+    }
+
+    /// Returns the component-wise sign, each `1.0`, `-1.0`, or NaN.
+    #[inline]
+    pub fn signum(self) -> Vector3<Q::Value> {
+        self.map(Quantity::signum)
+    }
+
+    /// Returns a vector with the magnitudes of `self` and the component-wise
+    /// signs of `sign`.
+    #[inline]
+    pub fn copysign(self, sign: Self) -> Self {
+        self.zip_map(sign, Quantity::copysign)
+    }
+
+    /// Returns the component-wise floor.
+    #[inline]
+    pub fn floor(self) -> Self {
+        self.map(Quantity::floor)
+    }
+
+    /// Returns the component-wise ceiling.
+    #[inline]
+    pub fn ceil(self) -> Self {
+        self.map(Quantity::ceil)
+    }
+
+    /// Returns the component-wise nearest integer, rounding halves away from
+    /// zero.
+    #[inline]
+    pub fn round(self) -> Self {
+        self.map(Quantity::round)
+    }
+
+    /// Returns the component-wise nearest integer, rounding halves to even.
+    #[inline]
+    pub fn round_ties_even(self) -> Self {
+        self.map(Quantity::round_ties_even)
+    }
+
+    /// Returns the component-wise truncation toward zero.
+    #[inline]
+    pub fn trunc(self) -> Self {
+        self.map(Quantity::trunc)
+    }
+
+    /// Returns the component-wise fractional part.
+    #[inline]
+    pub fn fract(self) -> Self {
+        self.map(Quantity::fract)
+    }
+
+    /// Returns the component-wise Euclidean quotient against `rhs`.
+    #[inline]
+    pub fn div_euclid(self, rhs: Self) -> Vector3<Q::Value> {
+        self.zip_map(rhs, Quantity::div_euclid)
+    }
+
+    /// Returns the component-wise least nonnegative remainder against `rhs`.
+    #[inline]
+    pub fn rem_euclid(self, rhs: Self) -> Self {
+        self.zip_map(rhs, Quantity::rem_euclid)
+    }
+
+    /// Returns the component-wise fused multiply-add `self * a + b`, each computed with a
+    /// single rounding error.
+    #[inline]
+    pub fn mul_add(self, a: Q::Value, b: Self) -> Self {
+        self.zip_map(b, |factor, addend| factor.mul_add(a, addend))
+    }
+
+    /// Returns the component-wise hypotenuse of `self` and `other`, each computed without
+    /// unnecessary overflow or underflow.
+    #[inline]
+    pub fn hypot(self, other: Self) -> Self {
+        self.zip_map(other, Quantity::hypot)
+    }
+
+    /// Returns `true` if any component is NaN.
+    #[inline]
+    pub fn is_nan(self) -> bool {
+        self.x.is_nan() || self.y.is_nan() || self.z.is_nan()
+    }
+
+    /// Returns `true` if any component is positive or negative infinity.
+    #[inline]
+    pub fn is_infinite(self) -> bool {
+        self.x.is_infinite() || self.y.is_infinite() || self.z.is_infinite()
+    }
+
+    /// Returns `true` if every component is finite.
+    #[inline]
+    pub fn is_finite(self) -> bool {
+        self.x.is_finite() && self.y.is_finite() && self.z.is_finite()
+    }
+
+    /// Returns `true` if every component is neither zero, subnormal, infinite,
+    /// nor NaN.
+    #[inline]
+    pub fn is_normal(self) -> bool {
+        self.x.is_normal() && self.y.is_normal() && self.z.is_normal()
+    }
+
+    /// Returns `true` if any component is subnormal.
+    #[inline]
+    pub fn is_subnormal(self) -> bool {
+        self.x.is_subnormal() || self.y.is_subnormal() || self.z.is_subnormal()
+    }
+
+    /// Returns the component-wise underlying numbers, read in `Q`'s own unit.
+    #[inline]
+    fn values(self) -> Vector3<Q::Value> {
+        self.map(Quantity::value)
     }
 }
 
 impl<V: Scalar> Vector3<V> {
-    /// The zero vector, `(0, 0, 0)`.
-    pub const ZERO: Self = Self::new(V::ZERO, V::ZERO, V::ZERO);
-
     /// The vector with every component set to one, `(1, 1, 1)`.
     pub const ONE: Self = Self::new(V::ONE, V::ONE, V::ONE);
 
@@ -361,218 +611,16 @@ impl<V: Scalar> Vector3<V> {
         self.dot(self)
     }
 
-    /// Returns the Euclidean norm (length) of the vector.
-    #[inline]
-    pub fn norm(self) -> V {
-        self.norm_squared().sqrt()
-    }
-
-    /// Returns `self` rescaled to unit length.
-    ///
-    /// Yields a non-finite vector when the norm is zero or non-finite; use
-    /// [`try_normalize`][Self::try_normalize] or
-    /// [`normalize_or_zero`][Self::normalize_or_zero] to handle those cases.
-    #[inline]
-    pub fn normalize(self) -> Self {
-        self / self.norm()
-    }
-
-    /// Returns `self` rescaled to unit length, or `None` if the result would
-    /// not be finite (e.g. for the zero vector).
-    #[inline]
-    pub fn try_normalize(self) -> Option<Self> {
-        let norm = self.norm();
-        if norm.is_finite() && norm > V::ZERO {
-            Some(self / norm)
-        } else {
-            None
-        }
-    }
-
-    /// Returns `self` rescaled to unit length, or the zero vector if the
-    /// result would not be finite.
-    #[inline]
-    pub fn normalize_or_zero(self) -> Self {
-        self.try_normalize().unwrap_or(Self::ZERO)
-    }
-
-    /// Returns `true` if the vector is of unit length within a small
-    /// tolerance (`2.0e-4`).
-    #[inline]
-    pub fn is_normalized(self) -> bool {
-        (self.norm_squared() - V::ONE).abs() <= V::from_f64(2.0e-4)
-    }
-
-    /// Returns the unsigned angle between `self` and `rhs`, in radians within
-    /// `[0, π]`.
-    ///
-    /// The computation is numerically stable across the whole range, including
-    /// near-parallel and near-antiparallel inputs.
-    #[inline]
-    pub fn angle_between(self, rhs: Self) -> V {
-        self.cross(rhs).norm().atan2(self.dot(rhs))
-    }
-
-    /// Returns the vector projection of `self` onto `onto`.
-    #[inline]
-    pub fn project_onto(self, onto: Self) -> Self {
-        onto * (self.dot(onto) / onto.norm_squared())
-    }
-
-    /// Returns the component of `self` orthogonal to `from`.
-    #[inline]
-    pub fn reject_from(self, from: Self) -> Self {
-        self - self.project_onto(from)
-    }
-
-    /// Reflects `self` across the plane through the origin with unit normal
-    /// `normal`.
-    #[inline]
-    pub fn reflect(self, normal: Self) -> Self {
-        self - normal * (self.dot(normal) * (V::ONE + V::ONE))
-    }
-
     /// Returns the component-wise reciprocal `(1/x, 1/y, 1/z)`.
     #[inline]
     pub fn recip(self) -> Self {
-        Self::new(self.x.recip(), self.y.recip(), self.z.recip())
+        self.map(Scalar::recip)
     }
 
     /// Returns the product of the three components, `x * y * z`.
     #[inline]
     pub fn element_product(self) -> V {
         self.x * self.y * self.z
-    }
-
-    /// Returns the component-wise absolute value.
-    #[inline]
-    pub fn abs(self) -> Self {
-        Self::new(self.x.abs(), self.y.abs(), self.z.abs())
-    }
-
-    /// Returns the component-wise minimum of `self` and `rhs`.
-    #[inline]
-    pub fn min(self, rhs: Self) -> Self {
-        Self::new(self.x.min(rhs.x), self.y.min(rhs.y), self.z.min(rhs.z))
-    }
-
-    /// Returns the component-wise maximum of `self` and `rhs`.
-    #[inline]
-    pub fn max(self, rhs: Self) -> Self {
-        Self::new(self.x.max(rhs.x), self.y.max(rhs.y), self.z.max(rhs.z))
-    }
-
-    /// Restricts every component to the interval `[min, max]`.
-    ///
-    /// # Panics
-    ///
-    /// Panics if any component of `min` exceeds the corresponding component of
-    /// `max`.
-    #[inline]
-    pub fn clamp(self, min: Self, max: Self) -> Self {
-        Self::new(
-            self.x.clamp(min.x, max.x),
-            self.y.clamp(min.y, max.y),
-            self.z.clamp(min.z, max.z),
-        )
-    }
-
-    /// Returns the smallest of the three components.
-    #[inline]
-    pub fn min_element(self) -> V {
-        self.x.min(self.y).min(self.z)
-    }
-
-    /// Returns the largest of the three components.
-    #[inline]
-    pub fn max_element(self) -> V {
-        self.x.max(self.y).max(self.z)
-    }
-
-    /// Returns the component-wise floor.
-    #[inline]
-    pub fn floor(self) -> Self {
-        Self::new(self.x.floor(), self.y.floor(), self.z.floor())
-    }
-
-    /// Returns the component-wise ceiling.
-    #[inline]
-    pub fn ceil(self) -> Self {
-        Self::new(self.x.ceil(), self.y.ceil(), self.z.ceil())
-    }
-
-    /// Returns the component-wise nearest integer, rounding halves away from
-    /// zero.
-    #[inline]
-    pub fn round(self) -> Self {
-        Self::new(self.x.round(), self.y.round(), self.z.round())
-    }
-
-    /// Returns the component-wise nearest integer, rounding halves to even.
-    #[inline]
-    pub fn round_ties_even(self) -> Self {
-        Self::new(
-            self.x.round_ties_even(),
-            self.y.round_ties_even(),
-            self.z.round_ties_even(),
-        )
-    }
-
-    /// Returns the component-wise truncation toward zero.
-    #[inline]
-    pub fn trunc(self) -> Self {
-        Self::new(self.x.trunc(), self.y.trunc(), self.z.trunc())
-    }
-
-    /// Returns the component-wise fractional part.
-    #[inline]
-    pub fn fract(self) -> Self {
-        Self::new(self.x.fract(), self.y.fract(), self.z.fract())
-    }
-
-    /// Returns a vector with the magnitudes of `self` and the component-wise
-    /// signs of `sign`.
-    #[inline]
-    pub fn copysign(self, sign: Self) -> Self {
-        Self::new(
-            self.x.copysign(sign.x),
-            self.y.copysign(sign.y),
-            self.z.copysign(sign.z),
-        )
-    }
-
-    /// Returns the component-wise sign, each `1`, `-1`, or `NaN`.
-    #[inline]
-    pub fn signum(self) -> Self {
-        Self::new(self.x.signum(), self.y.signum(), self.z.signum())
-    }
-
-    /// Returns the component-wise least nonnegative remainder against `rhs`.
-    #[inline]
-    pub fn rem_euclid(self, rhs: Self) -> Self {
-        Self::new(
-            self.x.rem_euclid(rhs.x),
-            self.y.rem_euclid(rhs.y),
-            self.z.rem_euclid(rhs.z),
-        )
-    }
-
-    /// Returns `true` if every component is finite.
-    #[inline]
-    pub fn is_finite(self) -> bool {
-        self.x.is_finite() && self.y.is_finite() && self.z.is_finite()
-    }
-
-    /// Returns `true` if any component is positive or negative infinity.
-    #[inline]
-    pub fn is_infinite(self) -> bool {
-        self.x.is_infinite() || self.y.is_infinite() || self.z.is_infinite()
-    }
-
-    /// Returns `true` if any component is `NaN`.
-    #[inline]
-    pub fn is_nan(self) -> bool {
-        self.x.is_nan() || self.y.is_nan() || self.z.is_nan()
     }
 }
 
@@ -582,228 +630,24 @@ mod tests {
 
     use core::f64::consts::{FRAC_PI_2, PI};
 
+    use crate::units::length::{Angstrom, Length};
+
     const TOL: f64 = 1e-12;
 
     fn close(a: f64, b: f64) -> bool {
         (a - b).abs() <= TOL
     }
 
-    #[test]
-    fn new_sets_the_three_components() {
-        let v = Vector3::new(1.0, 2.0, 3.0);
-        assert_eq!(v.x, 1.0);
-        assert_eq!(v.y, 2.0);
-        assert_eq!(v.z, 3.0);
+    fn vectors_close(a: Vector3<f64>, b: Vector3<f64>) -> bool {
+        close(a.x, b.x) && close(a.y, b.y) && close(a.z, b.z)
     }
 
-    #[test]
-    fn splat_repeats_one_value_across_all_components() {
-        assert_eq!(Vector3::splat(5.0), Vector3::new(5.0, 5.0, 5.0));
+    fn length(value: f64) -> Length<f64, Angstrom> {
+        Length::new(value)
     }
 
-    #[test]
-    fn from_array_takes_components_in_order() {
-        assert_eq!(
-            Vector3::from_array([1.0, 2.0, 3.0]),
-            Vector3::new(1.0, 2.0, 3.0)
-        );
-    }
-
-    #[test]
-    fn to_array_returns_components_in_order() {
-        assert_eq!(Vector3::new(1.0, 2.0, 3.0).to_array(), [1.0, 2.0, 3.0]);
-    }
-
-    #[test]
-    fn from_slice_reads_the_first_three_elements() {
-        assert_eq!(
-            Vector3::from_slice(&[1.0, 2.0, 3.0, 4.0]),
-            Vector3::new(1.0, 2.0, 3.0),
-        );
-    }
-
-    #[test]
-    #[should_panic]
-    fn from_slice_shorter_than_three_panics() {
-        let _ = Vector3::from_slice(&[1.0_f64, 2.0]);
-    }
-
-    #[test]
-    fn with_x_replaces_only_the_x_component() {
-        assert_eq!(
-            Vector3::new(1.0, 2.0, 3.0).with_x(9.0),
-            Vector3::new(9.0, 2.0, 3.0),
-        );
-    }
-
-    #[test]
-    fn with_y_replaces_only_the_y_component() {
-        assert_eq!(
-            Vector3::new(1.0, 2.0, 3.0).with_y(9.0),
-            Vector3::new(1.0, 9.0, 3.0),
-        );
-    }
-
-    #[test]
-    fn with_z_replaces_only_the_z_component() {
-        assert_eq!(
-            Vector3::new(1.0, 2.0, 3.0).with_z(9.0),
-            Vector3::new(1.0, 2.0, 9.0),
-        );
-    }
-
-    #[test]
-    fn index_reads_the_component_at_each_position() {
-        let v = Vector3::new(1.0, 2.0, 3.0);
-        assert_eq!(v[0], 1.0);
-        assert_eq!(v[1], 2.0);
-        assert_eq!(v[2], 3.0);
-    }
-
-    #[test]
-    fn index_mut_writes_the_component_at_each_position() {
-        let mut v = Vector3::new(0.0, 0.0, 0.0);
-        v[0] = 1.0;
-        v[1] = 2.0;
-        v[2] = 3.0;
-        assert_eq!(v, Vector3::new(1.0, 2.0, 3.0));
-    }
-
-    #[test]
-    #[should_panic(expected = "index out of bounds")]
-    fn index_out_of_bounds_panics() {
-        let _ = Vector3::new(1.0_f64, 2.0, 3.0)[3];
-    }
-
-    #[test]
-    #[should_panic(expected = "index out of bounds")]
-    fn index_mut_out_of_bounds_panics() {
-        let mut v = Vector3::new(1.0_f64, 2.0, 3.0);
-        v[3] = 0.0;
-    }
-
-    #[test]
-    fn map_applies_the_function_to_every_component() {
-        assert_eq!(
-            Vector3::new(1.0, 2.0, 3.0).map(|c| c * 2.0),
-            Vector3::new(2.0, 4.0, 6.0),
-        );
-    }
-
-    #[test]
-    fn zip_map_combines_the_two_vectors_component_wise() {
-        let a = Vector3::new(1.0, 2.0, 3.0);
-        let b = Vector3::new(4.0, 5.0, 6.0);
-        assert_eq!(a.zip_map(b, |x, y| x * y), Vector3::new(4.0, 10.0, 18.0));
-    }
-
-    #[test]
-    fn neg_negates_every_component() {
-        assert_eq!(-Vector3::new(1.0, -2.0, 3.0), Vector3::new(-1.0, 2.0, -3.0));
-    }
-
-    #[test]
-    fn add_sums_components_pairwise() {
-        assert_eq!(
-            Vector3::new(1.0, 2.0, 3.0) + Vector3::new(4.0, 5.0, 6.0),
-            Vector3::new(5.0, 7.0, 9.0),
-        );
-    }
-
-    #[test]
-    fn sub_subtracts_components_pairwise() {
-        assert_eq!(
-            Vector3::new(5.0, 7.0, 9.0) - Vector3::new(4.0, 5.0, 6.0),
-            Vector3::new(1.0, 2.0, 3.0),
-        );
-    }
-
-    #[test]
-    fn add_assign_adds_in_place() {
-        let mut v = Vector3::new(1.0, 2.0, 3.0);
-        v += Vector3::new(4.0, 5.0, 6.0);
-        assert_eq!(v, Vector3::new(5.0, 7.0, 9.0));
-    }
-
-    #[test]
-    fn sub_assign_subtracts_in_place() {
-        let mut v = Vector3::new(5.0, 7.0, 9.0);
-        v -= Vector3::new(4.0, 5.0, 6.0);
-        assert_eq!(v, Vector3::new(1.0, 2.0, 3.0));
-    }
-
-    #[test]
-    fn mul_scales_every_component() {
-        assert_eq!(
-            Vector3::new(1.0, 2.0, 3.0) * 2.0,
-            Vector3::new(2.0, 4.0, 6.0)
-        );
-    }
-
-    #[test]
-    fn div_divides_every_component() {
-        assert_eq!(
-            Vector3::new(2.0, 4.0, 6.0) / 2.0,
-            Vector3::new(1.0, 2.0, 3.0)
-        );
-    }
-
-    #[test]
-    fn mul_assign_scales_in_place() {
-        let mut v = Vector3::new(1.0, 2.0, 3.0);
-        v *= 2.0;
-        assert_eq!(v, Vector3::new(2.0, 4.0, 6.0));
-    }
-
-    #[test]
-    fn div_assign_divides_in_place() {
-        let mut v = Vector3::new(2.0, 4.0, 6.0);
-        v /= 2.0;
-        assert_eq!(v, Vector3::new(1.0, 2.0, 3.0));
-    }
-
-    #[test]
-    fn element_sum_adds_the_three_components() {
-        assert_eq!(Vector3::new(1.0, 2.0, 3.0).element_sum(), 6.0);
-    }
-
-    #[test]
-    fn element_product_multiplies_the_three_components() {
-        assert_eq!(Vector3::new(2.0, 3.0, 4.0).element_product(), 24.0);
-    }
-
-    #[test]
-    fn sum_of_no_vectors_is_the_zero_vector() {
-        let total: Vector3<f64> = core::iter::empty::<Vector3<f64>>().sum();
-        assert_eq!(total, Vector3::ZERO);
-    }
-
-    #[test]
-    fn sum_folds_owned_vectors() {
-        let total: Vector3<f64> = [Vector3::X, Vector3::Y, Vector3::Z].into_iter().sum();
-        assert_eq!(total, Vector3::ONE);
-    }
-
-    #[test]
-    fn sum_folds_borrowed_vectors() {
-        let vectors = [Vector3::<f64>::X, Vector3::Y];
-        let total: Vector3<f64> = vectors.iter().sum();
-        assert_eq!(total, Vector3::new(1.0, 1.0, 0.0));
-    }
-
-    #[test]
-    fn lerp_at_one_half_returns_the_midpoint() {
-        let a = Vector3::new(0.0, 0.0, 0.0);
-        let b = Vector3::new(10.0, 20.0, 30.0);
-        assert_eq!(a.lerp(b, 0.5), Vector3::new(5.0, 10.0, 15.0));
-    }
-
-    #[test]
-    fn lerp_at_the_endpoints_returns_each_bound() {
-        let a = Vector3::new(1.0, 2.0, 3.0);
-        let b = Vector3::new(4.0, 5.0, 6.0);
-        assert_eq!(a.lerp(b, 0.0), a);
-        assert_eq!(a.lerp(b, 1.0), b);
+    fn vector() -> Vector3<f64> {
+        Vector3::new(1.0, 2.0, 3.0)
     }
 
     #[test]
@@ -812,356 +656,857 @@ mod tests {
     }
 
     #[test]
-    fn zero_has_all_components_zero() {
+    fn the_zero_vector_has_zero_components() {
         assert_eq!(Vector3::<f64>::ZERO, Vector3::new(0.0, 0.0, 0.0));
     }
 
     #[test]
-    fn one_has_all_components_one() {
+    fn norm_of_the_zero_vector_is_zero() {
+        assert_eq!(Vector3::<f64>::ZERO.norm(), 0.0);
+    }
+
+    #[test]
+    fn try_normalize_of_the_zero_vector_is_none() {
+        assert!(Vector3::<f64>::ZERO.try_normalize().is_none());
+    }
+
+    #[test]
+    fn normalize_or_zero_of_the_zero_vector_is_the_zero_vector() {
+        assert_eq!(Vector3::<f64>::ZERO.normalize_or_zero(), Vector3::ZERO);
+    }
+
+    #[test]
+    fn element_sum_of_the_zero_vector_is_zero() {
+        assert_eq!(Vector3::<f64>::ZERO.element_sum(), 0.0);
+    }
+
+    #[test]
+    fn summing_no_vectors_yields_the_zero_vector() {
+        let none: [Vector3<f64>; 0] = [];
+        assert_eq!(none.into_iter().sum::<Vector3<f64>>(), Vector3::ZERO);
+    }
+
+    #[test]
+    fn angle_between_a_vector_and_itself_is_zero() {
+        assert!(close(vector().angle_between(vector()), 0.0));
+    }
+
+    #[test]
+    fn lerp_at_zero_yields_the_starting_vector() {
+        assert_eq!(vector().lerp(Vector3::new(4.0, 8.0, 12.0), 0.0), vector());
+    }
+
+    #[test]
+    fn lerp_at_one_yields_the_ending_vector() {
+        let target = Vector3::new(4.0, 8.0, 12.0);
+        assert_eq!(vector().lerp(target, 1.0), target);
+    }
+
+    #[test]
+    fn new_sets_the_three_components() {
+        let v = Vector3::new(1.0, 2.0, 3.0);
+        assert_eq!((v.x, v.y, v.z), (1.0, 2.0, 3.0));
+    }
+
+    #[test]
+    fn from_array_takes_components_in_order() {
+        assert_eq!(Vector3::from_array([1.0, 2.0, 3.0]), vector());
+    }
+
+    #[test]
+    fn to_array_yields_components_in_order() {
+        assert_eq!(vector().to_array(), [1.0, 2.0, 3.0]);
+    }
+
+    #[test]
+    fn with_x_replaces_only_the_first_component() {
+        assert_eq!(vector().with_x(9.0), Vector3::new(9.0, 2.0, 3.0));
+    }
+
+    #[test]
+    fn with_y_replaces_only_the_second_component() {
+        assert_eq!(vector().with_y(9.0), Vector3::new(1.0, 9.0, 3.0));
+    }
+
+    #[test]
+    fn with_z_replaces_only_the_third_component() {
+        assert_eq!(vector().with_z(9.0), Vector3::new(1.0, 2.0, 9.0));
+    }
+
+    #[test]
+    fn map_applies_the_function_to_every_component() {
+        assert_eq!(vector().map(|c| c as i32), Vector3::new(1, 2, 3));
+    }
+
+    #[test]
+    fn zip_map_combines_the_two_vectors_component_wise() {
+        let other = Vector3::new(4.0, 5.0, 6.0);
+        assert_eq!(
+            vector().zip_map(other, |a, b| (a + b) as i32),
+            Vector3::new(5, 7, 9)
+        );
+    }
+
+    #[test]
+    fn splat_repeats_one_value_across_all_components() {
+        assert_eq!(Vector3::splat(5.0), Vector3::new(5.0, 5.0, 5.0));
+    }
+
+    #[test]
+    fn from_slice_takes_the_first_three_elements() {
+        assert_eq!(Vector3::from_slice(&[1.0, 2.0, 3.0, 4.0]), vector());
+    }
+
+    #[test]
+    fn indexing_yields_the_component_at_that_position() {
+        let v = vector();
+        assert_eq!((v[0], v[1], v[2]), (1.0, 2.0, 3.0));
+    }
+
+    #[test]
+    fn index_mut_replaces_the_component_at_that_position() {
+        let mut v = vector();
+        v[1] = 9.0;
+        assert_eq!(v, Vector3::new(1.0, 9.0, 3.0));
+    }
+
+    #[test]
+    fn negation_flips_the_sign_of_every_component() {
+        assert_eq!(-vector(), Vector3::new(-1.0, -2.0, -3.0));
+    }
+
+    #[test]
+    fn addition_sums_the_components() {
+        assert_eq!(vector() + Vector3::splat(1.0), Vector3::new(2.0, 3.0, 4.0));
+    }
+
+    #[test]
+    fn add_assign_sums_the_components_in_place() {
+        let mut v = vector();
+        v += Vector3::splat(1.0);
+        assert_eq!(v, Vector3::new(2.0, 3.0, 4.0));
+    }
+
+    #[test]
+    fn subtraction_differences_the_components() {
+        assert_eq!(vector() - Vector3::splat(1.0), Vector3::new(0.0, 1.0, 2.0));
+    }
+
+    #[test]
+    fn sub_assign_differences_the_components_in_place() {
+        let mut v = vector();
+        v -= Vector3::splat(1.0);
+        assert_eq!(v, Vector3::new(0.0, 1.0, 2.0));
+    }
+
+    #[test]
+    fn multiplying_by_a_number_scales_every_component() {
+        assert_eq!(vector() * 2.0, Vector3::new(2.0, 4.0, 6.0));
+    }
+
+    #[test]
+    fn mul_assign_scales_every_component_in_place() {
+        let mut v = vector();
+        v *= 2.0;
+        assert_eq!(v, Vector3::new(2.0, 4.0, 6.0));
+    }
+
+    #[test]
+    fn a_double_on_the_left_scales_every_component() {
+        assert_eq!(2.0 * vector(), Vector3::new(2.0, 4.0, 6.0));
+    }
+
+    #[test]
+    fn a_single_on_the_left_scales_every_component() {
+        let v = Vector3::new(1.0_f32, 2.0, 3.0);
+        assert_eq!(2.0_f32 * v, Vector3::new(2.0_f32, 4.0, 6.0));
+    }
+
+    #[test]
+    fn dividing_by_a_number_scales_every_component_down() {
+        assert_eq!(Vector3::new(2.0, 4.0, 6.0) / 2.0, vector());
+    }
+
+    #[test]
+    fn div_assign_scales_every_component_down_in_place() {
+        let mut v = Vector3::new(2.0, 4.0, 6.0);
+        v /= 2.0;
+        assert_eq!(v, vector());
+    }
+
+    #[test]
+    fn summing_owned_vectors_adds_them() {
+        assert_eq!(
+            [vector(), vector()].into_iter().sum::<Vector3<f64>>(),
+            vector() * 2.0
+        );
+    }
+
+    #[test]
+    fn summing_borrowed_vectors_adds_them() {
+        assert_eq!(
+            [vector(), vector()].iter().sum::<Vector3<f64>>(),
+            vector() * 2.0
+        );
+    }
+
+    #[test]
+    fn norm_is_the_euclidean_length() {
+        assert_eq!(Vector3::new(3.0, 4.0, 0.0).norm(), 5.0);
+    }
+
+    #[test]
+    fn normalize_rescales_to_unit_length() {
+        assert_eq!(
+            Vector3::new(0.0, 4.0, 0.0).normalize(),
+            Vector3::new(0.0, 1.0, 0.0)
+        );
+    }
+
+    #[test]
+    fn try_normalize_of_a_nonzero_vector_is_some() {
+        let unit = Vector3::new(0.0, 4.0, 0.0).try_normalize();
+        assert_eq!(unit.unwrap(), Vector3::new(0.0, 1.0, 0.0));
+    }
+
+    #[test]
+    fn normalize_or_zero_rescales_a_nonzero_vector() {
+        let unit = Vector3::new(0.0, 4.0, 0.0).normalize_or_zero();
+        assert_eq!(unit, Vector3::new(0.0, 1.0, 0.0));
+    }
+
+    #[test]
+    fn angle_between_perpendicular_vectors_is_a_quarter_turn() {
+        assert!(close(
+            Vector3::<f64>::X.angle_between(Vector3::Y),
+            FRAC_PI_2
+        ));
+    }
+
+    #[test]
+    fn project_onto_yields_the_component_along_the_target() {
+        let v = Vector3::new(2.0, 3.0, 0.0);
+        assert_eq!(v.project_onto(Vector3::X), Vector3::new(2.0, 0.0, 0.0));
+    }
+
+    #[test]
+    fn reject_from_yields_the_component_orthogonal_to_the_target() {
+        let v = Vector3::new(2.0, 3.0, 0.0);
+        assert_eq!(v.reject_from(Vector3::X), Vector3::new(0.0, 3.0, 0.0));
+    }
+
+    #[test]
+    fn reflect_mirrors_the_vector_across_the_plane() {
+        let v = Vector3::new(1.0, -2.0, 3.0);
+        assert_eq!(v.reflect(Vector3::Y), Vector3::new(1.0, 2.0, 3.0));
+    }
+
+    #[test]
+    fn lerp_interpolates_between_the_vectors() {
+        let target = Vector3::new(4.0, 8.0, 12.0);
+        assert_eq!(Vector3::ZERO.lerp(target, 0.25), vector());
+    }
+
+    #[test]
+    fn abs_takes_the_magnitude_of_every_component() {
+        assert_eq!(Vector3::new(-1.0, 2.0, -3.0).abs(), vector());
+    }
+
+    #[test]
+    fn min_takes_the_smaller_of_each_pair_of_components() {
+        let other = Vector3::new(4.0, 2.0, 3.0);
+        assert_eq!(Vector3::new(1.0, 5.0, 3.0).min(other), vector());
+    }
+
+    #[test]
+    fn max_takes_the_larger_of_each_pair_of_components() {
+        let other = Vector3::new(4.0, 2.0, 3.0);
+        assert_eq!(
+            Vector3::new(1.0, 5.0, 3.0).max(other),
+            Vector3::new(4.0, 5.0, 3.0)
+        );
+    }
+
+    #[test]
+    fn clamp_raises_a_component_below_the_interval_to_the_lower_bound() {
+        let v = Vector3::new(-1.0, 2.0, 3.0);
+        assert_eq!(
+            v.clamp(Vector3::ZERO, Vector3::splat(9.0)),
+            Vector3::new(0.0, 2.0, 3.0)
+        );
+    }
+
+    #[test]
+    fn clamp_leaves_a_component_inside_the_interval_unchanged() {
+        assert_eq!(vector().clamp(Vector3::ZERO, Vector3::splat(9.0)), vector());
+    }
+
+    #[test]
+    fn clamp_lowers_a_component_above_the_interval_to_the_upper_bound() {
+        let v = Vector3::new(1.0, 2.0, 99.0);
+        assert_eq!(
+            v.clamp(Vector3::ZERO, Vector3::splat(9.0)),
+            Vector3::new(1.0, 2.0, 9.0)
+        );
+    }
+
+    #[test]
+    fn midpoint_is_halfway_between_the_vectors() {
+        assert_eq!(
+            Vector3::ZERO.midpoint(Vector3::new(2.0, 4.0, 6.0)),
+            vector()
+        );
+    }
+
+    #[test]
+    fn min_element_is_the_smallest_component() {
+        assert_eq!(Vector3::new(3.0, -1.0, 2.0).min_element(), -1.0);
+    }
+
+    #[test]
+    fn max_element_is_the_largest_component() {
+        assert_eq!(Vector3::new(3.0, -1.0, 2.0).max_element(), 3.0);
+    }
+
+    #[test]
+    fn element_sum_adds_the_three_components() {
+        assert_eq!(vector().element_sum(), 6.0);
+    }
+
+    #[test]
+    fn signum_takes_the_sign_of_every_component() {
+        assert_eq!(
+            Vector3::new(-2.0, 0.5, -3.0).signum(),
+            Vector3::new(-1.0, 1.0, -1.0)
+        );
+    }
+
+    #[test]
+    fn copysign_keeps_the_magnitudes_and_takes_the_signs_of_its_argument() {
+        let v = Vector3::new(3.0, -4.0, 5.0);
+        let signs = Vector3::new(-1.0, 1.0, -1.0);
+        assert_eq!(v.copysign(signs), Vector3::new(-3.0, 4.0, -5.0));
+    }
+
+    #[test]
+    fn floor_rounds_every_component_toward_negative_infinity() {
+        assert_eq!(
+            Vector3::new(-2.5, 2.5, 3.0).floor(),
+            Vector3::new(-3.0, 2.0, 3.0)
+        );
+    }
+
+    #[test]
+    fn ceil_rounds_every_component_toward_positive_infinity() {
+        assert_eq!(
+            Vector3::new(-2.5, 2.5, 3.0).ceil(),
+            Vector3::new(-2.0, 3.0, 3.0)
+        );
+    }
+
+    #[test]
+    fn round_sends_a_half_away_from_zero() {
+        assert_eq!(
+            Vector3::new(2.5, 3.5, -2.5).round(),
+            Vector3::new(3.0, 4.0, -3.0)
+        );
+    }
+
+    #[test]
+    fn round_ties_even_sends_a_half_to_the_even_integer() {
+        let v = Vector3::new(2.5, 3.5, -2.5);
+        assert_eq!(v.round_ties_even(), Vector3::new(2.0, 4.0, -2.0));
+    }
+
+    #[test]
+    fn trunc_drops_the_fractional_part_of_every_component() {
+        assert_eq!(
+            Vector3::new(-2.75, 2.75, 3.0).trunc(),
+            Vector3::new(-2.0, 2.0, 3.0)
+        );
+    }
+
+    #[test]
+    fn fract_keeps_the_fractional_part_of_every_component() {
+        let v = Vector3::new(-2.75, 2.75, 3.0);
+        assert_eq!(v.fract(), Vector3::new(-0.75, 0.75, 0.0));
+    }
+
+    #[test]
+    fn div_euclid_is_the_euclidean_quotient_of_every_component() {
+        let v = Vector3::new(7.0, -7.0, 0.0);
+        assert_eq!(
+            v.div_euclid(Vector3::splat(3.0)),
+            Vector3::new(2.0, -3.0, 0.0)
+        );
+    }
+
+    #[test]
+    fn rem_euclid_is_nonnegative_for_a_negative_component() {
+        let v = Vector3::new(-1.0, 7.0, 5.0);
+        assert_eq!(
+            v.rem_euclid(Vector3::splat(3.0)),
+            Vector3::new(2.0, 1.0, 2.0)
+        );
+    }
+
+    #[test]
+    fn mul_add_scales_then_offsets_every_component() {
+        let offset = Vector3::new(10.0, 20.0, 30.0);
+        assert_eq!(
+            vector().mul_add(2.0, offset),
+            Vector3::new(12.0, 24.0, 36.0)
+        );
+    }
+
+    #[test]
+    fn hypot_combines_the_components_pairwise() {
+        let legs = Vector3::new(4.0, 0.0, 5.0);
+        let combined = Vector3::new(3.0, 4.0, 12.0).hypot(legs);
+        assert!(vectors_close(combined, Vector3::new(5.0, 4.0, 13.0)));
+    }
+
+    #[test]
+    fn is_nan_holds_when_a_component_is_not_a_number() {
+        assert!(Vector3::new(1.0, f64::NAN, 3.0).is_nan());
+    }
+
+    #[test]
+    fn is_infinite_holds_when_a_component_is_infinite() {
+        assert!(Vector3::new(1.0, f64::INFINITY, 3.0).is_infinite());
+    }
+
+    #[test]
+    fn is_finite_holds_when_every_component_is_finite() {
+        assert!(vector().is_finite());
+    }
+
+    #[test]
+    fn is_normal_holds_when_every_component_is_normal() {
+        assert!(vector().is_normal());
+    }
+
+    #[test]
+    fn is_subnormal_holds_when_a_component_is_subnormal() {
+        assert!(Vector3::new(1.0, f64::MIN_POSITIVE / 2.0, 3.0).is_subnormal());
+    }
+
+    #[test]
+    fn the_one_vector_has_every_component_set_to_one() {
         assert_eq!(Vector3::<f64>::ONE, Vector3::new(1.0, 1.0, 1.0));
     }
 
     #[test]
-    fn the_basis_constants_are_the_unit_axes() {
+    fn the_x_axis_vector_points_along_the_first_component() {
         assert_eq!(Vector3::<f64>::X, Vector3::new(1.0, 0.0, 0.0));
+    }
+
+    #[test]
+    fn the_y_axis_vector_points_along_the_second_component() {
         assert_eq!(Vector3::<f64>::Y, Vector3::new(0.0, 1.0, 0.0));
+    }
+
+    #[test]
+    fn the_z_axis_vector_points_along_the_third_component() {
         assert_eq!(Vector3::<f64>::Z, Vector3::new(0.0, 0.0, 1.0));
     }
 
     #[test]
     fn dot_multiplies_and_sums_the_components() {
-        let a = Vector3::new(1.0, 2.0, 3.0);
-        let b = Vector3::new(4.0, 5.0, 6.0);
-        assert_eq!(a.dot(b), 32.0);
+        assert_eq!(vector().dot(Vector3::new(4.0, 5.0, 6.0)), 32.0);
     }
 
     #[test]
-    fn cross_returns_the_right_hand_product() {
-        let a = Vector3::new(1.0, 2.0, 3.0);
-        let b = Vector3::new(4.0, 5.0, 6.0);
-        assert_eq!(a.cross(b), Vector3::new(-3.0, 6.0, -3.0));
+    fn cross_returns_the_right_handed_product() {
+        assert_eq!(Vector3::<f64>::X.cross(Vector3::Y), Vector3::Z);
     }
 
     #[test]
-    fn norm_squared_is_the_sum_of_squares() {
-        assert_eq!(Vector3::new(2.0, 3.0, 6.0).norm_squared(), 49.0);
-    }
-
-    #[test]
-    fn norm_is_the_euclidean_length() {
-        assert_eq!(Vector3::new(2.0, 3.0, 6.0).norm(), 7.0);
-    }
-
-    #[test]
-    fn normalize_rescales_to_unit_length_in_the_same_direction() {
-        assert_eq!(
-            Vector3::new(2.0, 3.0, 6.0).normalize(),
-            Vector3::new(2.0 / 7.0, 3.0 / 7.0, 6.0 / 7.0),
-        );
-    }
-
-    #[test]
-    fn normalize_of_the_zero_vector_is_not_finite() {
-        assert!(!Vector3::<f64>::ZERO.normalize().is_finite());
-    }
-
-    #[test]
-    fn try_normalize_of_a_nonzero_vector_is_some() {
-        assert_eq!(
-            Vector3::new(2.0, 3.0, 6.0).try_normalize(),
-            Some(Vector3::new(2.0 / 7.0, 3.0 / 7.0, 6.0 / 7.0)),
-        );
-    }
-
-    #[test]
-    fn try_normalize_of_the_zero_vector_is_none() {
-        assert_eq!(Vector3::<f64>::ZERO.try_normalize(), None);
-    }
-
-    #[test]
-    fn normalize_or_zero_rescales_a_nonzero_vector() {
-        assert_eq!(
-            Vector3::new(2.0, 3.0, 6.0).normalize_or_zero(),
-            Vector3::new(2.0 / 7.0, 3.0 / 7.0, 6.0 / 7.0),
-        );
-    }
-
-    #[test]
-    fn normalize_or_zero_of_the_zero_vector_is_zero() {
-        assert_eq!(Vector3::<f64>::ZERO.normalize_or_zero(), Vector3::ZERO);
-    }
-
-    #[test]
-    fn is_normalized_is_true_for_a_unit_vector() {
-        assert!(Vector3::<f64>::X.is_normalized());
-    }
-
-    #[test]
-    fn is_normalized_is_false_for_a_non_unit_vector() {
-        assert!(!Vector3::new(2.0, 0.0, 0.0).is_normalized());
-    }
-
-    #[test]
-    fn angle_between_perpendicular_vectors_is_a_right_angle() {
-        let x = Vector3::<f64>::X;
-        assert!(close(x.angle_between(Vector3::Y), FRAC_PI_2));
-    }
-
-    #[test]
-    fn angle_between_parallel_vectors_is_zero() {
-        let x = Vector3::<f64>::X;
-        assert!(close(x.angle_between(x), 0.0));
-    }
-
-    #[test]
-    fn angle_between_antiparallel_vectors_is_pi() {
-        let x = Vector3::<f64>::X;
-        assert!(close(x.angle_between(-x), PI));
-    }
-
-    #[test]
-    fn project_onto_returns_the_parallel_component() {
-        let v = Vector3::new(2.0, 3.0, 0.0);
-        let axis = Vector3::new(1.0, 0.0, 0.0);
-        assert_eq!(v.project_onto(axis), Vector3::new(2.0, 0.0, 0.0));
-    }
-
-    #[test]
-    fn reject_from_returns_the_orthogonal_component() {
-        let v = Vector3::new(2.0, 3.0, 0.0);
-        let axis = Vector3::new(1.0, 0.0, 0.0);
-        assert_eq!(v.reject_from(axis), Vector3::new(0.0, 3.0, 0.0));
-    }
-
-    #[test]
-    fn reflect_mirrors_across_the_plane_normal() {
-        let v = Vector3::new(1.0, -1.0, 0.0);
-        let normal = Vector3::new(0.0, 1.0, 0.0);
-        assert_eq!(v.reflect(normal), Vector3::new(1.0, 1.0, 0.0));
+    fn norm_squared_is_the_sum_of_the_squared_components() {
+        assert_eq!(vector().norm_squared(), 14.0);
     }
 
     #[test]
     fn recip_inverts_every_component() {
+        let v = Vector3::new(2.0, 4.0, 8.0);
+        assert_eq!(v.recip(), Vector3::new(0.5, 0.25, 0.125));
+    }
+
+    #[test]
+    fn element_product_multiplies_the_three_components() {
+        assert_eq!(Vector3::new(2.0, 3.0, 4.0).element_product(), 24.0);
+    }
+
+    #[test]
+    fn normalize_of_a_length_vector_is_dimensionless() {
+        let v = Vector3::new(length(0.0), length(4.0), length(0.0));
+        assert_eq!(v.normalize(), Vector3::new(0.0, 1.0, 0.0));
+    }
+
+    #[test]
+    fn try_normalize_of_a_length_vector_is_dimensionless() {
+        let v = Vector3::new(length(0.0), length(4.0), length(0.0));
+        assert_eq!(v.try_normalize().unwrap(), Vector3::new(0.0, 1.0, 0.0));
+    }
+
+    #[test]
+    fn normalize_or_zero_of_a_length_vector_is_dimensionless() {
+        let v = Vector3::new(length(0.0), length(4.0), length(0.0));
+        assert_eq!(v.normalize_or_zero(), Vector3::new(0.0, 1.0, 0.0));
+    }
+
+    #[test]
+    fn angle_between_length_vectors_is_dimensionless() {
+        let a = Vector3::new(length(1.0), length(0.0), length(0.0));
+        let b = Vector3::new(length(0.0), length(2.0), length(0.0));
+        assert!(close(a.angle_between(b), FRAC_PI_2));
+    }
+
+    #[test]
+    fn reflect_takes_a_dimensionless_normal() {
+        let v = Vector3::new(length(1.0), length(-2.0), length(3.0));
+        let expected = Vector3::new(length(1.0), length(2.0), length(3.0));
+        assert_eq!(v.reflect(Vector3::Y), expected);
+    }
+
+    #[test]
+    fn lerp_of_length_vectors_takes_a_dimensionless_factor() {
+        let target = Vector3::new(length(2.0), length(4.0), length(6.0));
+        let expected = Vector3::new(length(1.0), length(2.0), length(3.0));
+        assert_eq!(Vector3::ZERO.lerp(target, 0.5), expected);
+    }
+
+    #[test]
+    fn multiplying_a_dimensionless_vector_by_a_length_carries_the_dimension() {
+        let expected = Vector3::new(length(2.0), length(4.0), length(6.0));
+        assert_eq!(vector() * length(2.0), expected);
+    }
+
+    #[test]
+    fn a_double_on_the_left_scales_a_length_vector() {
+        let v = Vector3::new(length(1.0), length(2.0), length(3.0));
+        let expected = Vector3::new(length(2.0), length(4.0), length(6.0));
+        assert_eq!(2.0 * v, expected);
+    }
+
+    #[test]
+    fn dividing_a_length_vector_by_a_length_leaves_it_dimensionless() {
+        let v = Vector3::new(length(2.0), length(4.0), length(6.0));
+        assert_eq!(v / length(2.0), vector());
+    }
+
+    #[test]
+    fn signum_of_a_length_vector_is_dimensionless() {
+        let v = Vector3::new(length(-2.0), length(0.5), length(-3.0));
+        assert_eq!(v.signum(), Vector3::new(-1.0, 1.0, -1.0));
+    }
+
+    #[test]
+    fn div_euclid_of_length_vectors_is_dimensionless() {
+        let v = Vector3::new(length(7.0), length(-7.0), length(0.0));
         assert_eq!(
-            Vector3::new(2.0, 4.0, 8.0).recip(),
-            Vector3::new(0.5, 0.25, 0.125),
+            v.div_euclid(Vector3::splat(length(3.0))),
+            Vector3::new(2.0, -3.0, 0.0)
         );
     }
 
     #[test]
-    fn abs_takes_the_magnitude_of_every_component() {
-        assert_eq!(
-            Vector3::new(-1.0, 2.0, -3.0).abs(),
-            Vector3::new(1.0, 2.0, 3.0),
-        );
+    fn mul_add_of_length_vectors_takes_a_dimensionless_factor() {
+        let v = Vector3::new(length(1.0), length(2.0), length(3.0));
+        let offset = Vector3::new(length(10.0), length(20.0), length(30.0));
+        let expected = Vector3::new(length(12.0), length(24.0), length(36.0));
+        assert_eq!(v.mul_add(2.0, offset), expected);
     }
 
     #[test]
-    fn min_selects_the_smaller_of_each_component() {
-        let a = Vector3::new(1.0, 5.0, 2.0);
-        let b = Vector3::new(4.0, 2.0, 3.0);
-        assert_eq!(a.min(b), Vector3::new(1.0, 2.0, 2.0));
+    fn hypot_of_length_vectors_stays_a_length() {
+        let v = Vector3::new(length(3.0), length(4.0), length(12.0));
+        let legs = Vector3::new(length(4.0), length(0.0), length(5.0));
+        let combined = v.hypot(legs).map(Quantity::value);
+        assert!(vectors_close(combined, Vector3::new(5.0, 4.0, 13.0)));
     }
 
     #[test]
-    fn max_selects_the_larger_of_each_component() {
-        let a = Vector3::new(1.0, 5.0, 2.0);
-        let b = Vector3::new(4.0, 2.0, 3.0);
-        assert_eq!(a.max(b), Vector3::new(4.0, 5.0, 3.0));
+    #[should_panic(expected = "index out of bounds")]
+    fn from_slice_shorter_than_three_panics() {
+        let _ = Vector3::from_slice(&[1.0_f64, 2.0]);
     }
 
     #[test]
-    fn clamp_restricts_each_component_to_the_range() {
-        let v = Vector3::new(-1.0, 5.0, 2.0);
-        let lo = Vector3::new(0.0, 0.0, 0.0);
-        let hi = Vector3::new(3.0, 3.0, 3.0);
-        assert_eq!(v.clamp(lo, hi), Vector3::new(0.0, 3.0, 2.0));
+    #[should_panic(expected = "index out of bounds")]
+    fn index_out_of_bounds_panics() {
+        let _ = vector()[3];
     }
 
     #[test]
-    #[should_panic]
-    fn clamp_with_min_above_max_panics() {
-        let _ = Vector3::new(1.0_f64, 2.0, 3.0).clamp(Vector3::splat(5.0), Vector3::splat(0.0));
+    #[should_panic(expected = "index out of bounds")]
+    fn index_mut_out_of_bounds_panics() {
+        vector()[3] = 0.0;
     }
 
     #[test]
-    fn min_element_returns_the_smallest_component() {
-        assert_eq!(Vector3::new(3.0, 1.0, 2.0).min_element(), 1.0);
+    #[should_panic(expected = "min > max")]
+    fn clamp_with_an_inverted_interval_panics() {
+        let _ = vector().clamp(Vector3::splat(9.0), Vector3::ZERO);
     }
 
     #[test]
-    fn max_element_returns_the_largest_component() {
-        assert_eq!(Vector3::new(3.0, 1.0, 2.0).max_element(), 3.0);
+    fn try_normalize_of_a_non_finite_vector_is_none() {
+        let v = Vector3::new(f64::INFINITY, 0.0, 0.0);
+        assert!(v.try_normalize().is_none());
     }
 
     #[test]
-    fn floor_rounds_each_component_down() {
-        assert_eq!(
-            Vector3::new(1.5, -1.5, 2.9).floor(),
-            Vector3::new(1.0, -2.0, 2.0),
-        );
+    fn min_ignores_a_not_a_number_component() {
+        assert_eq!(Vector3::splat(f64::NAN).min(vector()), vector());
     }
 
     #[test]
-    fn ceil_rounds_each_component_up() {
-        assert_eq!(
-            Vector3::new(1.1, -1.9, 2.5).ceil(),
-            Vector3::new(2.0, -1.0, 3.0),
-        );
+    fn max_ignores_a_not_a_number_component() {
+        assert_eq!(Vector3::splat(f64::NAN).max(vector()), vector());
     }
 
     #[test]
-    fn round_rounds_halves_away_from_zero() {
-        assert_eq!(
-            Vector3::new(0.5, 2.5, -0.5).round(),
-            Vector3::new(1.0, 3.0, -1.0),
-        );
+    fn is_nan_does_not_hold_when_no_component_is_not_a_number() {
+        assert!(!vector().is_nan());
     }
 
     #[test]
-    fn round_ties_even_rounds_halves_to_even() {
-        assert_eq!(
-            Vector3::new(0.5, 2.5, -1.5).round_ties_even(),
-            Vector3::new(0.0, 2.0, -2.0),
-        );
+    fn is_infinite_does_not_hold_when_every_component_is_finite() {
+        assert!(!vector().is_infinite());
     }
 
     #[test]
-    fn trunc_discards_each_fractional_part() {
-        assert_eq!(
-            Vector3::new(1.7, -1.7, 2.2).trunc(),
-            Vector3::new(1.0, -1.0, 2.0),
-        );
-    }
-
-    #[test]
-    fn fract_keeps_each_fractional_part() {
-        assert_eq!(
-            Vector3::new(1.25, -1.25, 2.5).fract(),
-            Vector3::new(0.25, -0.25, 0.5),
-        );
-    }
-
-    #[test]
-    fn copysign_takes_each_sign_from_the_argument() {
-        let magnitudes = Vector3::new(1.0, 2.0, 3.0);
-        let signs = Vector3::new(-1.0, 1.0, -5.0);
-        assert_eq!(magnitudes.copysign(signs), Vector3::new(-1.0, 2.0, -3.0));
-    }
-
-    #[test]
-    fn signum_returns_the_sign_of_each_component() {
-        assert_eq!(
-            Vector3::new(-3.0, 4.0, -5.0).signum(),
-            Vector3::new(-1.0, 1.0, -1.0),
-        );
-    }
-
-    #[test]
-    fn rem_euclid_returns_the_nonnegative_remainder() {
-        let v = Vector3::new(7.0, -1.0, 8.0);
-        let m = Vector3::new(3.0, 3.0, 3.0);
-        assert_eq!(v.rem_euclid(m), Vector3::new(1.0, 2.0, 2.0));
-    }
-
-    #[test]
-    fn is_finite_is_true_when_all_components_are_finite() {
-        assert!(Vector3::new(1.0, 2.0, 3.0).is_finite());
-    }
-
-    #[test]
-    fn is_finite_is_false_when_a_component_is_infinite() {
+    fn is_finite_does_not_hold_when_a_component_is_infinite() {
         assert!(!Vector3::new(1.0, f64::INFINITY, 3.0).is_finite());
     }
 
     #[test]
-    fn is_infinite_is_true_when_a_component_is_infinite() {
-        assert!(Vector3::new(1.0, f64::INFINITY, 3.0).is_infinite());
+    fn is_normal_does_not_hold_when_a_component_is_zero() {
+        assert!(!Vector3::new(1.0, 0.0, 3.0).is_normal());
     }
 
     #[test]
-    fn is_infinite_is_false_when_all_components_are_finite() {
-        assert!(!Vector3::new(1.0, 2.0, 3.0).is_infinite());
+    fn is_subnormal_does_not_hold_when_every_component_is_normal() {
+        assert!(!vector().is_subnormal());
     }
 
     #[test]
-    fn is_nan_is_true_when_a_component_is_nan() {
-        assert!(Vector3::new(1.0, f64::NAN, 3.0).is_nan());
+    fn from_slice_of_exactly_three_elements_yields_the_vector() {
+        assert_eq!(Vector3::from_slice(&[1.0, 2.0, 3.0]), vector());
     }
 
     #[test]
-    fn is_nan_is_false_when_no_component_is_nan() {
-        assert!(!Vector3::new(1.0, 2.0, 3.0).is_nan());
+    fn floor_leaves_an_integer_component_unchanged() {
+        assert_eq!(vector().floor(), vector());
+    }
+
+    #[test]
+    fn ceil_leaves_an_integer_component_unchanged() {
+        assert_eq!(vector().ceil(), vector());
+    }
+
+    #[test]
+    fn fract_of_an_integer_component_is_zero() {
+        assert_eq!(vector().fract(), Vector3::ZERO);
+    }
+
+    #[test]
+    fn signum_of_a_negative_zero_component_is_minus_one() {
+        assert_eq!(Vector3::new(-0.0, 1.0, 1.0).signum().x, -1.0);
+    }
+
+    #[test]
+    fn angle_between_antiparallel_vectors_is_a_half_turn() {
+        assert!(close(Vector3::<f64>::X.angle_between(-Vector3::X), PI));
+    }
+
+    #[test]
+    fn lerp_beyond_one_extrapolates_past_the_ending_vector() {
+        let target = Vector3::new(4.0, 8.0, 12.0);
+        assert_eq!(
+            Vector3::ZERO.lerp(target, 2.0),
+            Vector3::new(8.0, 16.0, 24.0)
+        );
     }
 
     #[test]
     fn array_roundtrip_preserves_the_vector() {
-        let v = Vector3::new(1.0, 2.0, 3.0);
-        assert_eq!(Vector3::from_array(v.to_array()), v);
+        assert_eq!(Vector3::from_array(vector().to_array()), vector());
     }
 
     #[test]
     fn addition_is_commutative() {
-        let a = Vector3::new(1.0, 2.0, 3.0);
-        let b = Vector3::new(4.0, 5.0, 6.0);
-        assert_eq!(a + b, b + a);
+        let other = Vector3::new(4.0, 5.0, 6.0);
+        assert_eq!(vector() + other, other + vector());
     }
 
     #[test]
     fn the_zero_vector_is_the_additive_identity() {
-        let v = Vector3::new(1.0, 2.0, 3.0);
-        assert_eq!(v + Vector3::ZERO, v);
+        assert_eq!(vector() + Vector3::ZERO, vector());
     }
 
     #[test]
     fn negation_is_the_additive_inverse() {
-        let v = Vector3::new(1.0, 2.0, 3.0);
-        assert_eq!(v + (-v), Vector3::ZERO);
+        assert_eq!(vector() + -vector(), Vector3::ZERO);
+    }
+
+    #[test]
+    fn scaling_on_either_side_gives_the_same_vector() {
+        assert_eq!(2.0 * vector(), vector() * 2.0);
     }
 
     #[test]
     fn dot_product_is_symmetric() {
-        let a = Vector3::new(1.0, 2.0, 3.0);
-        let b = Vector3::new(4.0, 5.0, 6.0);
-        assert_eq!(a.dot(b), b.dot(a));
+        let other = Vector3::new(4.0, 5.0, 6.0);
+        assert_eq!(vector().dot(other), other.dot(vector()));
     }
 
     #[test]
     fn cross_product_is_anticommutative() {
-        let a = Vector3::new(1.0, 2.0, 3.0);
-        let b = Vector3::new(4.0, 5.0, 6.0);
-        assert_eq!(a.cross(b), -(b.cross(a)));
+        let other = Vector3::new(4.0, 5.0, 6.0);
+        assert_eq!(vector().cross(other), -other.cross(vector()));
     }
 
     #[test]
     fn cross_product_is_orthogonal_to_both_factors() {
-        let a = Vector3::new(1.0, 2.0, 3.0);
-        let b = Vector3::new(4.0, 5.0, 6.0);
-        let c = a.cross(b);
-        assert_eq!(c.dot(a), 0.0);
-        assert_eq!(c.dot(b), 0.0);
+        let other = Vector3::new(4.0, 5.0, 6.0);
+        let normal = vector().cross(other);
+        assert!(close(normal.dot(vector()), 0.0) && close(normal.dot(other), 0.0));
+    }
+
+    #[test]
+    fn norm_squared_is_the_square_of_the_norm() {
+        let norm = vector().norm();
+        assert!(close(vector().norm_squared(), norm * norm));
+    }
+
+    #[test]
+    fn norm_holds_above_the_squared_range() {
+        let scale = 2.0_f64.powi(600);
+        let v = Vector3::new(3.0 * scale, 4.0 * scale, 0.0);
+        assert!(close(v.norm() / scale, 5.0));
+    }
+
+    #[test]
+    fn norm_holds_below_the_squared_range() {
+        let scale = 2.0_f64.powi(-600);
+        let v = Vector3::new(3.0 * scale, 4.0 * scale, 0.0);
+        assert!(close(v.norm() / scale, 5.0));
+    }
+
+    #[test]
+    fn project_onto_holds_above_the_squared_range() {
+        let scale = 2.0_f64.powi(600);
+        let v = Vector3::new(3.0 * scale, 4.0 * scale, 0.0);
+        let projected = v.project_onto(Vector3::new(scale, 0.0, 0.0));
+        assert!(close(projected.x / scale, 3.0) && projected.y == 0.0);
+    }
+
+    #[test]
+    fn reject_from_holds_above_the_squared_range() {
+        let scale = 2.0_f64.powi(600);
+        let v = Vector3::new(3.0 * scale, 4.0 * scale, 0.0);
+        let rejected = v.reject_from(Vector3::new(scale, 0.0, 0.0));
+        assert!(close(rejected.y / scale, 4.0) && rejected.x == 0.0);
+    }
+
+    #[test]
+    fn norm_of_a_vector_with_an_infinite_component_is_infinite() {
+        assert_eq!(Vector3::new(f64::INFINITY, 1.0, 2.0).norm(), f64::INFINITY);
+    }
+
+    #[test]
+    fn norm_of_a_vector_with_a_not_a_number_component_is_not_a_number() {
+        assert!(Vector3::new(f64::NAN, 1.0, 2.0).norm().is_nan());
+    }
+
+    #[test]
+    fn angle_between_is_unchanged_by_a_scale_beyond_the_squared_range() {
+        let scale = 2.0_f64.powi(600);
+        let far =
+            Vector3::new(scale, 2.0 * scale, 0.0).angle_between(Vector3::new(scale, 0.0, 0.0));
+        let near = Vector3::new(1.0, 2.0, 0.0).angle_between(Vector3::X);
+        assert!(close(far, near));
+    }
+
+    #[test]
+    fn angle_between_is_unchanged_by_a_scale_below_the_squared_range() {
+        let scale = 2.0_f64.powi(-600);
+        let near =
+            Vector3::new(scale, 2.0 * scale, 0.0).angle_between(Vector3::new(scale, 0.0, 0.0));
+        assert!(close(
+            near,
+            Vector3::new(1.0, 2.0, 0.0).angle_between(Vector3::X)
+        ));
+    }
+
+    #[test]
+    fn lerp_holds_when_the_displacement_between_the_ends_overflows() {
+        let start = Vector3::splat(-f64::MAX);
+        assert_eq!(start.lerp(Vector3::splat(f64::MAX), 0.5), Vector3::ZERO);
+    }
+
+    #[test]
+    fn a_vector_with_a_zero_component_is_not_normal() {
+        assert!(!Vector3::<f64>::X.is_normal());
+    }
+
+    #[test]
+    fn normalizing_yields_a_vector_of_unit_norm() {
+        assert!(close(Vector3::new(3.0, 4.0, 12.0).normalize().norm(), 1.0));
     }
 
     #[test]
     fn projection_and_rejection_reconstruct_the_vector() {
-        let v = Vector3::new(2.0, 3.0, 0.0);
-        let axis = Vector3::new(1.0, 0.0, 0.0);
-        assert_eq!(v.project_onto(axis) + v.reject_from(axis), v);
+        let onto = Vector3::new(1.0, 1.0, 0.0);
+        let reconstructed = vector().project_onto(onto) + vector().reject_from(onto);
+        assert!(vectors_close(reconstructed, vector()));
     }
 
     #[test]
-    fn equality_holds_only_when_all_components_match() {
-        let v = Vector3::new(1.0, 2.0, 3.0);
-        assert_eq!(v, Vector3::new(1.0, 2.0, 3.0));
-        assert_ne!(v, Vector3::new(9.0, 2.0, 3.0));
-        assert_ne!(v, Vector3::new(1.0, 9.0, 3.0));
-        assert_ne!(v, Vector3::new(1.0, 2.0, 9.0));
+    fn reflecting_twice_returns_the_vector() {
+        let v = Vector3::new(1.0, -2.0, 3.0);
+        assert_eq!(v.reflect(Vector3::Y).reflect(Vector3::Y), v);
     }
 
     #[test]
-    fn the_operations_are_generic_over_f32() {
-        let v = Vector3::new(2.0_f32, 3.0, 6.0);
-        assert_eq!(v.norm(), 7.0);
-        assert_eq!(v.dot(v), 49.0);
+    fn truncating_and_the_fractional_part_reconstruct_the_vector() {
+        let v = Vector3::new(-2.75, 2.75, 3.0);
+        assert_eq!(v.trunc() + v.fract(), v);
+    }
+
+    #[test]
+    fn min_of_a_vector_with_itself_is_that_vector() {
+        assert_eq!(vector().min(vector()), vector());
+    }
+
+    #[test]
+    fn max_of_a_vector_with_itself_is_that_vector() {
+        assert_eq!(vector().max(vector()), vector());
+    }
+
+    #[test]
+    fn clamp_agrees_with_taking_the_maximum_then_the_minimum() {
+        let (lo, hi) = (Vector3::splat(1.5), Vector3::splat(2.5));
+        assert_eq!(vector().clamp(lo, hi), vector().max(lo).min(hi));
+    }
+
+    #[test]
+    fn midpoint_agrees_with_interpolating_halfway() {
+        let other = Vector3::new(4.0, 8.0, 12.0);
+        assert_eq!(vector().midpoint(other), vector().lerp(other, 0.5));
+    }
+
+    #[test]
+    fn recip_is_its_own_inverse() {
+        let v = Vector3::new(2.0, 4.0, 8.0);
+        assert_eq!(v.recip().recip(), v);
+    }
+
+    #[test]
+    fn vectors_are_equal_exactly_when_all_components_match() {
+        assert_eq!(vector(), Vector3::new(1.0, 2.0, 3.0));
+        assert_ne!(vector(), Vector3::new(1.0, 2.0, 4.0));
     }
 }

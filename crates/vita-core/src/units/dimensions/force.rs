@@ -43,7 +43,7 @@ impl ForceUnit for HartreePerBohr {
 
 /// The kilocalorie per mole per ångström (kcal mol⁻¹ Å⁻¹).
 ///
-/// 1 kcal mol⁻¹ Å⁻¹ ≈ 0.529177210544 / 627.509474063 Eₕ a₀⁻¹ (CODATA 2022, derived).
+/// 1 kcal mol⁻¹ Å⁻¹ ≈ 0.529177210544 / 627.509474063 Eₕ a₀⁻¹ (CODATA 2022, computed).
 pub struct KilocaloriePerMolePerAngstrom;
 
 impl ForceUnit for KilocaloriePerMolePerAngstrom {
@@ -53,7 +53,7 @@ impl ForceUnit for KilocaloriePerMolePerAngstrom {
 
 /// The kilojoule per mole per nanometer (kJ mol⁻¹ nm⁻¹).
 ///
-/// 1 kJ mol⁻¹ nm⁻¹ ≈ 0.0529177210544 / 2625.49963948 Eₕ a₀⁻¹ (CODATA 2022, derived).
+/// 1 kJ mol⁻¹ nm⁻¹ ≈ 0.0529177210544 / 2625.49963948 Eₕ a₀⁻¹ (CODATA 2022, computed).
 pub struct KilojoulePerMolePerNanometer;
 
 impl ForceUnit for KilojoulePerMolePerNanometer {
@@ -63,7 +63,7 @@ impl ForceUnit for KilojoulePerMolePerNanometer {
 
 /// The electronvolt per ångström (eV Å⁻¹) — standard DFT force unit.
 ///
-/// 1 eV Å⁻¹ ≈ 0.529177210544 / 27.211386245981 Eₕ a₀⁻¹ (CODATA 2022, derived).
+/// 1 eV Å⁻¹ ≈ 0.529177210544 / 27.211386245981 Eₕ a₀⁻¹ (CODATA 2022, computed).
 pub struct ElectronVoltPerAngstrom;
 
 impl ForceUnit for ElectronVoltPerAngstrom {
@@ -71,7 +71,7 @@ impl ForceUnit for ElectronVoltPerAngstrom {
     const SYMBOL: &'static str = "eV Å⁻¹";
 }
 
-/// The newton (N) — SI unit of force (CODATA 2022).
+/// The newton (N) — SI derived unit of force (CODATA 2022).
 ///
 /// 1 N ≈ 1 / 8.2387235038e-8 Eₕ a₀⁻¹.
 pub struct Newton;

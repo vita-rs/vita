@@ -92,7 +92,7 @@ impl ConcentrationUnit for Femtomolar {
     const SYMBOL: &'static str = "fM";
 }
 
-/// The mole per cubic meter (mol/m³) — SI unit of concentration.
+/// The mole per cubic meter (mol/m³) — SI derived unit of concentration.
 ///
 /// 1 mol/m³ = 0.001 M (exact, since 1 m³ = 1000 L by definition).
 pub struct MolePerCubicMeter;

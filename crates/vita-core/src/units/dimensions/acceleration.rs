@@ -60,7 +60,7 @@ impl AccelerationUnit for AngstromPerSquareFemtosecond {
     const SYMBOL: &'static str = "Å fs⁻²";
 }
 
-/// The meter per square second (m s⁻²) — SI unit of acceleration.
+/// The meter per square second (m s⁻²) — SI derived unit of acceleration.
 ///
 /// 1 m s⁻² = 1e-14 Å ps⁻².
 pub struct MeterPerSquareSecond;
@@ -70,7 +70,7 @@ impl AccelerationUnit for MeterPerSquareSecond {
     const SYMBOL: &'static str = "m s⁻²";
 }
 
-/// The atomic acceleration unit (a₀ atu⁻²) — atomic unit of acceleration (CODATA 2022, derived).
+/// The atomic acceleration unit (a₀ atu⁻²) — atomic unit of acceleration (CODATA 2022, computed).
 ///
 /// 1 a₀ atu⁻² ≈ 9.04421612109e8 Å ps⁻².
 pub struct AtomicAcceleration;

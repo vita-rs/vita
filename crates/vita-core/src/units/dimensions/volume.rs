@@ -42,7 +42,7 @@ impl VolumeUnit for CubicAngstrom {
     const SYMBOL: &'static str = "Å³";
 }
 
-/// The cubic bohr (a₀³) — atomic unit of volume (CODATA 2022, derived).
+/// The cubic bohr (a₀³) — atomic unit of volume (CODATA 2022, computed).
 ///
 /// 1 a₀³ ≈ 0.148184711171 Å³.
 pub struct CubicBohr;
@@ -72,7 +72,7 @@ impl VolumeUnit for CubicPicometer {
     const SYMBOL: &'static str = "pm³";
 }
 
-/// The cubic meter (m³) — SI base unit of volume.
+/// The cubic meter (m³) — SI derived unit of volume.
 ///
 /// 1 m³ = 1e30 Å³.
 pub struct CubicMeter;

@@ -60,7 +60,7 @@ impl MomentumUnit for DaltonAngstromPerFemtosecond {
     const SYMBOL: &'static str = "Da Å fs⁻¹";
 }
 
-/// The atomic momentum unit (ℏ a₀⁻¹) — atomic unit of momentum (CODATA 2022, derived).
+/// The atomic momentum unit (ℏ a₀⁻¹) — atomic unit of momentum (CODATA 2022, computed).
 ///
 /// 1 ℏ a₀⁻¹ ≈ 12.001234736055 Da Å ps⁻¹.
 pub struct AtomicMomentum;
@@ -70,7 +70,7 @@ impl MomentumUnit for AtomicMomentum {
     const SYMBOL: &'static str = "ℏ a₀⁻¹";
 }
 
-/// The kilogram-meter per second (kg m s⁻¹) — SI unit of momentum (CODATA 2022, derived).
+/// The kilogram-meter per second (kg m s⁻¹) — SI derived unit of momentum (CODATA 2022, computed).
 ///
 /// 1 kg m s⁻¹ ≈ 6.0221407537e24 Da Å ps⁻¹.
 pub struct KilogramMeterPerSecond;

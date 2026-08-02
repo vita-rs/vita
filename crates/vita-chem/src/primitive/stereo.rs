@@ -141,7 +141,7 @@ pub struct StereoDescriptor {
 impl StereoDescriptor {
     /// The kind whose configurations this descriptor selects among.
     #[inline]
-    pub const fn kind(&self) -> StereoKind {
+    pub const fn kind(self) -> StereoKind {
         self.kind
     }
 
@@ -150,7 +150,7 @@ impl StereoDescriptor {
     /// A chiral kind's descriptor flips to a distinct one; an achiral kind's is its
     /// own mirror, so the two coincide.
     #[inline]
-    pub fn mirror(&self) -> StereoDescriptor {
+    pub fn mirror(self) -> StereoDescriptor {
         let geometry = geometry(self.kind);
         StereoDescriptor {
             kind: self.kind,
@@ -219,7 +219,7 @@ impl StereoConfiguration {
         (locus.anchors(kind) && neighbors.len() == kind.slot_count()).then(|| Self {
             locus,
             kind,
-            neighbors: normalized(kind, neighbors),
+            neighbors: normalized(kind, &neighbors),
         })
     }
 
@@ -504,7 +504,7 @@ static TRIGONAL_PRISMATIC: Geometry = Geometry {
 /// orbit — the canonical presentation, so equal configurations store equal
 /// neighbors and `==`, `Ord`, and `Hash` follow from the stored order. Only proper
 /// rotations act, leaving intact the handedness a chiral kind fixes.
-fn normalized(kind: StereoKind, neighbors: Vec<SiteId>) -> Vec<SiteId> {
+fn normalized(kind: StereoKind, neighbors: &[SiteId]) -> Vec<SiteId> {
     geometry(kind)
         .group
         .iter()

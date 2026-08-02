@@ -2,7 +2,8 @@
 //!
 //! Each physical dimension is a submodule exposing a quantity newtype `Q<V, U>` — a
 //! scalar `V` tagged with a zero-sized unit marker `U` — alongside the marker trait and
-//! unit types implementing it. Converting between units is the explicit `.to()`.
+//! unit types implementing it. Every newtype implements [`Quantity`](crate::Quantity),
+//! which carries its arithmetic; converting between units is the explicit `.to()`.
 
 mod dimensions;
 mod quantity;

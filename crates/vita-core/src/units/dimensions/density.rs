@@ -38,7 +38,7 @@ impl DensityUnit for GramPerCubicCentimeter {
     const SYMBOL: &'static str = "g cm⁻³";
 }
 
-/// The kilogram per cubic meter (kg m⁻³) — SI unit of density.
+/// The kilogram per cubic meter (kg m⁻³) — SI derived unit of density.
 ///
 /// 1 kg m⁻³ = 0.001 g cm⁻³.
 pub struct KilogramPerCubicMeter;
@@ -48,7 +48,7 @@ impl DensityUnit for KilogramPerCubicMeter {
     const SYMBOL: &'static str = "kg m⁻³";
 }
 
-/// The dalton per cubic ångström (Da Å⁻³) — atomic unit of density (CODATA 2022, derived).
+/// The dalton per cubic ångström (Da Å⁻³) — atomic unit of density (CODATA 2022, computed).
 ///
 /// 1 Da Å⁻³ ≈ 1.66053906892 g cm⁻³.
 pub struct DaltonPerCubicAngstrom;
