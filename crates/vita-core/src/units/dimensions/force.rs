@@ -71,7 +71,7 @@ impl ForceUnit for ElectronVoltPerAngstrom {
     const SYMBOL: &'static str = "eV Å⁻¹";
 }
 
-/// The newton (N) — SI unit of force (CODATA 2022).
+/// The newton (N) — SI derived unit of force (CODATA 2022).
 ///
 /// 1 N ≈ 1 / 8.2387235038e-8 Eₕ a₀⁻¹.
 pub struct Newton;

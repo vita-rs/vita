@@ -74,7 +74,7 @@ impl ReciprocalVolumeUnit for ReciprocalCubicPicometer {
     const SYMBOL: &'static str = "pm⁻³";
 }
 
-/// The reciprocal cubic meter (m⁻³) — SI base unit of reciprocal volume.
+/// The reciprocal cubic meter (m⁻³) — SI derived unit of reciprocal volume.
 ///
 /// 1 m⁻³ = 1e-30 Å⁻³.
 pub struct ReciprocalCubicMeter;

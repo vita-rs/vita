@@ -71,7 +71,7 @@ impl ReciprocalAreaUnit for ReciprocalSquarePicometer {
     const SYMBOL: &'static str = "pm⁻²";
 }
 
-/// The reciprocal square meter (m⁻²) — SI base unit of reciprocal area.
+/// The reciprocal square meter (m⁻²) — SI derived unit of reciprocal area.
 ///
 /// 1 m⁻² = 1e-20 Å⁻².
 pub struct ReciprocalSquareMeter;

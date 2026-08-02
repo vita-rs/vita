@@ -38,7 +38,7 @@ impl DensityUnit for GramPerCubicCentimeter {
     const SYMBOL: &'static str = "g cm⁻³";
 }
 
-/// The kilogram per cubic meter (kg m⁻³) — SI unit of density.
+/// The kilogram per cubic meter (kg m⁻³) — SI derived unit of density.
 ///
 /// 1 kg m⁻³ = 0.001 g cm⁻³.
 pub struct KilogramPerCubicMeter;

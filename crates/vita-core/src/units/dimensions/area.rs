@@ -70,7 +70,7 @@ impl AreaUnit for SquarePicometer {
     const SYMBOL: &'static str = "pm²";
 }
 
-/// The square meter (m²) — SI base unit of area.
+/// The square meter (m²) — SI derived unit of area.
 ///
 /// 1 m² = 1e20 Å².
 pub struct SquareMeter;

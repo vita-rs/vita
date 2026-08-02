@@ -92,7 +92,7 @@ impl EnergyUnit for MilliElectronVolt {
     const SYMBOL: &'static str = "meV";
 }
 
-/// The joule (J) — SI base unit of energy (CODATA 2022).
+/// The joule (J) — SI derived unit of energy (CODATA 2022).
 ///
 /// 1 J ≈ 1 / 4.3597447222060e-18 Eₕ.
 pub struct Joule;

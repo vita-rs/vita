@@ -60,7 +60,7 @@ impl AccelerationUnit for AngstromPerSquareFemtosecond {
     const SYMBOL: &'static str = "Å fs⁻²";
 }
 
-/// The meter per square second (m s⁻²) — SI unit of acceleration.
+/// The meter per square second (m s⁻²) — SI derived unit of acceleration.
 ///
 /// 1 m s⁻² = 1e-14 Å ps⁻².
 pub struct MeterPerSquareSecond;

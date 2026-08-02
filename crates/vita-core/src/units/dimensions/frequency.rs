@@ -59,7 +59,7 @@ impl FrequencyUnit for Terahertz {
     const SYMBOL: &'static str = "THz";
 }
 
-/// The hertz (Hz) — SI base unit of frequency.
+/// The hertz (Hz) — SI derived unit of frequency.
 ///
 /// 1 Hz = 1 / 29979245800 cm⁻¹ (exact).
 pub struct Hertz;

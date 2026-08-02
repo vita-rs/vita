@@ -39,7 +39,7 @@ impl ChargeUnit for ElementaryCharge {
     const SYMBOL: &'static str = "e";
 }
 
-/// The coulomb (C) — SI base unit of electric charge.
+/// The coulomb (C) — SI derived unit of electric charge.
 ///
 /// 1 C ≈ 1 / 1.602176634e-19 e (CODATA 2022).
 pub struct Coulomb;

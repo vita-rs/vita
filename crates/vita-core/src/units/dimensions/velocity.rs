@@ -60,7 +60,7 @@ impl VelocityUnit for AngstromPerFemtosecond {
     const SYMBOL: &'static str = "Å fs⁻¹";
 }
 
-/// The meter per second (m s⁻¹) — SI unit of velocity.
+/// The meter per second (m s⁻¹) — SI derived unit of velocity.
 ///
 /// 1 m s⁻¹ = 0.01 Å ps⁻¹.
 pub struct MeterPerSecond;

@@ -72,7 +72,7 @@ impl ForceConstantUnit for ElectronVoltPerSquareAngstrom {
     const SYMBOL: &'static str = "eV Å⁻²";
 }
 
-/// The newton per meter (N m⁻¹) — SI unit of force constant (CODATA 2022).
+/// The newton per meter (N m⁻¹) — SI derived unit of force constant (CODATA 2022).
 ///
 /// 1 N m⁻¹ ≈ 5.29177210544e-11 / 8.2387235038e-8 Eₕ a₀⁻².
 pub struct NewtonPerMeter;

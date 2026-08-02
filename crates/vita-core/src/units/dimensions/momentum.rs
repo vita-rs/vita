@@ -70,7 +70,7 @@ impl MomentumUnit for AtomicMomentum {
     const SYMBOL: &'static str = "ℏ a₀⁻¹";
 }
 
-/// The kilogram-meter per second (kg m s⁻¹) — SI unit of momentum (CODATA 2022, derived).
+/// The kilogram-meter per second (kg m s⁻¹) — SI derived unit of momentum (CODATA 2022, derived).
 ///
 /// 1 kg m s⁻¹ ≈ 6.0221407537e24 Da Å ps⁻¹.
 pub struct KilogramMeterPerSecond;
