@@ -39,3 +39,93 @@ where
     let cosine = leading.dot(trailing);
     Some(Angle::<V, Radian>::new(sine.atan2(cosine)).to::<U>())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use core::f64::consts::{FRAC_PI_2, PI};
+
+    use crate::geometry::measure::fixture::{System, close, configuration, s};
+    use crate::units::angle::Degree;
+
+    fn chain(far: [f64; 3]) -> System {
+        configuration(&[[0.0, 1.0, 0.0], [0.0, 0.0, 0.0], [1.0, 0.0, 0.0], far])
+    }
+
+    #[test]
+    fn a_syn_planar_chain_has_a_dihedral_of_zero() {
+        let system = chain([1.0, 1.0, 0.0]);
+        let torsion: Angle<f64, Radian> = dihedral(&system, s(1), s(2), s(3), s(4)).unwrap();
+        assert!(close(torsion, Angle::new(0.0)));
+    }
+
+    #[test]
+    fn an_anti_planar_chain_has_a_dihedral_of_a_half_turn() {
+        let system = chain([1.0, -1.0, 0.0]);
+        let torsion: Angle<f64, Radian> = dihedral(&system, s(1), s(2), s(3), s(4)).unwrap();
+        assert!(close(torsion, Angle::new(PI)));
+    }
+
+    #[test]
+    fn a_quarter_turn_of_the_far_arm_measures_a_quarter_turn() {
+        let system = chain([1.0, 0.0, 1.0]);
+        let torsion: Angle<f64, Radian> = dihedral(&system, s(1), s(2), s(3), s(4)).unwrap();
+        assert!(close(torsion, Angle::new(FRAC_PI_2)));
+    }
+
+    #[test]
+    fn a_dihedral_reverses_sign_when_the_far_arm_turns_the_other_way() {
+        let system = chain([1.0, 0.0, -1.0]);
+        let torsion: Angle<f64, Radian> = dihedral(&system, s(1), s(2), s(3), s(4)).unwrap();
+        assert!(close(torsion, Angle::new(-FRAC_PI_2)));
+    }
+
+    #[test]
+    fn a_dihedral_is_given_in_the_requested_unit() {
+        let system = chain([1.0, 0.0, 1.0]);
+        let torsion: Angle<f64, Degree> = dihedral(&system, s(1), s(2), s(3), s(4)).unwrap();
+        assert!(close(torsion, Angle::new(90.0)));
+    }
+
+    #[test]
+    fn a_collinear_leading_triple_leaves_the_dihedral_absent() {
+        let system = configuration(&[
+            [-1.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0],
+            [1.0, 0.0, 0.0],
+            [1.0, 1.0, 0.0],
+        ]);
+        let torsion: Option<Angle<f64, Radian>> = dihedral(&system, s(1), s(2), s(3), s(4));
+        assert!(torsion.is_none());
+    }
+
+    #[test]
+    fn a_collinear_trailing_triple_leaves_the_dihedral_absent() {
+        let system = chain([2.0, 0.0, 0.0]);
+        let torsion: Option<Angle<f64, Radian>> = dihedral(&system, s(1), s(2), s(3), s(4));
+        assert!(torsion.is_none());
+    }
+
+    #[test]
+    fn a_dihedral_is_unchanged_when_its_chain_is_reversed() {
+        let system = chain([1.0, 0.0, 1.0]);
+        let forward: Angle<f64, Radian> = dihedral(&system, s(1), s(2), s(3), s(4)).unwrap();
+        let reversed: Angle<f64, Radian> = dihedral(&system, s(4), s(3), s(2), s(1)).unwrap();
+        assert!(close(forward, reversed));
+    }
+
+    #[test]
+    fn a_dihedral_is_unchanged_when_its_chain_is_scaled() {
+        let system = chain([1.0, 1.0, 1.0]);
+        let scaled = configuration(&[
+            [0.0, 3.0, 0.0],
+            [0.0, 0.0, 0.0],
+            [3.0, 0.0, 0.0],
+            [3.0, 3.0, 3.0],
+        ]);
+        let torsion: Angle<f64, Radian> = dihedral(&system, s(1), s(2), s(3), s(4)).unwrap();
+        let enlarged: Angle<f64, Radian> = dihedral(&scaled, s(1), s(2), s(3), s(4)).unwrap();
+        assert!(close(torsion, enlarged));
+    }
+}
