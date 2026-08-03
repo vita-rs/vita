@@ -46,7 +46,7 @@ mod tests {
 
     use core::f64::consts::{FRAC_PI_2, PI};
 
-    use crate::geometry::measure::fixture::{System, close, configuration, s};
+    use crate::geometry::fixture::{System, close, configuration, s};
     use crate::units::angle::Degree;
 
     fn chain(far: [f64; 3]) -> System {

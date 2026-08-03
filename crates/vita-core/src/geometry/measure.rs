@@ -28,38 +28,3 @@ use crate::{HasPositions, Quantity, Scalar, SiteId};
 fn point<S: HasPositions<V>, V: Scalar>(system: &S, site: SiteId) -> Point3<V> {
     system.position::<Angstrom>(site).map(Quantity::value)
 }
-
-#[cfg(test)]
-mod fixture {
-    use super::*;
-
-    use crate::HasSites;
-    use crate::units::length::{Length, LengthUnit};
-
-    pub struct System(Vec<Point3<f64>>);
-
-    impl HasSites for System {
-        fn sites(&self) -> impl Iterator<Item = SiteId> + '_ {
-            (1..=self.0.len() as u32).map(s)
-        }
-    }
-
-    impl HasPositions<f64> for System {
-        fn position<U: LengthUnit>(&self, site: SiteId) -> Point3<Length<f64, U>> {
-            self.0[site.get() as usize - 1]
-                .map(|value| Length::<f64, Angstrom>::new(value).to::<U>())
-        }
-    }
-
-    pub fn s(n: u32) -> SiteId {
-        SiteId::new(n).unwrap()
-    }
-
-    pub fn configuration(points: &[[f64; 3]]) -> System {
-        System(points.iter().copied().map(Point3::from_array).collect())
-    }
-
-    pub fn close<Q: Quantity<Value = f64>>(a: Q, b: Q) -> bool {
-        (a.value() - b.value()).abs() <= 1e-12
-    }
-}

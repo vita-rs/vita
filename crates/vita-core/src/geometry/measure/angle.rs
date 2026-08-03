@@ -29,7 +29,7 @@ mod tests {
 
     use core::f64::consts::{FRAC_PI_2, PI};
 
-    use crate::geometry::measure::fixture::{close, configuration, s};
+    use crate::geometry::fixture::{close, configuration, s};
     use crate::units::angle::Degree;
 
     #[test]

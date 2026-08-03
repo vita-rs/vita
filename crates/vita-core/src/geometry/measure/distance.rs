@@ -22,7 +22,7 @@ where
 mod tests {
     use super::*;
 
-    use crate::geometry::measure::fixture::{close, configuration, s};
+    use crate::geometry::fixture::{close, configuration, s};
     use crate::units::length::{Angstrom, Nanometer};
 
     #[test]

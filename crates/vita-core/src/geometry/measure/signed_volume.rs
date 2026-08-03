@@ -38,7 +38,7 @@ where
 mod tests {
     use super::*;
 
-    use crate::geometry::measure::fixture::{System, close, configuration, s};
+    use crate::geometry::fixture::{System, close, configuration, s};
     use crate::units::volume::CubicNanometer;
 
     fn corner() -> System {
