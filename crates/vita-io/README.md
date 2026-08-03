@@ -20,7 +20,7 @@ use vita_core::units::length::Angstrom;
 let system = xyz::read(reader).system::<f64>()?;
 
 // any `HasElements + HasPositions<f64>` -> any `Write`
-xyz::write::<_, Angstrom, _>(&mut writer, &system, &xyz::Config { comment: "" })?;
+xyz::write::<_, _, Angstrom>(&mut writer, &system, &xyz::Config { comment: "" })?;
 ```
 
 ---

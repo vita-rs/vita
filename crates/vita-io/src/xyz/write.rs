@@ -21,11 +21,11 @@ pub struct Config<'a> {
 ///
 /// Returns [`Error::Io`](crate::Error::Io) if `writer` fails or if
 /// [`Config::comment`] contains a line terminator (`\n` or `\r`).
-pub fn write<V, U, S>(writer: &mut impl Write, source: &S, config: &Config<'_>) -> Result<(), Error>
+pub fn write<S, V, U>(writer: &mut impl Write, source: &S, config: &Config<'_>) -> Result<(), Error>
 where
+    S: HasElements + HasPositions<V>,
     V: Scalar,
     U: LengthUnit,
-    S: HasElements + HasPositions<V>,
 {
     if config.comment.contains(['\n', '\r']) {
         return Err(io::Error::new(
@@ -99,7 +99,7 @@ mod tests {
 
     fn written<U: LengthUnit>(source: &Atoms, comment: &str) -> Result<String, Error> {
         let mut buffer = Vec::new();
-        write::<f64, U, _>(&mut buffer, source, &Config { comment })?;
+        write::<_, f64, U>(&mut buffer, source, &Config { comment })?;
         Ok(String::from_utf8(buffer).unwrap())
     }
 
@@ -140,7 +140,7 @@ mod tests {
             )],
         };
         let mut buffer = Vec::new();
-        write::<f32, Angstrom, _>(&mut buffer, &source, &Config { comment: "c" }).unwrap();
+        write::<_, f32, Angstrom>(&mut buffer, &source, &Config { comment: "c" }).unwrap();
         assert_eq!(String::from_utf8(buffer).unwrap(), "1\nc\nH 1.5 0 0\n");
     }
 
@@ -175,7 +175,7 @@ mod tests {
         }
         let source = atoms(&[("H", 0.0, 0.0, 0.0)]);
         let error =
-            write::<f64, Angstrom, _>(&mut Failing, &source, &Config { comment: "c" }).unwrap_err();
+            write::<_, f64, Angstrom>(&mut Failing, &source, &Config { comment: "c" }).unwrap_err();
         assert!(matches!(error, Error::Io(e) if e.kind() == io::ErrorKind::BrokenPipe));
     }
 
@@ -185,7 +185,7 @@ mod tests {
             .system::<f64>()
             .unwrap();
         let mut buffer = Vec::new();
-        write::<f64, Angstrom, _>(
+        write::<_, f64, Angstrom>(
             &mut buffer,
             &original,
             &Config {
