@@ -11,11 +11,13 @@ mod angle;
 mod dihedral;
 mod displacement;
 mod distance;
+mod signed_volume;
 
 pub use angle::angle;
 pub use dihedral::dihedral;
 pub use displacement::displacement;
 pub use distance::distance;
+pub use signed_volume::signed_volume;
 
 use crate::tensor::Point3;
 use crate::units::length::Angstrom;
