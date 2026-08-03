@@ -7,8 +7,10 @@
 //! separation with its direction. An angle or a dihedral whose arms collapse is absent
 //! rather than zero.
 
+mod displacement;
 mod distance;
 
+pub use displacement::displacement;
 pub use distance::distance;
 
 use crate::tensor::Point3;
