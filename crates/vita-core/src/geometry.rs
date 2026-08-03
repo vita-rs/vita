@@ -1,4 +1,5 @@
 pub mod measure;
+pub mod moment;
 
 #[cfg(test)]
 mod fixture {
