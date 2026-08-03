@@ -472,7 +472,7 @@ fn from_reciprocal_angstroms<V: Scalar, U: ReciprocalLengthUnit>(
 
 /// Converts an angle to its bare scalar value in radians.
 #[inline]
-fn into_radians<V: Scalar, A: AngleUnit>(angle: Angle<V, A>) -> V {
+fn into_radians<V: Scalar, U: AngleUnit>(angle: Angle<V, U>) -> V {
     angle.to::<Radian>().value()
 }
 
