@@ -7,15 +7,23 @@
 //! separation with its direction. An angle or a dihedral whose arms collapse is absent
 //! rather than zero.
 
+mod angle;
 mod displacement;
 mod distance;
 
+pub use angle::angle;
 pub use displacement::displacement;
 pub use distance::distance;
 
 use crate::tensor::Point3;
 use crate::units::length::Angstrom;
 use crate::{HasPositions, Quantity, Scalar, SiteId};
+
+/// The position of `site` in ångströms, stripped of its unit: the readings below
+/// multiply coordinates together, and a product of lengths is not a length.
+fn point<S: HasPositions<V>, V: Scalar>(system: &S, site: SiteId) -> Point3<V> {
+    system.position::<Angstrom>(site).map(Quantity::value)
+}
 
 #[cfg(test)]
 mod fixture {
