@@ -8,10 +8,12 @@
 //! rather than zero.
 
 mod angle;
+mod dihedral;
 mod displacement;
 mod distance;
 
 pub use angle::angle;
+pub use dihedral::dihedral;
 pub use displacement::displacement;
 pub use distance::distance;
 
