@@ -4,10 +4,10 @@
 //! is put to that one [`Arrangement`]: which sites lie [`near`](Arrangement::near) a
 //! place, which [`pairs`](Arrangement::pairs) of them fall within the cutoff, and — as
 //! [`Neighbors`] — that same relation indexed by site, to be asked about rather than
-//! read through once. Each answer carries the displacement it was decided by, so a
-//! reading that weighs by separation measures nothing twice. [`periodic_arrangement`]
-//! and [`periodic_neighbors`] answer on the torus a lattice defines, taking every
-//! separation to its shortest image.
+//! read through once. What it reads out itself comes with the displacement that decided
+//! it, so a reading that weighs by separation measures nothing twice, while the relation
+//! it gathers keeps the pairs alone. [`periodic_arrangement`] and [`periodic_neighbors`]
+//! answer on the torus a lattice defines, taking every separation to its shortest image.
 //!
 //! A place and a site are asked after differently: an [`Arrangement`] is indexed by the
 //! space the sites sit in, so any point at all can be put to it, while [`Neighbors`] is
