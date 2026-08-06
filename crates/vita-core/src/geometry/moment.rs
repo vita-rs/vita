@@ -8,6 +8,11 @@
 //! gives the shape. The second moment is the last a quadratic form on
 //! three-dimensional space can hold; the named combinations of its eigenvalues that
 //! each field keeps are the caller's.
+//!
+//! Every reading takes the coordinates as they stand. A moment is taken about a mean of
+//! positions, and a torus carries their addition but not the division that follows it: a
+//! periodic distribution has moments only once lifted back into space, and neither the
+//! coordinates nor the cell settles the lift.
 
 mod center;
 mod moments;

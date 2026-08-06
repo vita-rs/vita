@@ -5,8 +5,7 @@ use crate::{HasPositions, Scalar, SiteId};
 /// The displacement from `from` to `to`, in unit `U`.
 ///
 /// The separation of two sites as a vector, direction and all; its norm is their
-/// [`distance`](super::distance()). Under periodic boundaries the separation to take is
-/// its shortest image, [`Lattice::minimum_image`](crate::Lattice::minimum_image).
+/// [`distance`](super::distance()).
 ///
 /// # Panics
 ///

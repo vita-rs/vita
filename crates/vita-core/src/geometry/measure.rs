@@ -6,6 +6,10 @@
 //! sites directly, with no chain to sight along, and [`displacement`] carries a
 //! separation with its direction. An angle or a dihedral whose arms collapse is absent
 //! rather than zero.
+//!
+//! Every reading takes the coordinates as they stand: under a periodic cell each reads
+//! the direct separation and not the shortest image,
+//! [`minimum_image`](crate::Lattice::minimum_image), which is the caller's to take.
 
 mod angle;
 mod dihedral;
