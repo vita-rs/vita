@@ -30,8 +30,9 @@
 //!
 //! [`geometry`] reads what a system's placement determines:
 //! [`measure`](geometry::measure) answers for a fixed tuple of sites — a separation, an
-//! angle, a dihedral, a handedness — and [`moment`](geometry::moment) for the sites as
-//! a whole, the center they are spread about and the spread itself.
+//! angle, a dihedral, a handedness — [`moment`](geometry::moment) for the sites as a
+//! whole, the center they are spread about and the spread itself, and
+//! [`proximity`](geometry::proximity) for what lies near what.
 
 mod capability;
 mod primitive;

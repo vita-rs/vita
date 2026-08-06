@@ -1,5 +1,13 @@
+//! Readings of the sites as placed in space.
+//!
+//! [`measure`] answers for a fixed tuple of them — a separation, an angle, a dihedral,
+//! a handedness; [`moment`] answers for all of them at once — the center they are
+//! spread about and the spread itself; [`proximity`] arranges them so that nearness
+//! can be asked — what lies near a place, and which pairs fall within reach.
+
 pub mod measure;
 pub mod moment;
+pub mod proximity;
 
 #[cfg(test)]
 mod fixture {
