@@ -476,3 +476,320 @@ fn wrapped(cell: [u32; 3], offset: [i32; 3], dims: [u32; 3]) -> Option<([u32; 3]
 fn from_angstroms<V: Scalar, U: LengthUnit>(displacement: Vector3<V>) -> Vector3<Length<V, U>> {
     displacement.map(|value| Length::<V, Angstrom>::new(value).to::<U>())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use crate::geometry::fixture::{close, configuration, s};
+    use crate::geometry::proximity::fixture::{chain, cube, reach, sheared, spot, strewn, sweep};
+    use crate::units::length::Nanometer;
+
+    fn paired(arrangement: &Arrangement<f64>) -> Vec<(SiteId, SiteId)> {
+        let mut pairs: Vec<(SiteId, SiteId)> = (arrangement.pairs::<Angstrom>())
+            .map(|(a, b, _)| (a, b))
+            .collect();
+        pairs.sort_unstable();
+        pairs
+    }
+
+    fn nearby(arrangement: &Arrangement<f64>, point: [f64; 3]) -> Vec<SiteId> {
+        let mut sites: Vec<SiteId> = arrangement
+            .near(spot(point))
+            .map(|(site, _)| site)
+            .collect();
+        sites.sort_unstable();
+        sites
+    }
+
+    fn shortest(
+        points: &[[f64; 3]],
+        lattice: Option<Lattice<f64>>,
+        a: SiteId,
+        b: SiteId,
+    ) -> Vector3<Length<f64, Angstrom>> {
+        let place = |site: SiteId| Point3::from_array(points[site.get() as usize - 1]);
+        let separation = (place(b) - place(a)).map(Length::new);
+        lattice.map_or(separation, |lattice| lattice.minimum_image(separation))
+    }
+
+    #[test]
+    fn an_empty_system_arranges_nothing() {
+        let found = arrangement(&configuration(&[]), reach(1.0));
+        assert!(paired(&found).is_empty() && nearby(&found, [0.0; 3]).is_empty());
+    }
+
+    #[test]
+    fn a_lone_site_has_no_pair() {
+        assert!(paired(&arrangement(&configuration(&[[0.0; 3]]), reach(1.0))).is_empty());
+    }
+
+    #[test]
+    fn a_negative_cutoff_puts_nothing_within_reach() {
+        let found = arrangement(&chain(), reach(-1.0));
+        assert!(paired(&found).is_empty() && nearby(&found, [0.0; 3]).is_empty());
+    }
+
+    #[test]
+    fn a_cutoff_of_zero_leaves_only_what_coincides() {
+        let system = configuration(&[[0.0; 3], [0.0; 3], [1.0, 0.0, 0.0]]);
+        assert_eq!(
+            paired(&arrangement(&system, reach(0.0))),
+            vec![(s(1), s(2))]
+        );
+    }
+
+    #[test]
+    fn pairs_are_the_sites_within_the_cutoff() {
+        let found = arrangement(&chain(), reach(1.5));
+        assert_eq!(
+            paired(&found),
+            vec![(s(1), s(2)), (s(2), s(3)), (s(3), s(4))]
+        );
+    }
+
+    #[test]
+    fn sites_exactly_at_the_cutoff_are_paired() {
+        assert_eq!(paired(&arrangement(&chain(), reach(1.0))).len(), 3);
+    }
+
+    #[test]
+    fn every_pair_gives_the_lesser_site_first() {
+        let found = arrangement(&configuration(&strewn()), reach(3.0));
+        assert!(found.pairs::<Angstrom>().all(|(a, b, _)| a < b));
+    }
+
+    #[test]
+    fn a_pair_carries_the_displacement_from_the_lesser_site_to_the_greater() {
+        let found = arrangement(&chain(), reach(1.5));
+        let (_, _, displacement) = found.pairs::<Angstrom>().next().unwrap();
+        assert!(close(displacement.x, Length::new(1.0)) && close(displacement.y, Length::ZERO));
+    }
+
+    #[test]
+    fn the_cutoff_is_read_back_in_the_requested_unit() {
+        let found = arrangement(&chain(), reach(1.5));
+        assert!(close(found.cutoff::<Nanometer>(), Length::new(0.15)));
+    }
+
+    #[test]
+    fn a_displacement_is_read_in_the_requested_unit() {
+        let found = arrangement(&chain(), reach(1.5));
+        let (_, _, displacement) = found.pairs::<Nanometer>().next().unwrap();
+        assert!(close(displacement.x, Length::new(0.1)));
+    }
+
+    #[test]
+    fn near_reads_the_point_in_the_requested_unit() {
+        let found = arrangement(&chain(), reach(0.5));
+        let point = Point3::from_array([0.1, 0.0, 0.0]).map(Length::<f64, Nanometer>::new);
+        assert_eq!(
+            found.near(point).map(|(site, _)| site).collect::<Vec<_>>(),
+            vec![s(2)]
+        );
+    }
+
+    #[test]
+    fn near_lists_the_sites_within_the_cutoff_of_a_point() {
+        let found = arrangement(&chain(), reach(1.5));
+        assert_eq!(nearby(&found, [2.2, 0.0, 0.0]), vec![s(2), s(3), s(4)]);
+    }
+
+    #[test]
+    fn a_site_standing_at_the_point_is_near_it() {
+        assert_eq!(
+            nearby(&arrangement(&chain(), reach(0.5)), [1.0, 0.0, 0.0]),
+            vec![s(2)]
+        );
+    }
+
+    #[test]
+    fn near_carries_the_displacement_from_the_point() {
+        let found = arrangement(&chain(), reach(0.5));
+        let (_, displacement) = found.near(spot([0.7, 0.0, 0.0])).next().unwrap();
+        assert!(close(displacement.x, Length::new(0.3)));
+    }
+
+    #[test]
+    fn a_point_out_of_reach_of_every_site_has_nothing_near() {
+        assert!(nearby(&arrangement(&chain(), reach(1.5)), [0.0, 9.0, 0.0]).is_empty());
+    }
+
+    #[test]
+    fn a_point_before_the_corner_finds_what_lies_near_it() {
+        assert_eq!(
+            nearby(&arrangement(&chain(), reach(1.5)), [-1.0, 0.0, 0.0]),
+            vec![s(1)]
+        );
+    }
+
+    #[test]
+    fn sites_in_diagonally_adjacent_cells_are_paired() {
+        let system = configuration(&[[0.0; 3], [1.9, 1.9, 1.9], [2.1, 2.1, 2.1]]);
+        assert_eq!(
+            paired(&arrangement(&system, reach(2.0))),
+            vec![(s(2), s(3))]
+        );
+    }
+
+    #[test]
+    fn pairs_are_independent_of_the_order_of_the_positions() {
+        let shuffled = configuration(&[
+            [3.0, 0.0, 0.0],
+            [1.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0],
+            [2.0, 0.0, 0.0],
+        ]);
+        let found = arrangement(&shuffled, reach(1.5));
+        assert_eq!(
+            paired(&found),
+            vec![(s(1), s(4)), (s(2), s(3)), (s(2), s(4))]
+        );
+    }
+
+    #[test]
+    fn a_point_is_near_the_sites_across_the_boundary() {
+        let found = periodic_arrangement(&cube(&[[0.5, 0.0, 0.0]]), reach(2.0));
+        assert_eq!(nearby(&found, [9.8, 0.0, 0.0]), vec![s(1)]);
+    }
+
+    #[test]
+    fn a_point_outside_the_cell_is_read_from_its_image_inside_it() {
+        let found = periodic_arrangement(&cube(&[[0.5, 0.0, 0.0]]), reach(2.0));
+        assert_eq!(nearby(&found, [20.3, 0.0, 0.0]), vec![s(1)]);
+    }
+
+    #[test]
+    fn a_position_outside_the_cell_is_read_from_its_image_inside_it() {
+        let system = cube(&[[3.0, 0.0, 0.0], [20.5, 0.0, 0.0]]);
+        assert_eq!(
+            paired(&periodic_arrangement(&system, reach(3.0))),
+            vec![(s(1), s(2))]
+        );
+    }
+
+    #[test]
+    fn a_cutoff_of_zero_leaves_only_what_coincides_across_the_lattice() {
+        let system = cube(&[[0.0; 3], [10.0, 0.0, 0.0], [1.0, 0.0, 0.0]]);
+        let found = periodic_arrangement(&system, reach(0.0));
+        assert_eq!(paired(&found), vec![(s(1), s(2))]);
+    }
+
+    #[test]
+    fn an_axis_too_short_to_divide_pairs_across_itself_once() {
+        let system = cube(&[[0.5, 0.0, 0.0], [9.5, 0.0, 0.0]]);
+        assert_eq!(
+            paired(&periodic_arrangement(&system, reach(5.0))),
+            vec![(s(1), s(2))]
+        );
+    }
+
+    #[test]
+    fn a_pair_two_images_bring_together_is_counted_once() {
+        let system = cube(&[[0.0; 3], [5.0, 0.0, 0.0]]);
+        assert_eq!(paired(&periodic_arrangement(&system, reach(5.0))).len(), 1);
+    }
+
+    #[test]
+    fn a_pair_two_images_bring_together_is_measured_by_the_nearer() {
+        let system = cube(&[[0.5, 0.0, 0.0], [9.5, 0.0, 0.0]]);
+        let found = periodic_arrangement(&system, reach(5.0));
+        let (_, _, displacement) = found.pairs::<Angstrom>().next().unwrap();
+        assert!(close(displacement.x, Length::new(-1.0)));
+    }
+
+    #[test]
+    fn a_sheared_cell_is_divided_by_its_perpendicular_widths() {
+        let system = sheared(&[[5.0, 5.0, 2.4], [5.0, 5.0, 5.3]]);
+        assert_eq!(
+            paired(&periodic_arrangement(&system, reach(3.0))),
+            vec![(s(1), s(2))]
+        );
+    }
+
+    #[test]
+    fn a_negative_cutoff_puts_nothing_within_reach_across_the_lattice() {
+        let system = cube(&[[0.5, 0.0, 0.0], [9.5, 0.0, 0.0]]);
+        assert!(paired(&periodic_arrangement(&system, reach(-1.0))).is_empty());
+    }
+
+    #[test]
+    fn the_arrangement_finds_what_a_full_sweep_would() {
+        let points = strewn();
+        let system = configuration(&points);
+        let swept: Vec<(SiteId, SiteId)> = (1..=points.len() as u32)
+            .flat_map(|a| (a + 1..=points.len() as u32).map(move |b| (a, b)))
+            .filter(|&(a, b)| {
+                let (near, far) = (points[a as usize - 1], points[b as usize - 1]);
+                (0..3)
+                    .map(|axis| (near[axis] - far[axis]).powi(2))
+                    .sum::<f64>()
+                    <= 9.0
+            })
+            .map(|(a, b)| (s(a), s(b)))
+            .collect();
+        let found = arrangement(&system, reach(3.0));
+        assert_eq!(paired(&found), swept);
+    }
+
+    #[test]
+    fn the_wrapped_arrangement_finds_what_a_full_sweep_would() {
+        let system = cube(&strewn());
+        let found = periodic_arrangement(&system, reach(3.0));
+        assert_eq!(paired(&found), sweep(&system, reach(3.0)));
+    }
+
+    #[test]
+    fn the_oblique_arrangement_finds_what_a_full_sweep_would() {
+        let system = sheared(&strewn());
+        let found = periodic_arrangement(&system, reach(3.0));
+        assert_eq!(paired(&found), sweep(&system, reach(3.0)));
+    }
+
+    #[test]
+    fn every_displacement_is_the_shortest_image_of_its_pair() {
+        let points = strewn();
+        let (cubic, oblique) = (cube(&points), sheared(&points));
+        let frames = [
+            (arrangement(&configuration(&points), reach(3.0)), None),
+            (
+                periodic_arrangement(&cubic, reach(3.0)),
+                Some(cubic.lattice()),
+            ),
+            (
+                periodic_arrangement(&oblique, reach(3.0)),
+                Some(oblique.lattice()),
+            ),
+        ];
+        for (found, lattice) in frames {
+            assert!(found.pairs::<Angstrom>().all(|(a, b, displacement)| {
+                let shortest = shortest(&points, lattice, a, b);
+                (0..3).all(|axis| close(displacement[axis], shortest[axis]))
+            }));
+        }
+    }
+
+    #[test]
+    fn near_finds_what_a_full_scan_would() {
+        let points = strewn();
+        let found = arrangement(&configuration(&points), reach(3.0));
+        for probe in [
+            [0.0; 3],
+            [5.2, 4.7, 6.3],
+            [9.9, 0.1, 4.4],
+            [-2.0, 3.0, 11.0],
+        ] {
+            let scanned: Vec<SiteId> = (1..=points.len() as u32)
+                .filter(|&index| {
+                    let place = points[index as usize - 1];
+                    (0..3)
+                        .map(|axis| (place[axis] - probe[axis]).powi(2))
+                        .sum::<f64>()
+                        <= 9.0
+                })
+                .map(s)
+                .collect();
+            assert_eq!(nearby(&found, probe), scanned);
+        }
+    }
+}

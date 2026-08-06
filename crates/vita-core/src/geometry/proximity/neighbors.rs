@@ -160,3 +160,107 @@ where
 {
     periodic_arrangement(system, cutoff).neighbors()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use crate::geometry::fixture::{configuration, s};
+    use crate::geometry::proximity::fixture::{Descending, chain, cube, reach, strewn, sweep};
+    use crate::units::length::{Angstrom, Nanometer};
+
+    #[test]
+    fn an_empty_system_has_no_neighbors() {
+        assert!(neighbors(&configuration(&[]), reach(1.0)).is_empty());
+    }
+
+    #[test]
+    fn the_pairs_are_counted_once_each() {
+        assert_eq!(neighbors(&chain(), reach(1.5)).len(), 3);
+    }
+
+    #[test]
+    fn contains_answers_whether_a_pair_is_within_reach() {
+        let found = neighbors(&chain(), reach(1.5));
+        assert!(found.contains(s(1), s(2)) && !found.contains(s(1), s(3)));
+    }
+
+    #[test]
+    fn contains_is_symmetric() {
+        let found = neighbors(&chain(), reach(1.5));
+        assert_eq!(found.contains(s(1), s(2)), found.contains(s(2), s(1)));
+    }
+
+    #[test]
+    fn a_site_is_not_its_own_neighbor() {
+        let found = periodic_neighbors(&cube(&[[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]]), reach(6.0));
+        assert!(!found.contains(s(1), s(1)));
+    }
+
+    #[test]
+    fn of_site_lists_the_sites_within_reach() {
+        let found = neighbors(&chain(), reach(1.5));
+        assert_eq!(found.of_site(s(2)).collect::<Vec<_>>(), vec![s(1), s(3)]);
+    }
+
+    #[test]
+    fn iter_lists_every_pair_once() {
+        let found = neighbors(&chain(), reach(1.5));
+        assert_eq!(
+            found.iter().collect::<Vec<_>>(),
+            vec![(s(1), s(2)), (s(2), s(3)), (s(3), s(4))]
+        );
+    }
+
+    #[test]
+    fn an_absent_site_reaches_nothing() {
+        assert_eq!(neighbors(&chain(), reach(1.5)).of_site(s(9)).count(), 0);
+    }
+
+    #[test]
+    fn a_site_out_of_reach_of_the_rest_reaches_nothing() {
+        let system = configuration(&[[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [9.0, 0.0, 0.0]]);
+        assert_eq!(neighbors(&system, reach(1.5)).of_site(s(3)).count(), 0);
+    }
+
+    #[test]
+    fn every_pair_is_reached_from_both_of_its_sites() {
+        let found = neighbors(&configuration(&strewn()), reach(3.0));
+        assert!(
+            found
+                .iter()
+                .all(|(a, b)| found.contains(a, b) && found.of_site(b).any(|site| site == a))
+        );
+    }
+
+    #[test]
+    fn the_cutoff_is_taken_in_the_requested_unit() {
+        let found = neighbors(&chain(), Length::<f64, Nanometer>::new(0.15));
+        assert_eq!(found.len(), 3);
+    }
+
+    #[test]
+    fn neighbors_are_independent_of_the_order_the_sites_arrive_in() {
+        let found = neighbors(&Descending(chain()), reach(1.5));
+        assert_eq!(found, neighbors(&chain(), reach(1.5)));
+    }
+
+    #[test]
+    fn the_relation_holds_exactly_the_pairs_the_arrangement_yields() {
+        let system = configuration(&strewn());
+        let mut yielded: Vec<(SiteId, SiteId)> = (arrangement(&system, reach(3.0))
+            .pairs::<Angstrom>())
+        .map(|(a, b, _)| (a, b))
+        .collect();
+        yielded.sort_unstable();
+        let found = neighbors(&system, reach(3.0));
+        assert_eq!(found.iter().collect::<Vec<_>>(), yielded);
+    }
+
+    #[test]
+    fn the_wrapped_relation_holds_exactly_the_pairs_a_full_sweep_would() {
+        let system = cube(&strewn());
+        let found = periodic_neighbors(&system, reach(3.0));
+        assert_eq!(found.iter().collect::<Vec<_>>(), sweep(&system, reach(3.0)));
+    }
+}
