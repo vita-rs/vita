@@ -12,6 +12,7 @@
 | **numerics**       | `Quantity`, `Scalar` — dimension-preserving arithmetic, and the dimensionless case |
 | **linear algebra** | `Point3`, `Vector3`, `Matrix3` — abstract 3‑D math over either                     |
 | **capability**     | `HasSites`, `HasPositions`, `HasElements`, … — questions a system can answer       |
+| **geometry**       | `measure`, `moment`, `proximity` — what a system's placement determines            |
 | **dimensions**     | 23 physical dimension modules, each a `Quantity` newtype tagged with its unit      |
 
 A system is never a concrete type in this crate. Everything is a trait bound — code declares the capabilities it needs and stays blind to the storage behind them:

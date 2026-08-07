@@ -21,14 +21,23 @@
 //!
 //! # Quantities
 //!
-//! Physical values carry their dimension and unit in the type via [`units`]; geometry uses
-//! the three-dimensional primitives in [`tensor`]. [`Quantity`] names what the two share —
+//! Physical values carry their dimension and unit in the type via [`units`]; spatial ones
+//! use the three-dimensional primitives in [`tensor`]. [`Quantity`] names what the two share —
 //! the operations that leave a dimension unchanged — so a tensor's element may be a bare
 //! [`Scalar`] (`f32` or `f64`) or any dimensioned quantity.
+//!
+//! # Geometry
+//!
+//! [`geometry`] reads what a system's placement determines:
+//! [`measure`](geometry::measure) answers for a fixed tuple of sites — a separation, an
+//! angle, a dihedral, a handedness — [`moment`](geometry::moment) for the sites as a
+//! whole, the center they are spread about and the spread itself, and
+//! [`proximity`](geometry::proximity) for what lies near what.
 
 mod capability;
 mod primitive;
 
+pub mod geometry;
 pub mod tensor;
 pub mod units;
 
