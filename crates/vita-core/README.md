@@ -34,7 +34,7 @@ where
 
 ```toml
 [dependencies]
-vita-core = "0.3.0"
+vita-core = "0.4.0"
 ```
 
 ---

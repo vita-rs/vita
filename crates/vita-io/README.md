@@ -29,8 +29,8 @@ xyz::write::<_, _, Angstrom>(&mut writer, &system, &xyz::Config { comment: "" })
 
 ```toml
 [dependencies]
-vita-core = "0.3.0"
-vita-io = "0.2.0"
+vita-core = "0.4.0"
+vita-io = "0.3.0"
 ```
 
 ---
