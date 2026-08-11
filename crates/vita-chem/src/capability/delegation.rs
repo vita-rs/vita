@@ -213,17 +213,6 @@ macro_rules! forward_capabilities {
         }
     };
 
-    (@one $wrapper:ident, $field:ident, HasHybridizations) => {
-        impl<M: $crate::HasHybridizations> $crate::HasHybridizations for $wrapper<'_, M> {
-            fn hybridization(&self, site: ::vita_core::SiteId) -> $crate::Hybridization {
-                self.$field.hybridization(site)
-            }
-            fn hybridizations(&self) -> impl Iterator<Item = $crate::Hybridization> + '_ {
-                self.$field.hybridizations()
-            }
-        }
-    };
-
     (@one $wrapper:ident, $field:ident, HasPartialCharges) => {
         impl<V: ::vita_core::Scalar, M: $crate::HasPartialCharges<V>> $crate::HasPartialCharges<V>
             for $wrapper<'_, M>

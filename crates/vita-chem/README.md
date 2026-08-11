@@ -6,13 +6,13 @@
 
 `vita-chem` is the cheminformatics crate of the vita ecosystem: discrete chemistry derived exactly from what a molecule declares — identity is computed, values are never invented.
 
-| layer          | what it provides                                                                                              |
-| :------------- | :------------------------------------------------------------------------------------------------------------ |
-| **primitives** | `BondId`, `BondOrder`, `StereoConfiguration`, … — the bond vocabulary                                         |
-| **capability** | `HasBondOrders`, `HasFormalCharges`, `HasStereoConfigurations`, … — the chemical questions                    |
-| **graph**      | `topology`, `canonical`, `isomorphism` — skeleton facts, portable identity, substructure search               |
-| **perception** | `valence`, `aromaticity`, `conjugation`, `hybridization`, `stereo` — electron bookkeeping and declared models |
-| **projection** | `composition`, `fingerprint`, `notation` — particle inventory, similarity, standard symbols                   |
+| layer          | what it provides                                                                                |
+| :------------- | :---------------------------------------------------------------------------------------------- |
+| **primitives** | `BondId`, `BondOrder`, `StereoConfiguration`, … — the bond vocabulary                           |
+| **capability** | `HasBondOrders`, `HasFormalCharges`, `HasStereoConfigurations`, … — the chemical questions      |
+| **graph**      | `topology`, `canonical`, `isomorphism` — skeleton facts, portable identity, substructure search |
+| **perception** | `valence`, `aromaticity`, `conjugation`, `stereo` — electron bookkeeping and declared models    |
+| **projection** | `composition`, `fingerprint`, `notation` — particle inventory, similarity, standard symbols     |
 
 A molecule is never a concrete type here either. Every algorithm bounds on exactly the capabilities it consumes and reads the molecule unchanged:
 

@@ -115,7 +115,6 @@ forward_capabilities!(
     HasBondOrders,
     HasBonds,
     HasFormalCharges,
-    HasHybridizations,
     HasPartialCharges,
     HasRadicalElectrons,
     HasStereoConfigurations,

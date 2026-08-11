@@ -89,7 +89,6 @@ forward_capabilities!(
     HasAromaticity,
     HasBonds,
     HasFormalCharges,
-    HasHybridizations,
     HasPartialCharges,
     HasRadicalElectrons,
     HasStereoConfigurations,
