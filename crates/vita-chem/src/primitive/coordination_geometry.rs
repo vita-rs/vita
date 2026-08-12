@@ -318,3 +318,355 @@ const fn slices_equal(a: &[u8], b: &[u8]) -> bool {
     }
     true
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use super::CoordinationGeometry::*;
+
+    const GEOMETRIES: [CoordinationGeometry; 13] = [
+        Linear,
+        Angular,
+        TrigonalPlanar,
+        TrigonalPyramidal,
+        TShaped,
+        Tetrahedral,
+        SquarePlanar,
+        PyramidalizedSquare,
+        Seesaw,
+        TrigonalBipyramidal,
+        SquarePyramidal,
+        Octahedral,
+        TrigonalPrismatic,
+    ];
+
+    const R: f64 = 0.866_025_403_784_438_6;
+
+    fn placement(geometry: CoordinationGeometry) -> Vec<[f64; 3]> {
+        match geometry {
+            Linear => vec![[0.0, 0.0, 1.0], [0.0, 0.0, -1.0]],
+            Angular => angular(1.2),
+            TrigonalPlanar => vec![[1.0, 0.0, 0.0], [-0.5, R, 0.0], [-0.5, -R, 0.0]],
+            TrigonalPyramidal => vec![[1.0, -1.0, -1.0], [-1.0, -1.0, 1.0], [-1.0, 1.0, -1.0]],
+            TShaped => vec![[0.0, 0.0, 1.0], [0.0, 0.0, -1.0], [1.0, 0.0, 0.0]],
+            Tetrahedral => vec![
+                [1.0, 1.0, 1.0],
+                [1.0, -1.0, -1.0],
+                [-1.0, -1.0, 1.0],
+                [-1.0, 1.0, -1.0],
+            ],
+            SquarePlanar => vec![
+                [1.0, 0.0, 0.0],
+                [0.0, 1.0, 0.0],
+                [-1.0, 0.0, 0.0],
+                [0.0, -1.0, 0.0],
+            ],
+            PyramidalizedSquare => pyramidalized_square(1.2),
+            Seesaw => vec![
+                [0.0, 0.0, 1.0],
+                [0.0, 0.0, -1.0],
+                [1.0, 0.0, 0.0],
+                [-0.5, R, 0.0],
+            ],
+            TrigonalBipyramidal => vec![
+                [0.0, 0.0, 1.0],
+                [0.0, 0.0, -1.0],
+                [1.0, 0.0, 0.0],
+                [-0.5, R, 0.0],
+                [-0.5, -R, 0.0],
+            ],
+            SquarePyramidal => vec![
+                [0.0, 0.0, 1.0],
+                [1.0, 0.0, 0.0],
+                [0.0, 1.0, 0.0],
+                [-1.0, 0.0, 0.0],
+                [0.0, -1.0, 0.0],
+            ],
+            Octahedral => vec![
+                [1.0, 0.0, 0.0],
+                [-1.0, 0.0, 0.0],
+                [0.0, 1.0, 0.0],
+                [0.0, -1.0, 0.0],
+                [0.0, 0.0, 1.0],
+                [0.0, 0.0, -1.0],
+            ],
+            TrigonalPrismatic => vec![
+                [1.0, 0.0, 1.0],
+                [-0.5, R, 1.0],
+                [-0.5, -R, 1.0],
+                [1.0, 0.0, -1.0],
+                [-0.5, R, -1.0],
+                [-0.5, -R, -1.0],
+            ],
+        }
+    }
+
+    fn angular(angle: f64) -> Vec<[f64; 3]> {
+        let (half_sine, half_cosine) = (angle / 2.0).sin_cos();
+        vec![
+            [half_sine, 0.0, half_cosine],
+            [-half_sine, 0.0, half_cosine],
+        ]
+    }
+
+    fn pyramidalized_square(angle: f64) -> Vec<[f64; 3]> {
+        let (sine, cosine) = angle.sin_cos();
+        vec![
+            [sine, 0.0, cosine],
+            [0.0, sine, cosine],
+            [-sine, 0.0, cosine],
+            [0.0, -sine, cosine],
+        ]
+    }
+
+    fn identity(n: usize) -> Vec<u8> {
+        (0..n as u8).collect()
+    }
+
+    fn is_permutation(permutation: &[u8], n: usize) -> bool {
+        let mut sorted = permutation.to_vec();
+        sorted.sort_unstable();
+        sorted == identity(n)
+    }
+
+    fn compose(after: &[u8], before: &[u8]) -> Vec<u8> {
+        before.iter().map(|&i| after[i as usize]).collect()
+    }
+
+    fn permutations(n: usize) -> Vec<Vec<u8>> {
+        let mut result = Vec::new();
+        permute(&mut identity(n), 0, &mut result);
+        result
+    }
+
+    fn permute(slice: &mut [u8], start: usize, out: &mut Vec<Vec<u8>>) {
+        if start == slice.len() {
+            out.push(slice.to_vec());
+            return;
+        }
+        for i in start..slice.len() {
+            slice.swap(start, i);
+            permute(slice, start + 1, out);
+            slice.swap(start, i);
+        }
+    }
+
+    fn dot(a: [f64; 3], b: [f64; 3]) -> f64 {
+        a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
+    }
+
+    fn signed_volume(a: [f64; 3], b: [f64; 3], c: [f64; 3]) -> f64 {
+        dot(
+            a,
+            [
+                b[1] * c[2] - b[2] * c[1],
+                b[2] * c[0] - b[0] * c[2],
+                b[0] * c[1] - b[1] * c[0],
+            ],
+        )
+    }
+
+    fn preserves_angles(placement: &[[f64; 3]], permutation: &[u8]) -> bool {
+        let n = placement.len();
+        (0..n).all(|i| {
+            (0..n).all(|j| {
+                let moved = dot(
+                    placement[permutation[i] as usize],
+                    placement[permutation[j] as usize],
+                );
+                (moved - dot(placement[i], placement[j])).abs() < 1e-9
+            })
+        })
+    }
+
+    fn spanning_triple(placement: &[[f64; 3]]) -> Option<(usize, usize, usize)> {
+        let n = placement.len();
+        (0..n)
+            .flat_map(|a| (a + 1..n).flat_map(move |b| (b + 1..n).map(move |c| (a, b, c))))
+            .find(|&(a, b, c)| signed_volume(placement[a], placement[b], placement[c]).abs() > 1e-9)
+    }
+
+    fn is_rotation(placement: &[[f64; 3]], permutation: &[u8]) -> bool {
+        if !preserves_angles(placement, permutation) {
+            return false;
+        }
+        match spanning_triple(placement) {
+            None => true,
+            Some((a, b, c)) => {
+                let before = signed_volume(placement[a], placement[b], placement[c]);
+                let after = signed_volume(
+                    placement[permutation[a] as usize],
+                    placement[permutation[b] as usize],
+                    placement[permutation[c] as usize],
+                );
+                (before > 0.0) == (after > 0.0)
+            }
+        }
+    }
+
+    fn rotation_group(placement: &[[f64; 3]]) -> Vec<Vec<u8>> {
+        let mut rotations: Vec<Vec<u8>> = permutations(placement.len())
+            .into_iter()
+            .filter(|permutation| is_rotation(placement, permutation))
+            .collect();
+        rotations.sort_unstable();
+        rotations
+    }
+
+    fn sorted_group(geometry: CoordinationGeometry) -> Vec<Vec<u8>> {
+        let mut group: Vec<Vec<u8>> = idealization(geometry)
+            .group
+            .iter()
+            .map(|element| element.to_vec())
+            .collect();
+        group.sort_unstable();
+        group
+    }
+
+    #[test]
+    fn slot_count_is_the_substituent_count_of_the_geometry() {
+        assert_eq!(Linear.slot_count(), 2);
+        assert_eq!(Angular.slot_count(), 2);
+        assert_eq!(TrigonalPlanar.slot_count(), 3);
+        assert_eq!(TrigonalPyramidal.slot_count(), 3);
+        assert_eq!(TShaped.slot_count(), 3);
+        assert_eq!(Tetrahedral.slot_count(), 4);
+        assert_eq!(SquarePlanar.slot_count(), 4);
+        assert_eq!(PyramidalizedSquare.slot_count(), 4);
+        assert_eq!(Seesaw.slot_count(), 4);
+        assert_eq!(TrigonalBipyramidal.slot_count(), 5);
+        assert_eq!(SquarePyramidal.slot_count(), 5);
+        assert_eq!(Octahedral.slot_count(), 6);
+        assert_eq!(TrigonalPrismatic.slot_count(), 6);
+    }
+
+    #[test]
+    fn configuration_count_is_the_number_of_distinct_stereoisomers() {
+        assert_eq!(Linear.configuration_count(), 1);
+        assert_eq!(Angular.configuration_count(), 1);
+        assert_eq!(TrigonalPlanar.configuration_count(), 1);
+        assert_eq!(TrigonalPyramidal.configuration_count(), 2);
+        assert_eq!(TShaped.configuration_count(), 3);
+        assert_eq!(Tetrahedral.configuration_count(), 2);
+        assert_eq!(SquarePlanar.configuration_count(), 3);
+        assert_eq!(PyramidalizedSquare.configuration_count(), 6);
+        assert_eq!(Seesaw.configuration_count(), 12);
+        assert_eq!(TrigonalBipyramidal.configuration_count(), 20);
+        assert_eq!(SquarePyramidal.configuration_count(), 30);
+        assert_eq!(Octahedral.configuration_count(), 30);
+        assert_eq!(TrigonalPrismatic.configuration_count(), 120);
+    }
+
+    #[test]
+    fn chiral_geometries_are_chiral() {
+        assert!(TrigonalPyramidal.is_chiral());
+        assert!(Tetrahedral.is_chiral());
+        assert!(PyramidalizedSquare.is_chiral());
+        assert!(Seesaw.is_chiral());
+        assert!(TrigonalBipyramidal.is_chiral());
+        assert!(SquarePyramidal.is_chiral());
+        assert!(Octahedral.is_chiral());
+        assert!(TrigonalPrismatic.is_chiral());
+    }
+
+    #[test]
+    fn achiral_geometries_are_not_chiral() {
+        assert!(!Linear.is_chiral());
+        assert!(!Angular.is_chiral());
+        assert!(!TrigonalPlanar.is_chiral());
+        assert!(!TShaped.is_chiral());
+        assert!(!SquarePlanar.is_chiral());
+    }
+
+    #[test]
+    fn geometries_order_by_slot_count_then_configuration_count() {
+        assert!(GEOMETRIES.is_sorted());
+        assert!(
+            GEOMETRIES.is_sorted_by_key(|geometry| (
+                geometry.slot_count(),
+                geometry.configuration_count()
+            ))
+        );
+    }
+
+    #[test]
+    fn every_group_permutes_its_slots() {
+        for geometry in GEOMETRIES {
+            for &element in idealization(geometry).group {
+                assert!(
+                    is_permutation(element, geometry.slot_count()),
+                    "{geometry:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn every_group_contains_the_identity() {
+        for geometry in GEOMETRIES {
+            let identity = identity(geometry.slot_count());
+            assert!(
+                idealization(geometry).group.contains(&identity.as_slice()),
+                "{geometry:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn every_group_is_closed_under_composition() {
+        for geometry in GEOMETRIES {
+            let group = idealization(geometry).group;
+            for &g in group {
+                for &h in group {
+                    let product = compose(g, h);
+                    assert!(group.contains(&product.as_slice()), "{geometry:?}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn every_group_is_the_rotation_group_of_the_geometry() {
+        for geometry in GEOMETRIES {
+            assert_eq!(
+                sorted_group(geometry),
+                rotation_group(&placement(geometry)),
+                "{geometry:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_family_has_one_group_throughout() {
+        for angle in [0.6, 1.2, 1.8, 3.0] {
+            assert_eq!(rotation_group(&angular(angle)), sorted_group(Angular));
+        }
+        for angle in [0.3, 0.9, 1.4] {
+            assert_eq!(
+                rotation_group(&pyramidalized_square(angle)),
+                sorted_group(PyramidalizedSquare)
+            );
+        }
+    }
+
+    #[test]
+    fn every_reflection_permutes_its_slots() {
+        for geometry in GEOMETRIES {
+            assert!(
+                is_permutation(idealization(geometry).reflection, geometry.slot_count()),
+                "{geometry:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn every_reflection_preserves_the_pairwise_angles() {
+        for geometry in GEOMETRIES {
+            assert!(
+                preserves_angles(&placement(geometry), idealization(geometry).reflection),
+                "{geometry:?}"
+            );
+        }
+    }
+}
