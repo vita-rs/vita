@@ -48,7 +48,7 @@ impl StereoLocus {
     }
 }
 
-/// The kind of a stereogenic unit: the idealised local geometry whose rotation
+/// The kind of a stereogenic unit: the idealized local geometry whose rotation
 /// group fixes which of its neighbor orderings are equivalent.
 ///
 /// A kind is a pure data key. It selects the permutation group under which a
@@ -229,7 +229,7 @@ impl StereoConfiguration {
         self.locus
     }
 
-    /// The idealised geometry fixing which orderings are equivalent.
+    /// The idealized geometry fixing which orderings are equivalent.
     #[inline]
     pub const fn kind(&self) -> StereoKind {
         self.kind
@@ -257,7 +257,7 @@ impl StereoConfiguration {
     }
 }
 
-/// The idealised local geometry a [`StereoKind`] denotes, looked up once by
+/// The idealized local geometry a [`StereoKind`] denotes, looked up once by
 /// [`geometry`]: the proper-rotation group over its neighbor slots, the reflection
 /// that mirrors it, the reference directions coordinates align onto, and how many
 /// independent ends its slots split into. Every fact about a kind is a function of
