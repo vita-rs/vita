@@ -171,8 +171,9 @@ mod tests {
 
     use vita_core::HasSites;
 
+    use crate::CoordinationGeometry::*;
     use crate::fingerprint::FeatureVector;
-    use crate::{StereoKind, StereoLocus};
+    use crate::{CoordinationGeometry, StereoKind, StereoLocus, StereogenicGeometry};
 
     fn s(n: u32) -> SiteId {
         SiteId::new(n).unwrap()
@@ -182,10 +183,14 @@ mod tests {
         BondId::new(n).unwrap()
     }
 
+    fn center(geometry: CoordinationGeometry) -> StereoKind {
+        StereoKind::Center(StereogenicGeometry::new(geometry).expect("the geometry is stereogenic"))
+    }
+
     fn config(site: u32, order: [u32; 4]) -> StereoConfiguration {
         StereoConfiguration::new(
             StereoLocus::Site(s(site)),
-            StereoKind::Tetrahedral,
+            center(Tetrahedral),
             order.map(s),
         )
         .unwrap()

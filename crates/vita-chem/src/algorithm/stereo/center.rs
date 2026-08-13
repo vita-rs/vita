@@ -101,7 +101,10 @@ mod tests {
     use vita_core::HasSites;
 
     use crate::BondOrder::{Double, Single};
-    use crate::{BondOrder, HasBonds, StereoConfiguration};
+    use crate::CoordinationGeometry::*;
+    use crate::{
+        BondOrder, CoordinationGeometry, HasBonds, StereoConfiguration, StereogenicGeometry,
+    };
 
     fn s(n: u32) -> SiteId {
         SiteId::new(n).unwrap()
@@ -111,13 +114,17 @@ mod tests {
         BondId::new(n).unwrap()
     }
 
+    fn center(geometry: CoordinationGeometry) -> StereoKind {
+        StereoKind::Center(StereogenicGeometry::new(geometry).expect("the geometry is stereogenic"))
+    }
+
     fn only(target: StereoLocus, kind: StereoKind) -> impl Fn(StereoLocus) -> Option<StereoKind> {
         move |locus| (locus == target).then_some(kind)
     }
 
     fn centers_at(sites: &'static [u32]) -> impl Fn(StereoLocus) -> Option<StereoKind> {
         move |locus| match locus {
-            StereoLocus::Site(site) if sites.contains(&site.get()) => Some(StereoKind::Tetrahedral),
+            StereoLocus::Site(site) if sites.contains(&site.get()) => Some(center(Tetrahedral)),
             _ => None,
         }
     }
@@ -125,7 +132,7 @@ mod tests {
     fn config(site: u32, order: [u32; 4]) -> StereoConfiguration {
         StereoConfiguration::new(
             StereoLocus::Site(s(site)),
-            StereoKind::Tetrahedral,
+            center(Tetrahedral),
             order.map(s),
         )
         .unwrap()
@@ -371,7 +378,7 @@ mod tests {
 
     #[test]
     fn empty_molecule_has_no_stereocenters() {
-        let centers = detect(&empty(), |_| Some(StereoKind::Tetrahedral));
+        let centers = detect(&empty(), |_| Some(center(Tetrahedral)));
         assert_eq!(centers.len(), 0);
         assert!(centers.is_empty());
     }
@@ -385,23 +392,20 @@ mod tests {
     fn a_carbon_with_four_distinct_substituents_is_a_stereocenter() {
         let centers = detect(
             &tetrahedral(),
-            only(StereoLocus::Site(s(1)), StereoKind::Tetrahedral),
+            only(StereoLocus::Site(s(1)), center(Tetrahedral)),
         );
         assert!(centers.contains(StereoLocus::Site(s(1))));
     }
 
     #[test]
     fn a_double_bond_with_distinct_ends_is_a_stereocenter() {
-        let centers = detect(
-            &alkene(),
-            only(StereoLocus::Bond(b(1)), StereoKind::CisTrans),
-        );
+        let centers = detect(&alkene(), only(StereoLocus::Bond(b(1)), StereoKind::Bond));
         assert!(centers.contains(StereoLocus::Bond(b(1))));
     }
 
     #[test]
     fn an_allene_with_distinct_termini_is_a_stereocenter() {
-        let centers = detect(&allene(), only(StereoLocus::Axis(s(2)), StereoKind::Allene));
+        let centers = detect(&allene(), only(StereoLocus::Axis(s(2)), StereoKind::Axis));
         assert!(centers.contains(StereoLocus::Axis(s(2))));
     }
 
@@ -409,7 +413,7 @@ mod tests {
     fn an_octahedral_m_a4_b2_center_is_a_stereocenter() {
         let centers = detect(
             &octahedral_m_a4_b2(),
-            only(StereoLocus::Site(s(1)), StereoKind::Octahedral),
+            only(StereoLocus::Site(s(1)), center(Octahedral)),
         );
         assert!(centers.contains(StereoLocus::Site(s(1))));
     }
@@ -418,7 +422,7 @@ mod tests {
     fn a_carbon_with_two_like_substituents_is_not_a_stereocenter() {
         let centers = detect(
             &two_like_substituents(),
-            only(StereoLocus::Site(s(1)), StereoKind::Tetrahedral),
+            only(StereoLocus::Site(s(1)), center(Tetrahedral)),
         );
         assert!(!centers.contains(StereoLocus::Site(s(1))));
     }
@@ -427,7 +431,7 @@ mod tests {
     fn a_double_bond_with_a_symmetric_end_is_not_a_stereocenter() {
         let centers = detect(
             &symmetric_alkene(),
-            only(StereoLocus::Bond(b(1)), StereoKind::CisTrans),
+            only(StereoLocus::Bond(b(1)), StereoKind::Bond),
         );
         assert!(!centers.contains(StereoLocus::Bond(b(1))));
     }
@@ -436,7 +440,7 @@ mod tests {
     fn an_octahedral_m_a5_b_center_is_not_a_stereocenter() {
         let centers = detect(
             &octahedral_m_a5_b(),
-            only(StereoLocus::Site(s(1)), StereoKind::Octahedral),
+            only(StereoLocus::Site(s(1)), center(Octahedral)),
         );
         assert!(!centers.contains(StereoLocus::Site(s(1))));
     }
@@ -445,7 +449,7 @@ mod tests {
     fn a_candidate_off_its_anchor_is_not_a_stereocenter() {
         let centers = detect(
             &alkene(),
-            only(StereoLocus::Bond(b(1)), StereoKind::Tetrahedral),
+            only(StereoLocus::Bond(b(1)), center(Tetrahedral)),
         );
         assert!(centers.is_empty());
     }
@@ -454,7 +458,7 @@ mod tests {
     fn a_center_short_of_its_substituents_is_not_a_stereocenter() {
         let centers = detect(
             &three_substituents(),
-            only(StereoLocus::Site(s(1)), StereoKind::Tetrahedral),
+            only(StereoLocus::Site(s(1)), center(Tetrahedral)),
         );
         assert!(!centers.contains(StereoLocus::Site(s(1))));
     }
@@ -469,14 +473,14 @@ mod tests {
     #[test]
     fn a_pseudo_asymmetric_center_is_detected() {
         let mol = trihydroxyglutaric([[2, 4, 5, 10], [8, 2, 9, 11]]);
-        let centers = detect(&mol, only(StereoLocus::Site(s(2)), StereoKind::Tetrahedral));
+        let centers = detect(&mol, only(StereoLocus::Site(s(2)), center(Tetrahedral)));
         assert!(centers.contains(StereoLocus::Site(s(2))));
     }
 
     #[test]
     fn a_dormant_pseudo_center_is_not_detected() {
         let mol = trihydroxyglutaric([[2, 4, 5, 10], [2, 8, 9, 11]]);
-        let centers = detect(&mol, only(StereoLocus::Site(s(2)), StereoKind::Tetrahedral));
+        let centers = detect(&mol, only(StereoLocus::Site(s(2)), center(Tetrahedral)));
         assert!(!centers.contains(StereoLocus::Site(s(2))));
     }
 
@@ -491,7 +495,7 @@ mod tests {
     fn contains_is_false_for_an_absent_locus() {
         let centers = detect(
             &tetrahedral(),
-            only(StereoLocus::Site(s(1)), StereoKind::Tetrahedral),
+            only(StereoLocus::Site(s(1)), center(Tetrahedral)),
         );
         assert!(!centers.contains(StereoLocus::Site(s(99))));
     }

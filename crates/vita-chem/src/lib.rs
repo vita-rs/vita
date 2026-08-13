@@ -46,7 +46,7 @@ pub mod prelude;
 
 pub use primitive::{
     BondId, BondOrder, CoordinationGeometry, StereoConfiguration, StereoDescriptor, StereoKind,
-    StereoLocus,
+    StereoLocus, StereogenicGeometry,
 };
 
 pub use capability::{

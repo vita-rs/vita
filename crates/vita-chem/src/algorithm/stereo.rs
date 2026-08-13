@@ -378,7 +378,8 @@ mod tests {
     use vita_core::HasSites;
 
     use crate::BondOrder::{Double, Single};
-    use crate::{BondId, HasBonds};
+    use crate::CoordinationGeometry::*;
+    use crate::{BondId, CoordinationGeometry, HasBonds, StereogenicGeometry};
 
     fn s(n: u32) -> SiteId {
         SiteId::new(n).unwrap()
@@ -386,6 +387,10 @@ mod tests {
 
     fn b(n: u32) -> BondId {
         BondId::new(n).unwrap()
+    }
+
+    fn center(geometry: CoordinationGeometry) -> StereoKind {
+        StereoKind::Center(StereogenicGeometry::new(geometry).expect("the geometry is stereogenic"))
     }
 
     struct Mol {
@@ -443,7 +448,7 @@ mod tests {
         }
     }
 
-    fn center() -> Mol {
+    fn quaternary() -> Mol {
         mol(
             &[1, 2, 3, 4, 5],
             &[
@@ -546,13 +551,13 @@ mod tests {
         .with([
             StereoConfiguration::new(
                 StereoLocus::Site(s(2)),
-                StereoKind::Tetrahedral,
+                center(Tetrahedral),
                 [s(4), s(5), s(6), s(1)],
             )
             .unwrap(),
             StereoConfiguration::new(
                 StereoLocus::Site(s(3)),
-                StereoKind::Tetrahedral,
+                center(Tetrahedral),
                 [s(8), s(7), s(9), s(1)],
             )
             .unwrap(),
@@ -561,7 +566,7 @@ mod tests {
 
     #[test]
     fn a_site_frame_is_the_atom_and_its_neighbors() {
-        let located = frame(&center(), StereoLocus::Site(s(1))).unwrap();
+        let located = frame(&quaternary(), StereoLocus::Site(s(1))).unwrap();
         assert_eq!(located.anchors, vec![s(1)]);
         assert_eq!(located.substituents, vec![s(2), s(3), s(4), s(5)]);
     }
@@ -604,7 +609,7 @@ mod tests {
 
     #[test]
     fn candidate_loci_offer_each_site_as_a_center_and_an_axis_and_each_bond() {
-        let loci: Vec<StereoLocus> = candidate_loci(&center()).collect();
+        let loci: Vec<StereoLocus> = candidate_loci(&quaternary()).collect();
         assert_eq!(loci.len(), 5 + 5 + 4);
         assert!(loci.contains(&StereoLocus::Site(s(1))));
         assert!(loci.contains(&StereoLocus::Axis(s(1))));
@@ -613,9 +618,9 @@ mod tests {
 
     #[test]
     fn a_reflected_signal_is_the_mirror_of_the_plain_signal() {
-        let mol = center().with([StereoConfiguration::new(
+        let mol = quaternary().with([StereoConfiguration::new(
             StereoLocus::Site(s(1)),
-            StereoKind::Tetrahedral,
+            center(Tetrahedral),
             [s(2), s(3), s(4), s(5)],
         )
         .unwrap()]);
@@ -627,7 +632,7 @@ mod tests {
 
     #[test]
     fn refined_without_configurations_matches_the_bare_canonical_form() {
-        let mol = center();
+        let mol = quaternary();
         let site_key = |_: SiteId| 0u8;
         let bond_key = |_: BondId| 0u8;
         let bare = canonicalize(&mol, site_key, bond_key);
@@ -655,9 +660,9 @@ mod tests {
 
     #[test]
     fn settle_files_a_site_configuration_against_its_site() {
-        let mol = center().with([StereoConfiguration::new(
+        let mol = quaternary().with([StereoConfiguration::new(
             StereoLocus::Site(s(1)),
-            StereoKind::Tetrahedral,
+            center(Tetrahedral),
             [s(2), s(3), s(4), s(5)],
         )
         .unwrap()]);
@@ -670,7 +675,7 @@ mod tests {
     fn settle_files_a_bond_configuration_against_both_ends() {
         let mol = alkene().with([StereoConfiguration::new(
             StereoLocus::Bond(b(1)),
-            StereoKind::CisTrans,
+            StereoKind::Bond,
             [s(3), s(4), s(5), s(6)],
         )
         .unwrap()]);
@@ -684,11 +689,11 @@ mod tests {
         let subs = [s(1), s(2), s(3), s(4)];
         let configs = configurations(
             StereoLocus::Site(s(1)),
-            StereoKind::Tetrahedral,
+            center(Tetrahedral),
             &subs,
             |site| site.get() as usize,
         );
-        assert_eq!(configs.len(), StereoKind::Tetrahedral.configuration_count());
+        assert_eq!(configs.len(), center(Tetrahedral).configuration_count());
     }
 
     #[test]
@@ -696,7 +701,7 @@ mod tests {
         let subs = [s(1), s(2), s(3), s(4)];
         let configs = configurations(
             StereoLocus::Site(s(1)),
-            StereoKind::Tetrahedral,
+            center(Tetrahedral),
             &subs,
             |site| {
                 if site == s(1) || site == s(2) {
@@ -712,33 +717,30 @@ mod tests {
     #[test]
     fn an_octahedral_m_a4_b2_has_a_cis_and_a_trans_configuration() {
         let subs = [s(1), s(2), s(3), s(4), s(5), s(6)];
-        let configs = configurations(
-            StereoLocus::Site(s(1)),
-            StereoKind::Octahedral,
-            &subs,
-            |site| usize::from(site == s(5) || site == s(6)),
-        );
+        let configs = configurations(StereoLocus::Site(s(1)), center(Octahedral), &subs, |site| {
+            usize::from(site == s(5) || site == s(6))
+        });
         assert_eq!(configs.len(), 2);
     }
 
     #[test]
     fn realizable_lists_a_stereogenic_centers_configurations() {
         let configs = realizable(
-            &center(),
+            &quaternary(),
             StereoLocus::Site(s(1)),
-            StereoKind::Tetrahedral,
+            center(Tetrahedral),
             &|site: SiteId| site.get(),
             &|_: BondId| 0u8,
         );
-        assert_eq!(configs.len(), StereoKind::Tetrahedral.configuration_count());
+        assert_eq!(configs.len(), center(Tetrahedral).configuration_count());
     }
 
     #[test]
     fn realizable_collapses_a_symmetric_center_to_one() {
         let configs = realizable(
-            &center(),
+            &quaternary(),
             StereoLocus::Site(s(1)),
-            StereoKind::Tetrahedral,
+            center(Tetrahedral),
             &|_: SiteId| 0u8,
             &|_: BondId| 0u8,
         );
@@ -748,9 +750,9 @@ mod tests {
     #[test]
     fn realizable_is_empty_off_an_anchor() {
         let configs = realizable(
-            &center(),
+            &quaternary(),
             StereoLocus::Bond(b(1)),
-            StereoKind::Tetrahedral,
+            center(Tetrahedral),
             &|site: SiteId| site.get(),
             &|_: BondId| 0u8,
         );
@@ -762,7 +764,7 @@ mod tests {
         let configs = realizable(
             &short_alkene(),
             StereoLocus::Bond(b(1)),
-            StereoKind::CisTrans,
+            StereoKind::Bond,
             &|site: SiteId| site.get(),
             &|_: BondId| 0u8,
         );
@@ -774,7 +776,7 @@ mod tests {
         let configs = realizable(
             &trigonal(),
             StereoLocus::Site(s(1)),
-            StereoKind::Tetrahedral,
+            center(Tetrahedral),
             &|site: SiteId| site.get(),
             &|_: BondId| 0u8,
         );
@@ -792,7 +794,7 @@ mod tests {
     #[test]
     fn presentations_of_a_center_are_every_ordering() {
         let subs = [s(1), s(2), s(3), s(4)];
-        let orderings = presentations(StereoKind::Tetrahedral, &subs);
+        let orderings = presentations(center(Tetrahedral), &subs);
         assert_eq!(orderings.len(), 24);
         let mut distinct = orderings.clone();
         distinct.sort_unstable();
@@ -803,7 +805,7 @@ mod tests {
     #[test]
     fn presentations_of_an_edge_keep_each_end_within_itself() {
         let subs = [s(1), s(2), s(3), s(4)];
-        let orderings = presentations(StereoKind::CisTrans, &subs);
+        let orderings = presentations(StereoKind::Bond, &subs);
         assert_eq!(orderings.len(), 4);
         for ordering in orderings {
             let mut first = [ordering[0], ordering[1]];

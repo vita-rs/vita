@@ -141,7 +141,11 @@ mod tests {
 
     use vita_core::HasSites;
 
-    use crate::{HasBonds, StereoConfiguration, StereoKind, StereoLocus};
+    use crate::CoordinationGeometry::*;
+    use crate::{
+        CoordinationGeometry, HasBonds, StereoConfiguration, StereoKind, StereoLocus,
+        StereogenicGeometry,
+    };
 
     fn s(n: u32) -> SiteId {
         SiteId::new(n).unwrap()
@@ -151,10 +155,14 @@ mod tests {
         BondId::new(n).unwrap()
     }
 
+    fn center(geometry: CoordinationGeometry) -> StereoKind {
+        StereoKind::Center(StereogenicGeometry::new(geometry).expect("the geometry is stereogenic"))
+    }
+
     fn config(site: u32, order: [u32; 4]) -> StereoConfiguration {
         StereoConfiguration::new(
             StereoLocus::Site(s(site)),
-            StereoKind::Tetrahedral,
+            center(Tetrahedral),
             order.map(s),
         )
         .unwrap()
@@ -304,12 +312,8 @@ mod tests {
     }
 
     fn cis_trans(bond: u32, order: [u32; 4]) -> StereoConfiguration {
-        StereoConfiguration::new(
-            StereoLocus::Bond(b(bond)),
-            StereoKind::CisTrans,
-            order.map(s),
-        )
-        .unwrap()
+        StereoConfiguration::new(StereoLocus::Bond(b(bond)), StereoKind::Bond, order.map(s))
+            .unwrap()
     }
 
     fn butene(order: [u32; 4]) -> Mol {

@@ -102,7 +102,10 @@ mod tests {
     use vita_core::HasSites;
 
     use crate::BondOrder::Single;
-    use crate::{BondOrder, HasBonds, StereoConfiguration};
+    use crate::CoordinationGeometry::*;
+    use crate::{
+        BondOrder, CoordinationGeometry, HasBonds, StereoConfiguration, StereogenicGeometry,
+    };
 
     fn s(n: u32) -> SiteId {
         SiteId::new(n).unwrap()
@@ -112,9 +115,13 @@ mod tests {
         BondId::new(n).unwrap()
     }
 
+    fn center(geometry: CoordinationGeometry) -> StereoKind {
+        StereoKind::Center(StereogenicGeometry::new(geometry).expect("the geometry is stereogenic"))
+    }
+
     fn centers_at(sites: &'static [u32]) -> impl Fn(StereoLocus) -> Option<StereoKind> {
         move |locus| match locus {
-            StereoLocus::Site(site) if sites.contains(&site.get()) => Some(StereoKind::Tetrahedral),
+            StereoLocus::Site(site) if sites.contains(&site.get()) => Some(center(Tetrahedral)),
             _ => None,
         }
     }
@@ -122,7 +129,7 @@ mod tests {
     fn config(site: u32, order: [u32; 4]) -> StereoConfiguration {
         StereoConfiguration::new(
             StereoLocus::Site(s(site)),
-            StereoKind::Tetrahedral,
+            center(Tetrahedral),
             order.map(s),
         )
         .unwrap()

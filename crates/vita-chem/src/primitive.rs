@@ -1,9 +1,10 @@
 mod bond_order;
-mod coordination_geometry;
 mod id;
-mod stereo;
+mod symmetry;
 
 pub use bond_order::BondOrder;
-pub use coordination_geometry::CoordinationGeometry;
 pub use id::BondId;
-pub use stereo::{StereoConfiguration, StereoDescriptor, StereoKind, StereoLocus};
+pub use symmetry::{
+    CoordinationGeometry, StereoConfiguration, StereoDescriptor, StereoKind, StereoLocus,
+    StereogenicGeometry,
+};
