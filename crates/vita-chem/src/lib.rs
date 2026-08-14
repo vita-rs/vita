@@ -50,8 +50,8 @@ pub use primitive::{
 };
 
 pub use capability::{
-    HasAromaticity, HasBondOrders, HasBonds, HasFormalCharges, HasPartialCharges,
-    HasRadicalElectrons, HasStereoConfigurations,
+    HasAromaticity, HasBondOrders, HasBonds, HasCoordinationGeometries, HasFormalCharges,
+    HasPartialCharges, HasRadicalElectrons, HasStereoConfigurations,
 };
 
 pub use algorithm::{

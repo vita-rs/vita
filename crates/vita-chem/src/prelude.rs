@@ -2,6 +2,6 @@
 
 pub use crate::BondId;
 pub use crate::{
-    HasAromaticity, HasBondOrders, HasBonds, HasFormalCharges, HasPartialCharges,
-    HasRadicalElectrons, HasStereoConfigurations,
+    HasAromaticity, HasBondOrders, HasBonds, HasCoordinationGeometries, HasFormalCharges,
+    HasPartialCharges, HasRadicalElectrons, HasStereoConfigurations,
 };

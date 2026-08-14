@@ -88,6 +88,7 @@ forward_capabilities!(
     HasVelocities,
     HasAromaticity,
     HasBonds,
+    HasCoordinationGeometries,
     HasFormalCharges,
     HasPartialCharges,
     HasRadicalElectrons,

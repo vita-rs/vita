@@ -100,6 +100,7 @@ forward_capabilities!(
     HasAromaticity,
     HasBondOrders,
     HasBonds,
+    HasCoordinationGeometries,
     HasFormalCharges,
     HasPartialCharges,
     HasRadicalElectrons,
