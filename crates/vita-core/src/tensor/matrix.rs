@@ -625,6 +625,110 @@ impl<V: Scalar> Matrix3<V> {
     pub fn inverse(self) -> Self {
         self.try_inverse().expect("matrix is not invertible")
     }
+
+    /// Returns the singular values in descending order — the semi-axes of the
+    /// ellipsoid this map carries the unit sphere onto.
+    ///
+    /// They are the square roots of the eigenvalues of `Mᵀ M`, which is symmetric
+    /// and positive semi-definite, so all three are real and non-negative however
+    /// degenerate the map: a rank-deficient one simply ends in zeros.
+    pub fn singular_values(self) -> Vector3<V> {
+        let (_, squares) = (self.transpose() * self).symmetric_eigendecomposition();
+        let root = |square: V| {
+            if square > V::ZERO {
+                square.sqrt()
+            } else {
+                V::ZERO
+            }
+        };
+        Vector3::new(root(squares.z), root(squares.y), root(squares.x))
+    }
+
+    /// The eigendecomposition of this symmetric matrix: its eigenvectors as the
+    /// columns of a right-handed orthonormal frame, and its eigenvalues ascending
+    /// alongside them.
+    ///
+    /// Cyclic Jacobi rotations, which leave the frame orthonormal by construction
+    /// and so stay defined where eigenvalues repeat. Sweeps run only while the
+    /// off-diagonal keeps shrinking, so the rotations stop at the floor of whatever
+    /// precision `V` carries, on no threshold and no count: each sweep leaves a
+    /// strictly smaller non-negative value, of which there are finitely many.
+    ///
+    /// The matrix must be symmetric; a caller holds one by construction or not at
+    /// all, so nothing here checks.
+    pub(crate) fn symmetric_eigendecomposition(self) -> (Self, Vector3<V>) {
+        let mut values = [
+            self.row(0).to_array(),
+            self.row(1).to_array(),
+            self.row(2).to_array(),
+        ];
+        let mut frame = [
+            [V::ONE, V::ZERO, V::ZERO],
+            [V::ZERO, V::ONE, V::ZERO],
+            [V::ZERO, V::ZERO, V::ONE],
+        ];
+        let off_diagonal = |values: &[[V; 3]; 3]| {
+            values[0][1] * values[0][1] + values[0][2] * values[0][2] + values[1][2] * values[1][2]
+        };
+        let mut remaining = off_diagonal(&values);
+        while remaining > V::ZERO {
+            for (p, q) in [(0usize, 1usize), (0, 2), (1, 2)] {
+                let off = values[p][q];
+                if off == V::ZERO {
+                    continue;
+                }
+                let theta = (values[q][q] - values[p][p]) / (off + off);
+                let tangent = theta.signum() / (theta.abs() + (theta * theta + V::ONE).sqrt());
+                let cosine = (tangent * tangent + V::ONE).sqrt().recip();
+                let sine = tangent * cosine;
+
+                values[p][p] -= tangent * off;
+                values[q][q] += tangent * off;
+                values[p][q] = V::ZERO;
+                values[q][p] = V::ZERO;
+
+                let rest = 3 - p - q;
+                let (near, far) = (values[p][rest], values[q][rest]);
+                values[p][rest] = cosine * near - sine * far;
+                values[rest][p] = values[p][rest];
+                values[q][rest] = sine * near + cosine * far;
+                values[rest][q] = values[q][rest];
+
+                for row in &mut frame {
+                    let (near, far) = (row[p], row[q]);
+                    row[p] = cosine * near - sine * far;
+                    row[q] = sine * near + cosine * far;
+                }
+            }
+            let shrunk = off_diagonal(&values);
+            if shrunk >= remaining {
+                break;
+            }
+            remaining = shrunk;
+        }
+
+        let mut eigenvalues = [values[0][0], values[1][1], values[2][2]];
+        for (lower, upper) in [(0usize, 1usize), (0, 2), (1, 2)] {
+            if eigenvalues[upper] < eigenvalues[lower] {
+                eigenvalues.swap(lower, upper);
+                for row in &mut frame {
+                    row.swap(lower, upper);
+                }
+            }
+        }
+
+        let axes = Self::from_rows(
+            Vector3::from_array(frame[0]),
+            Vector3::from_array(frame[1]),
+            Vector3::from_array(frame[2]),
+        );
+        let axes = if axes.determinant() < V::ZERO {
+            Self::from_cols(axes.col(0), axes.col(1), -axes.col(2))
+        } else {
+            axes
+        };
+        (axes, Vector3::from_array(eigenvalues))
+    }
 }
 
 #[cfg(test)]
@@ -677,6 +781,34 @@ mod tests {
 
     fn length_matrix() -> Matrix3<Length<f64, Angstrom>> {
         Matrix3::from_diagonal(Vector3::new(length(2.0), length(3.0), length(4.0)))
+    }
+
+    fn diagonal() -> Matrix3<f64> {
+        Matrix3::from_diagonal(Vector3::new(2.0, 1.0, 3.0))
+    }
+
+    fn tilted() -> Matrix3<f64> {
+        Matrix3::from_rows(
+            Vector3::new(2.5, 1.5, 0.0),
+            Vector3::new(1.5, 2.5, 0.0),
+            Vector3::new(0.0, 0.0, 0.0),
+        )
+    }
+
+    fn repeated() -> Matrix3<f64> {
+        Matrix3::from_rows(
+            Vector3::new(2.0, 1.0, 0.0),
+            Vector3::new(1.0, 2.0, 0.0),
+            Vector3::new(0.0, 0.0, 3.0),
+        )
+    }
+
+    fn saddle() -> Matrix3<f64> {
+        Matrix3::from_rows(
+            Vector3::new(4.0, 1.0, 2.0),
+            Vector3::new(1.0, 3.0, -1.0),
+            Vector3::new(2.0, -1.0, -5.0),
+        )
     }
 
     #[test]
@@ -1433,6 +1565,119 @@ mod tests {
         assert_eq!(
             matrix().midpoint(Matrix3::ZERO),
             matrix().lerp(Matrix3::ZERO, 0.5)
+        );
+    }
+
+    #[test]
+    fn a_rank_deficient_matrix_ends_in_zeros() {
+        let plane = Matrix3::from_diagonal(Vector3::new(2.0, 1.0, 0.0));
+        let line = Matrix3::from_diagonal(Vector3::new(2.0, 0.0, 0.0));
+        assert!(vectors_close(
+            plane.singular_values(),
+            Vector3::new(2.0, 1.0, 0.0)
+        ));
+        assert!(vectors_close(
+            line.singular_values(),
+            Vector3::new(2.0, 0.0, 0.0)
+        ));
+        assert!(vectors_close(
+            Matrix3::from_diagonal(Vector3::ZERO).singular_values(),
+            Vector3::ZERO
+        ));
+    }
+
+    #[test]
+    fn the_singular_values_of_a_diagonal_matrix_are_its_magnitudes_descending() {
+        let stretched = Matrix3::from_diagonal(Vector3::new(2.0, -3.0, 1.0));
+        assert!(vectors_close(
+            stretched.singular_values(),
+            Vector3::new(3.0, 2.0, 1.0)
+        ));
+    }
+
+    #[test]
+    fn the_singular_values_of_a_rotation_are_all_one() {
+        assert!(vectors_close(
+            Matrix3::from_rotation_z(FRAC_PI_2).singular_values(),
+            Vector3::new(1.0, 1.0, 1.0)
+        ));
+    }
+
+    #[test]
+    fn the_singular_values_are_unchanged_by_rotating_either_side() {
+        let turn = Matrix3::from_axis_angle(Vector3::new(1.0, 2.0, 3.0).normalize(), 0.7);
+        assert!(vectors_close(
+            (turn * saddle() * turn.transpose()).singular_values(),
+            saddle().singular_values()
+        ));
+    }
+
+    #[test]
+    fn the_singular_values_multiply_to_the_absolute_determinant() {
+        let values = saddle().singular_values();
+        assert!(close(
+            values.x * values.y * values.z,
+            saddle().determinant().abs()
+        ));
+    }
+
+    #[test]
+    fn a_diagonal_matrix_keeps_its_diagonal_as_its_eigenvalues() {
+        let (_, eigenvalues) = diagonal().symmetric_eigendecomposition();
+        assert_eq!(eigenvalues, Vector3::new(1.0, 2.0, 3.0));
+    }
+
+    #[test]
+    fn the_eigenvalues_ascend() {
+        let (_, eigenvalues) = tilted().symmetric_eigendecomposition();
+        assert!(
+            close(eigenvalues.x, 0.0) && close(eigenvalues.y, 1.0) && close(eigenvalues.z, 4.0)
+        );
+    }
+
+    #[test]
+    fn the_eigenvectors_are_orthonormal() {
+        let (frame, _) = saddle().symmetric_eigendecomposition();
+        assert!(
+            (0..3).all(|index| close(frame.col(index).norm_squared(), 1.0))
+                && close(frame.col(0).dot(frame.col(1)), 0.0)
+                && close(frame.col(0).dot(frame.col(2)), 0.0)
+                && close(frame.col(1).dot(frame.col(2)), 0.0)
+        );
+    }
+
+    #[test]
+    fn the_eigenvectors_form_a_right_handed_frame() {
+        let (frame, _) = diagonal().symmetric_eigendecomposition();
+        assert!(close(frame.determinant(), 1.0));
+    }
+
+    #[test]
+    fn repeated_eigenvalues_leave_the_eigenvectors_orthonormal() {
+        let (frame, eigenvalues) = repeated().symmetric_eigendecomposition();
+        assert!(
+            close(eigenvalues.y, eigenvalues.z)
+                && (0..3).all(|index| close(frame.col(index).norm_squared(), 1.0))
+                && close(frame.col(1).dot(frame.col(2)), 0.0)
+        );
+    }
+
+    #[test]
+    fn an_indefinite_matrix_decomposes_alike() {
+        let (_, eigenvalues) = saddle().symmetric_eigendecomposition();
+        assert!(eigenvalues.x < 0.0 && eigenvalues.z > 0.0);
+    }
+
+    #[test]
+    fn the_decomposition_reconstructs_the_matrix() {
+        let (frame, eigenvalues) = saddle().symmetric_eigendecomposition();
+        let rebuilt = frame * Matrix3::from_diagonal(eigenvalues) * frame.transpose();
+        assert!(
+            rebuilt
+                .to_cols_array()
+                .iter()
+                .zip(saddle().to_cols_array())
+                .all(|(&taken, expected)| close(taken, expected))
         );
     }
 
