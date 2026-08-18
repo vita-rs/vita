@@ -55,8 +55,10 @@ mod idealization {
     pub struct Idealization {
         /// The symmetry over the slots.
         pub symmetry: Symmetry,
-        /// The reference unit directions, slot by slot, a site's coordinates align
-        /// onto.
+        /// The reference directions, slot by slot, a site's coordinates align onto.
+        ///
+        /// Not normalized: each arrangement is stated in whichever vectors put it
+        /// plainest, so a consumer comparing angles normalizes them first.
         pub directions: &'static [[f64; 3]],
     }
 
@@ -910,8 +912,10 @@ mod stereo {
             self.symmetry().is_chiral()
         }
 
-        /// The reference unit directions its coordinates align onto, slot by slot —
-        /// empty for an arrangement read from a dihedral instead, a bond or an axis.
+        /// The reference directions its coordinates align onto, slot by slot — empty
+        /// for an arrangement read from a dihedral instead, a bond or an axis.
+        ///
+        /// Not normalized — see [`CoordinationGeometry::directions`].
         #[inline]
         pub(crate) const fn directions(self) -> &'static [[f64; 3]] {
             match self {
