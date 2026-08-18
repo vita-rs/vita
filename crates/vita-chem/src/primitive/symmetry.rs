@@ -268,6 +268,23 @@ mod coordination_geometry {
     }
 
     impl CoordinationGeometry {
+        /// Every geometry, in declaration order.
+        pub(crate) const ALL: [Self; 13] = [
+            Self::Linear,
+            Self::Angular,
+            Self::TrigonalPlanar,
+            Self::TrigonalPyramidal,
+            Self::TShaped,
+            Self::Tetrahedral,
+            Self::SquarePlanar,
+            Self::PyramidalizedSquare,
+            Self::Seesaw,
+            Self::TrigonalBipyramidal,
+            Self::SquarePyramidal,
+            Self::Octahedral,
+            Self::TrigonalPrismatic,
+        ];
+
         /// Returns the number of slots the geometry arranges — its coordination
         /// number.
         #[inline]
@@ -290,6 +307,15 @@ mod coordination_geometry {
         #[inline]
         pub const fn is_chiral(self) -> bool {
             self.symmetry().is_chiral()
+        }
+
+        /// The reference directions its substituents align onto, slot by slot.
+        ///
+        /// Not normalized — each arrangement is stated in whichever vectors put it
+        /// plainest, so a consumer comparing angles normalizes them first.
+        #[inline]
+        pub(crate) const fn directions(self) -> &'static [[f64; 3]] {
+            self.idealization().directions
         }
 
         /// The idealization the geometry denotes.
@@ -571,21 +597,7 @@ mod coordination_geometry {
         use super::super::idealization::{MAX_SLOTS, oracle::*};
         use super::CoordinationGeometry::*;
 
-        const GEOMETRIES: [CoordinationGeometry; 13] = [
-            Linear,
-            Angular,
-            TrigonalPlanar,
-            TrigonalPyramidal,
-            TShaped,
-            Tetrahedral,
-            SquarePlanar,
-            PyramidalizedSquare,
-            Seesaw,
-            TrigonalBipyramidal,
-            SquarePyramidal,
-            Octahedral,
-            TrigonalPrismatic,
-        ];
+        const GEOMETRIES: [CoordinationGeometry; 13] = CoordinationGeometry::ALL;
 
         fn group(geometry: CoordinationGeometry) -> Vec<Vec<u8>> {
             sorted_group(geometry.idealization().symmetry.group)
@@ -903,7 +915,7 @@ mod stereo {
         #[inline]
         pub(crate) const fn directions(self) -> &'static [[f64; 3]] {
             match self {
-                Self::Center(stereogenic) => stereogenic.geometry().idealization().directions,
+                Self::Center(stereogenic) => stereogenic.geometry().directions(),
                 Self::Bond | Self::Axis => &[],
             }
         }
