@@ -195,3 +195,269 @@ fn residual<V: Scalar>(observed: &[Vector3<V>], reference: &[Vector3<V>], assign
     };
     (V::from_f64(observed.len() as f64) - values.x - values.y - least) * V::from_f64(2.0)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use vita_core::HasSites;
+    use vita_core::tensor::Point3;
+    use vita_core::units::angle::Degree;
+    use vita_core::units::length::{Length, LengthUnit};
+
+    use crate::BondId;
+
+    const TOL: f64 = 1e-7;
+
+    fn s(n: u32) -> SiteId {
+        SiteId::new(n).unwrap()
+    }
+
+    fn b(n: u32) -> BondId {
+        BondId::new(n).unwrap()
+    }
+
+    struct Mol {
+        sites: Vec<SiteId>,
+        coords: Vec<[f64; 3]>,
+        bonds: Vec<BondId>,
+        endpoints: Vec<(SiteId, SiteId)>,
+    }
+
+    impl HasSites for Mol {
+        fn sites(&self) -> impl Iterator<Item = SiteId> + '_ {
+            self.sites.iter().copied()
+        }
+    }
+
+    impl HasPositions<f64> for Mol {
+        fn position<U: LengthUnit>(&self, site: SiteId) -> Point3<Length<f64, U>> {
+            let [x, y, z] = self.coords[self.sites.iter().position(|&i| i == site).unwrap()];
+            Point3::new(Length::new(x), Length::new(y), Length::new(z))
+        }
+    }
+
+    impl HasBonds for Mol {
+        fn bonds(&self) -> impl Iterator<Item = BondId> + '_ {
+            self.bonds.iter().copied()
+        }
+
+        fn bond_endpoints(&self, bond: BondId) -> (SiteId, SiteId) {
+            self.endpoints[self.bonds.iter().position(|&i| i == bond).unwrap()]
+        }
+    }
+
+    fn centered(placements: &[[f64; 3]]) -> Mol {
+        let mut coords = vec![[0.0, 0.0, 0.0]];
+        coords.extend_from_slice(placements);
+        Mol {
+            sites: (1..=placements.len() as u32 + 1).map(s).collect(),
+            coords,
+            bonds: (1..=placements.len() as u32).map(b).collect(),
+            endpoints: (1..=placements.len() as u32)
+                .map(|ligand| (s(1), s(ligand + 1)))
+                .collect(),
+        }
+    }
+
+    fn ideal(geometry: CoordinationGeometry) -> Mol {
+        centered(geometry.directions())
+    }
+
+    fn departure(site: &Mol, geometry: CoordinationGeometry) -> f64 {
+        departures(site)
+            .get::<Radian>(s(1), geometry)
+            .unwrap()
+            .value()
+    }
+
+    fn close(a: f64, b: f64) -> bool {
+        (a - b).abs() <= TOL
+    }
+
+    fn mapped(placements: &[[f64; 3]], f: impl Fn([f64; 3]) -> [f64; 3]) -> Vec<[f64; 3]> {
+        placements.iter().map(|&point| f(point)).collect()
+    }
+
+    #[test]
+    fn a_site_no_arrangement_fits_goes_unmeasured() {
+        assert!(departures::<_, f64>(&centered(&[[1.0, 0.0, 0.0]])).is_empty());
+        assert!(departures::<_, f64>(&centered(&[])).is_empty());
+    }
+
+    #[test]
+    fn a_substituent_sitting_on_its_site_leaves_it_unmeasured() {
+        let coincident = centered(&[[0.0, 0.0, 0.0], [0.0, 0.0, -1.0]]);
+        assert_eq!(
+            departures(&coincident).get::<Radian>(s(1), CoordinationGeometry::Linear),
+            None
+        );
+    }
+
+    #[test]
+    fn a_site_on_an_arrangements_own_directions_departs_from_it_by_nothing() {
+        for geometry in CoordinationGeometry::ALL {
+            assert!(
+                close(departure(&ideal(geometry), geometry), 0.0),
+                "{geometry:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn bending_a_straight_site_departs_by_half_the_bend() {
+        let bend = 0.4;
+        let (sine, cosine) = bend.sin_cos();
+        let bent = centered(&[[0.0, 0.0, 1.0], [sine, 0.0, -cosine]]);
+        assert!(close(
+            departure(&bent, CoordinationGeometry::Linear),
+            bend / 2.0
+        ));
+    }
+
+    #[test]
+    fn a_departure_is_given_in_the_requested_unit() {
+        let bent = centered(&[[0.0, 0.0, 1.0], [1.0, 0.0, 0.0]]);
+        let in_radians = departure(&bent, CoordinationGeometry::Linear);
+        let in_degrees = departures(&bent)
+            .get::<Degree>(s(1), CoordinationGeometry::Linear)
+            .unwrap();
+        assert!(close(in_degrees.value(), in_radians.to_degrees()));
+    }
+
+    #[test]
+    fn every_other_candidate_of_the_same_size_lies_further() {
+        for geometry in CoordinationGeometry::ALL {
+            let site = ideal(geometry);
+            for (candidate, apart) in departures(&site).of_site::<Radian>(s(1)) {
+                assert_eq!(
+                    candidate == geometry,
+                    close(apart.value(), 0.0),
+                    "{geometry:?} against {candidate:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn a_bent_site_is_nearer_angular_than_linear() {
+        let water = centered(&[[0.0, 0.0, 1.0], [0.968, 0.0, -0.25]]);
+        assert_eq!(
+            departures(&water).nearest(s(1)),
+            Some(CoordinationGeometry::Angular)
+        );
+    }
+
+    #[test]
+    fn only_arrangements_of_the_right_size_are_measured() {
+        let measured: Vec<CoordinationGeometry> =
+            departures(&ideal(CoordinationGeometry::Octahedral))
+                .of_site::<Radian>(s(1))
+                .map(|(geometry, _)| geometry)
+                .collect();
+        assert_eq!(
+            measured.len(),
+            CoordinationGeometry::ALL
+                .into_iter()
+                .filter(|candidate| candidate.slot_count() == 6)
+                .count()
+        );
+        assert!(measured.iter().all(|candidate| candidate.slot_count() == 6));
+    }
+
+    #[test]
+    fn an_arrangement_of_another_size_answers_nothing() {
+        let measured = departures(&ideal(CoordinationGeometry::Tetrahedral));
+        assert_eq!(
+            measured.get::<Radian>(s(1), CoordinationGeometry::Octahedral),
+            None
+        );
+    }
+
+    #[test]
+    fn an_unmeasured_site_answers_nothing() {
+        let measured = departures(&ideal(CoordinationGeometry::Tetrahedral));
+        assert_eq!(measured.nearest(s(2)), None);
+        assert_eq!(
+            measured.get::<Radian>(s(2), CoordinationGeometry::Linear),
+            None
+        );
+        assert_eq!(measured.of_site::<Radian>(s(2)).count(), 0);
+    }
+
+    #[test]
+    fn an_arrangement_is_the_nearest_to_its_own_directions() {
+        for geometry in CoordinationGeometry::ALL {
+            assert_eq!(
+                departures(&ideal(geometry)).nearest(s(1)),
+                Some(geometry),
+                "{geometry:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn the_candidates_come_out_nearest_first() {
+        let apart: Vec<f64> = departures(&ideal(CoordinationGeometry::Tetrahedral))
+            .of_site::<Radian>(s(1))
+            .map(|(_, departure)| departure.value())
+            .collect();
+        assert_eq!(apart.len(), 4);
+        assert!(apart.is_sorted_by(|near, far| near <= far));
+    }
+
+    #[test]
+    fn the_geometries_are_the_nearest_arrangement_of_every_measured_site() {
+        let measured = departures(&ideal(CoordinationGeometry::Tetrahedral));
+        let geometries = measured.geometries();
+        assert_eq!(geometries.len(), measured.len());
+        assert_eq!(geometries.get(s(1)), measured.nearest(s(1)));
+    }
+
+    #[test]
+    fn how_far_a_substituent_lies_does_not_move_the_departure() {
+        for geometry in CoordinationGeometry::ALL {
+            let stretched = centered(&mapped(geometry.directions(), |point| {
+                point.map(|value| value * 3.0)
+            }));
+            let mut uneven = geometry.directions().to_vec();
+            uneven[0] = uneven[0].map(|value| value * 7.0);
+            assert!(close(departure(&stretched, geometry), 0.0), "{geometry:?}");
+            assert!(
+                close(departure(&centered(&uneven), geometry), 0.0),
+                "{geometry:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn turning_a_site_does_not_move_its_departures() {
+        let (sine, cosine) = 0.7f64.sin_cos();
+        for geometry in CoordinationGeometry::ALL {
+            let turned = centered(&mapped(geometry.directions(), |[x, y, z]| {
+                [x * cosine - y * sine, x * sine + y * cosine, z]
+            }));
+            assert!(close(departure(&turned, geometry), 0.0), "{geometry:?}");
+        }
+    }
+
+    #[test]
+    fn reflecting_a_site_does_not_move_its_departures() {
+        for geometry in CoordinationGeometry::ALL {
+            let mirrored = centered(&mapped(geometry.directions(), |[x, y, z]| [-x, y, z]));
+            assert!(close(departure(&mirrored, geometry), 0.0), "{geometry:?}");
+        }
+    }
+
+    #[test]
+    fn listing_the_substituents_in_another_order_does_not_move_the_departure() {
+        for geometry in CoordinationGeometry::ALL {
+            let mut reordered = geometry.directions().to_vec();
+            reordered.reverse();
+            assert!(
+                close(departure(&centered(&reordered), geometry), 0.0),
+                "{geometry:?}"
+            );
+        }
+    }
+}

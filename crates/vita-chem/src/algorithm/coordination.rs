@@ -133,3 +133,99 @@ impl<M: HasSites> HasCoordinationGeometries for WithCoordinationGeometries<'_, M
         self.mol.sites().map(|site| self.geometries.get(site))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use vita_core::{Element, HasElements};
+
+    use crate::CoordinationGeometry::{Angular, Tetrahedral};
+
+    fn s(n: u32) -> SiteId {
+        SiteId::new(n).unwrap()
+    }
+
+    struct Mol;
+
+    impl HasSites for Mol {
+        fn sites(&self) -> impl Iterator<Item = SiteId> + '_ {
+            (1..=3).map(s)
+        }
+    }
+
+    impl HasElements for Mol {
+        fn element(&self, _site: SiteId) -> Element {
+            Element::from_symbol("C").unwrap()
+        }
+    }
+
+    fn geometries() -> CoordinationGeometries {
+        CoordinationGeometries::from_pairs([(s(3), Angular), (s(1), Tetrahedral)])
+    }
+
+    #[test]
+    fn a_set_of_no_geometries_is_empty() {
+        let none = CoordinationGeometries::from_pairs([]);
+        assert_eq!(none.len(), 0);
+        assert!(none.is_empty());
+    }
+
+    #[test]
+    fn a_site_answers_the_geometry_it_was_given() {
+        assert_eq!(geometries().get(s(1)), Some(Tetrahedral));
+        assert_eq!(geometries().get(s(3)), Some(Angular));
+    }
+
+    #[test]
+    fn a_site_that_was_given_none_answers_none() {
+        assert_eq!(geometries().get(s(2)), None);
+    }
+
+    #[test]
+    fn the_geometries_count_the_sites_that_have_one() {
+        assert_eq!(geometries().len(), 2);
+        assert!(!geometries().is_empty());
+    }
+
+    #[test]
+    fn the_geometries_come_out_in_ascending_site_order() {
+        assert_eq!(
+            geometries().iter().collect::<Vec<_>>(),
+            vec![(s(1), Tetrahedral), (s(3), Angular)]
+        );
+    }
+
+    #[test]
+    fn a_bound_view_answers_the_capability_from_the_geometries() {
+        let geometries = geometries();
+        let view = geometries.bind(&Mol);
+        assert_eq!(view.coordination_geometry(s(1)), Some(Tetrahedral));
+        assert_eq!(view.coordination_geometry(s(2)), None);
+    }
+
+    #[test]
+    fn a_bound_view_yields_one_answer_per_site() {
+        let geometries = geometries();
+        let view = geometries.bind(&Mol);
+        assert_eq!(
+            view.coordination_geometries().collect::<Vec<_>>(),
+            vec![Some(Tetrahedral), None, Some(Angular)]
+        );
+    }
+
+    #[test]
+    fn a_bound_view_forwards_the_skeleton() {
+        let geometries = geometries();
+        let view = geometries.bind(&Mol);
+        assert_eq!(view.site_count(), Mol.site_count());
+        assert_eq!(view.element(s(1)), Mol.element(s(1)));
+    }
+
+    #[test]
+    #[should_panic(expected = "site is not in the molecule")]
+    fn a_bound_view_refuses_a_site_the_molecule_does_not_hold() {
+        let geometries = geometries();
+        geometries.bind(&Mol).coordination_geometry(s(9));
+    }
+}
