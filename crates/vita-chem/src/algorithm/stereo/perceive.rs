@@ -5,6 +5,7 @@ use vita_core::units::length::Angstrom;
 use vita_core::{HasPositions, Quantity, Scalar, SiteId};
 
 use super::{candidate_loci, frame};
+use crate::algorithm::utils::next_permutation;
 use crate::capability::delegation::forward_capabilities;
 use crate::{
     HasBondOrders, HasBonds, HasStereoConfigurations, StereoConfiguration, StereoKind, StereoLocus,
@@ -314,21 +315,6 @@ where
         Ordering::Equal => return None,
     };
     StereoConfiguration::new(locus, StereoKind::Axis, ordered)
-}
-
-/// Advances `slice` to the next lexicographic permutation, `false` at the last.
-fn next_permutation(slice: &mut [u8]) -> bool {
-    let n = slice.len();
-    let Some(pivot) = (1..n).rev().find(|&i| slice[i - 1] < slice[i]) else {
-        return false;
-    };
-    let successor = (pivot..n)
-        .rev()
-        .find(|&i| slice[i] > slice[pivot - 1])
-        .expect("a successor exists past the pivot");
-    slice.swap(pivot - 1, successor);
-    slice[pivot..].reverse();
-    true
 }
 
 #[cfg(test)]
