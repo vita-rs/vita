@@ -31,17 +31,17 @@ impl StereoConfigurations {
         self.configurations.is_empty()
     }
 
-    /// Iterates the configurations, ordered by locus.
-    pub fn iter(&self) -> impl Iterator<Item = &StereoConfiguration> + '_ {
-        self.configurations.iter()
-    }
-
     /// The configuration at `locus`, or `None` if it bears none.
     pub fn get(&self, locus: StereoLocus) -> Option<&StereoConfiguration> {
         self.configurations
             .binary_search_by_key(&locus, StereoConfiguration::locus)
             .ok()
             .map(|index| &self.configurations[index])
+    }
+
+    /// Iterates the configurations, ordered by locus.
+    pub fn iter(&self) -> impl Iterator<Item = &StereoConfiguration> + '_ {
+        self.configurations.iter()
     }
 
     /// The `configurations` gathered into a locus-ordered set.

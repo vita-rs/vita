@@ -35,7 +35,7 @@ impl StericNumbers {
         self.counts.get(&site).copied()
     }
 
-    /// Iterates the `(site, steric number)` pairs, ordered by site.
+    /// Iterates `(site, steric number)` pairs in ascending site order.
     pub fn iter(&self) -> impl Iterator<Item = (SiteId, u32)> + '_ {
         self.counts.iter().map(|(&site, &count)| (site, count))
     }

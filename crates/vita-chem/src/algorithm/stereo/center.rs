@@ -38,7 +38,7 @@ impl Stereocenters {
         self.loci.binary_search(&locus).is_ok()
     }
 
-    /// Iterates the stereogenic loci ascending: sites, then bonds, then axes.
+    /// Iterates the stereogenic loci in ascending order: sites, then bonds, then axes.
     pub fn iter(&self) -> impl Iterator<Item = StereoLocus> + '_ {
         self.loci.iter().copied()
     }

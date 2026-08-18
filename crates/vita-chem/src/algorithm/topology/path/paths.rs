@@ -10,7 +10,7 @@ use crate::algorithm::utils::FxHashMap;
 /// A shortest path uses the fewest bonds; when several tie, all are kept. Each
 /// path lists its sites in order from `start` to `end` inclusive. Empty when
 /// `end` is unreachable from `start`, and the single path `[start]` when
-/// `start == end`. The paths are ordered ascending.
+/// `start == end`. The paths are in ascending order.
 ///
 /// Obtain via [`paths`].
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -29,8 +29,8 @@ impl Paths {
         self.paths.is_empty()
     }
 
-    /// Iterates the shortest paths, ascending; each is a sequence of sites from
-    /// `start` to `end`.
+    /// Iterates the shortest paths in ascending order; each is a sequence of sites
+    /// from `start` to `end`.
     pub fn iter(&self) -> impl Iterator<Item = &[SiteId]> + '_ {
         self.paths.iter().map(Vec::as_slice)
     }

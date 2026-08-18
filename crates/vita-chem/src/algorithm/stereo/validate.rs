@@ -39,13 +39,13 @@ impl StereoConsistency {
         self.overspecified.len()
     }
 
-    /// Iterates the stereogenic loci left without a configuration, ascending.
+    /// Iterates the stereogenic loci left without a configuration, in ascending order.
     pub fn unspecified(&self) -> impl Iterator<Item = StereoLocus> + '_ {
         self.unspecified.iter().copied()
     }
 
-    /// Iterates the loci that carry a configuration yet are not stereogenic,
-    /// ascending.
+    /// Iterates the loci that carry a configuration yet are not stereogenic, in
+    /// ascending order.
     pub fn overspecified(&self) -> impl Iterator<Item = StereoLocus> + '_ {
         self.overspecified.iter().copied()
     }

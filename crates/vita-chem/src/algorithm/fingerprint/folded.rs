@@ -41,7 +41,7 @@ impl FoldedFingerprint {
         self.0.test(i)
     }
 
-    /// Iterates the bits features folded onto, ascending.
+    /// Iterates the bits features folded onto, in ascending order.
     pub fn iter(&self) -> impl Iterator<Item = usize> + '_ {
         (0..self.0.len()).filter(|&i| self.0.test(i))
     }
