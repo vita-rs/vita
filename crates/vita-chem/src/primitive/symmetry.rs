@@ -1050,8 +1050,9 @@ mod stereo {
         /// Builds a configuration at `locus` of `kind` from its `neighbors`, given in the
         /// order the kind's contract prescribes.
         ///
-        /// Returns `None` unless `locus` [anchors](StereoLocus::anchors) `kind` and its
-        /// neighbor count is the kind's [`StereoKind::slot_count`].
+        /// Returns `None` unless `locus` [anchors](StereoLocus::anchors) `kind`, its
+        /// neighbor count is the kind's [`StereoKind::slot_count`], and its neighbors are
+        /// distinct — one atom cannot fill two slots at once.
         #[inline]
         pub fn new(
             locus: StereoLocus,
@@ -1059,10 +1060,16 @@ mod stereo {
             neighbors: impl IntoIterator<Item = SiteId>,
         ) -> Option<Self> {
             let neighbors: Vec<SiteId> = neighbors.into_iter().collect();
-            (locus.anchors(kind) && neighbors.len() == kind.slot_count()).then(|| Self {
-                locus,
-                kind,
-                neighbors: normalized(kind, &neighbors),
+            let distinct = neighbors
+                .iter()
+                .enumerate()
+                .all(|(slot, neighbor)| !neighbors[..slot].contains(neighbor));
+            (locus.anchors(kind) && neighbors.len() == kind.slot_count() && distinct).then(|| {
+                Self {
+                    locus,
+                    kind,
+                    neighbors: normalized(kind, &neighbors),
+                }
             })
         }
 
@@ -1438,6 +1445,18 @@ mod stereo {
                     StereoLocus::Site(s(1)),
                     center(Tetrahedral),
                     neighbors(0)
+                )
+                .is_none()
+            );
+        }
+
+        #[test]
+        fn new_rejects_a_repeated_neighbor() {
+            assert!(
+                StereoConfiguration::new(
+                    StereoLocus::Site(s(1)),
+                    center(Tetrahedral),
+                    [s(2), s(3), s(2), s(4)],
                 )
                 .is_none()
             );
