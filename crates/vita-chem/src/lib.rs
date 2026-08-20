@@ -21,22 +21,23 @@
 //!
 //! Each answer is fixed by the discrete structure alone: absolutely, as in
 //! [`topology`] and [`canonical`], or within a model declared outright —
-//! Hückel's rule for [`aromaticity`], electron-domain counting for
-//! [`hybridization`], p-orbital availability for [`conjugation`]. Where
+//! Hückel's rule for [`aromaticity`], p-orbital availability for
+//! [`conjugation`], electron-domain repulsion for [`coordination`]. Where
 //! determination runs out, the answer is honestly absent: a delocalized
 //! bond has no integer order until kekulized, a d-block site no fixed
 //! electron count. Where only convention could choose, nothing is offered:
-//! a configuration is a coset, not a named handedness, and no tautomer is
-//! chosen as dominant. Identity is computed; values are never invented.
+//! a configuration is a coset, not a named handedness, no site is called
+//! the shape it lies nearest, and no tautomer is chosen as dominant.
+//! Identity is computed; values are never invented.
 //!
 //! # Modules
 //!
 //! [`topology`] reads the bare skeleton; [`valence`] keeps the electron
-//! books; [`aromaticity`], [`conjugation`], and [`hybridization`] perceive
-//! within their models; [`canonical`] and [`stereo`] settle identity;
-//! [`isomorphism`] finds structure inside structure; [`composition`] takes
-//! the particle inventory; [`fingerprint`] measures similarity;
-//! [`notation`] renders facts as standard symbols.
+//! books; [`aromaticity`] and [`conjugation`] perceive within their models;
+//! [`coordination`] reads a site's shape; [`canonical`] and [`stereo`]
+//! settle identity; [`isomorphism`] finds structure inside structure;
+//! [`composition`] takes the particle inventory; [`fingerprint`] measures
+//! similarity; [`notation`] renders facts as standard symbols.
 
 mod algorithm;
 mod capability;
@@ -45,16 +46,16 @@ mod primitive;
 pub mod prelude;
 
 pub use primitive::{
-    BondId, BondOrder, Hybridization, StereoConfiguration, StereoDescriptor, StereoKind,
-    StereoLocus,
+    BondId, BondOrder, CoordinationGeometry, StereoConfiguration, StereoDescriptor, StereoKind,
+    StereoLocus, StereogenicGeometry,
 };
 
 pub use capability::{
-    HasAromaticity, HasBondOrders, HasBonds, HasFormalCharges, HasHybridizations,
+    HasAromaticity, HasBondOrders, HasBonds, HasCoordinationGeometries, HasFormalCharges,
     HasPartialCharges, HasRadicalElectrons, HasStereoConfigurations,
 };
 
 pub use algorithm::{
-    aromaticity, canonical, composition, conjugation, fingerprint, hybridization, isomorphism,
+    aromaticity, canonical, composition, conjugation, coordination, fingerprint, isomorphism,
     notation, stereo, topology, valence,
 };

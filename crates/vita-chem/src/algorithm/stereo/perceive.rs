@@ -4,10 +4,12 @@ use vita_core::tensor::{Point3, Vector3};
 use vita_core::units::length::Angstrom;
 use vita_core::{HasPositions, Quantity, Scalar, SiteId};
 
-use super::{candidate_loci, frame};
+use super::{candidate_loci, frame, kind};
+use crate::algorithm::utils::next_permutation;
 use crate::capability::delegation::forward_capabilities;
 use crate::{
-    HasBondOrders, HasBonds, HasStereoConfigurations, StereoConfiguration, StereoKind, StereoLocus,
+    HasBondOrders, HasBonds, HasCoordinationGeometries, HasStereoConfigurations,
+    StereoConfiguration, StereoKind, StereoLocus,
 };
 
 /// A set of stereo configurations over a molecule — one per stereogenic unit, ordered
@@ -30,17 +32,17 @@ impl StereoConfigurations {
         self.configurations.is_empty()
     }
 
-    /// Iterates the configurations, ordered by locus.
-    pub fn iter(&self) -> impl Iterator<Item = &StereoConfiguration> + '_ {
-        self.configurations.iter()
-    }
-
     /// The configuration at `locus`, or `None` if it bears none.
     pub fn get(&self, locus: StereoLocus) -> Option<&StereoConfiguration> {
         self.configurations
             .binary_search_by_key(&locus, StereoConfiguration::locus)
             .ok()
             .map(|index| &self.configurations[index])
+    }
+
+    /// Iterates the configurations, ordered by locus.
+    pub fn iter(&self) -> impl Iterator<Item = &StereoConfiguration> + '_ {
+        self.configurations.iter()
     }
 
     /// The `configurations` gathered into a locus-ordered set.
@@ -100,8 +102,8 @@ forward_capabilities!(
     HasAromaticity,
     HasBondOrders,
     HasBonds,
+    HasCoordinationGeometries,
     HasFormalCharges,
-    HasHybridizations,
     HasPartialCharges,
     HasRadicalElectrons,
 );
@@ -122,11 +124,12 @@ impl<M: HasBonds> HasStereoConfigurations for WithStereoConfigurations<'_, M> {
 
 /// Perceives the stereo configurations a molecule's coordinates realize.
 ///
-/// For each locus the caller's `candidate` admits, reads a [`StereoConfiguration`]
-/// from the geometry: a center by matching the directions to its substituents onto
-/// the geometry's reference frame — the pairwise angles fix which substituent fills
-/// which slot, one signed volume the handedness — a double bond or allene by the
-/// sign of a single invariant across its rigid double-bond chain. A locus whose
+/// For each site whose coordination geometry admits more than one configuration, and
+/// each double bond or allene axis the graph makes rigid, reads a
+/// [`StereoConfiguration`] from the coordinates: a center by matching the directions to
+/// its substituents onto the geometry's reference frame — the pairwise angles fix which
+/// substituent fills which slot, one signed volume the handedness — a double bond or
+/// allene by the sign of a single invariant across its rigid double-bond chain. A locus whose
 /// coordinates are degenerate — coplanar center substituents, an eclipsed double
 /// bond — fixes no configuration and is skipped.
 ///
@@ -141,31 +144,22 @@ impl<M: HasBonds> HasStereoConfigurations for WithStereoConfigurations<'_, M> {
 /// assuming [`bonds_of`](HasBonds::bonds_of) and
 /// [`neighbors`](HasBonds::neighbors) run in O(degree) — bounded work per
 /// candidate locus, its substituents capped at six.
-pub fn perceive<M, V>(
-    mol: &M,
-    candidate: impl Fn(StereoLocus) -> Option<StereoKind>,
-) -> StereoConfigurations
+pub fn perceive<M, V>(mol: &M) -> StereoConfigurations
 where
-    M: HasBondOrders + HasPositions<V>,
+    M: HasBondOrders + HasCoordinationGeometries + HasPositions<V>,
     V: Scalar,
 {
     let position = |site: SiteId| mol.position::<Angstrom>(site).map(|length| length.value());
     let position = &position;
-    let candidate = &candidate;
 
     let perceive = move |locus: StereoLocus| -> Option<StereoConfiguration> {
-        let kind = candidate(locus)?;
+        let kind = kind(mol, locus)?;
         let located = frame(mol, locus)?;
         let (anchors, subs) = (&located.anchors, &located.substituents);
         match locus {
             StereoLocus::Site(site) => central(site, kind, subs, position),
-            StereoLocus::Bond(_) if kind == StereoKind::CisTrans => {
-                cis_trans(locus, anchors, subs, position)
-            }
-            StereoLocus::Axis(_) if kind == StereoKind::Allene => {
-                allene(locus, anchors, subs, position)
-            }
-            _ => None,
+            StereoLocus::Bond(_) => cis_trans(locus, anchors, subs, position),
+            StereoLocus::Axis(_) => allene(locus, anchors, subs, position),
         }
     };
 
@@ -294,7 +288,7 @@ where
         Ordering::Less => (subs[3], subs[2]),
         Ordering::Equal => return None,
     };
-    StereoConfiguration::new(locus, StereoKind::CisTrans, [subs[0], subs[1], near, far])
+    StereoConfiguration::new(locus, StereoKind::Bond, [subs[0], subs[1], near, far])
 }
 
 /// The configuration of an allene given its two termini (`anchors`) and their
@@ -317,22 +311,7 @@ where
         Ordering::Less => [subs[1], subs[0], subs[2], subs[3]],
         Ordering::Equal => return None,
     };
-    StereoConfiguration::new(locus, StereoKind::Allene, ordered)
-}
-
-/// Advances `slice` to the next lexicographic permutation, `false` at the last.
-fn next_permutation(slice: &mut [u8]) -> bool {
-    let n = slice.len();
-    let Some(pivot) = (1..n).rev().find(|&i| slice[i - 1] < slice[i]) else {
-        return false;
-    };
-    let successor = (pivot..n)
-        .rev()
-        .find(|&i| slice[i] > slice[pivot - 1])
-        .expect("a successor exists past the pivot");
-    slice.swap(pivot - 1, successor);
-    slice[pivot..].reverse();
-    true
+    StereoConfiguration::new(locus, StereoKind::Axis, ordered)
 }
 
 #[cfg(test)]
@@ -343,7 +322,8 @@ mod tests {
     use vita_core::units::length::{Length, LengthUnit};
 
     use crate::BondOrder::{Double, Single};
-    use crate::{BondId, BondOrder};
+    use crate::CoordinationGeometry::*;
+    use crate::{BondId, BondOrder, CoordinationGeometry, StereogenicGeometry};
 
     fn s(n: u32) -> SiteId {
         SiteId::new(n).unwrap()
@@ -353,8 +333,8 @@ mod tests {
         BondId::new(n).unwrap()
     }
 
-    fn only(target: StereoLocus, kind: StereoKind) -> impl Fn(StereoLocus) -> Option<StereoKind> {
-        move |locus| (locus == target).then_some(kind)
+    fn center(geometry: CoordinationGeometry) -> StereoKind {
+        StereoKind::Center(StereogenicGeometry::new(geometry).expect("the geometry is stereogenic"))
     }
 
     fn config_at(locus: StereoLocus, kind: StereoKind, order: [u32; 4]) -> StereoConfiguration {
@@ -374,6 +354,7 @@ mod tests {
     struct Mol {
         sites: Vec<SiteId>,
         coords: Vec<[f64; 3]>,
+        geometries: Vec<Option<CoordinationGeometry>>,
         bonds: Vec<BondId>,
         endpoints: Vec<(SiteId, SiteId)>,
         orders: Vec<BondOrder>,
@@ -382,6 +363,17 @@ mod tests {
     impl Mol {
         fn at(&self, site: SiteId) -> [f64; 3] {
             self.coords[self.sites.iter().position(|&x| x == site).unwrap()]
+        }
+
+        fn with_geometries(
+            mut self,
+            geometries: impl IntoIterator<Item = (u32, CoordinationGeometry)>,
+        ) -> Self {
+            for (site, geometry) in geometries {
+                let i = self.sites.iter().position(|&x| x == s(site)).unwrap();
+                self.geometries[i] = Some(geometry);
+            }
+            self
         }
     }
 
@@ -416,10 +408,17 @@ mod tests {
         }
     }
 
+    impl HasCoordinationGeometries for Mol {
+        fn coordination_geometry(&self, site: SiteId) -> Option<CoordinationGeometry> {
+            self.geometries[self.sites.iter().position(|&x| x == site).unwrap()]
+        }
+    }
+
     fn mol(atoms: &[(u32, [f64; 3])], bonds: &[(u32, u32, u32, BondOrder)]) -> Mol {
         Mol {
             sites: atoms.iter().map(|&(id, _)| s(id)).collect(),
             coords: atoms.iter().map(|&(_, xyz)| xyz).collect(),
+            geometries: vec![None; atoms.len()],
             bonds: bonds.iter().map(|&(id, ..)| b(id)).collect(),
             endpoints: bonds.iter().map(|&(_, a, c, _)| (s(a), s(c))).collect(),
             orders: bonds.iter().map(|&(_, _, _, order)| order).collect(),
@@ -430,6 +429,7 @@ mod tests {
         Mol {
             sites: m.sites.clone(),
             coords: m.coords.iter().map(|&[x, y, z]| [-x, y, z]).collect(),
+            geometries: m.geometries.clone(),
             bonds: m.bonds.clone(),
             endpoints: m.endpoints.clone(),
             orders: m.orders.clone(),
@@ -440,6 +440,7 @@ mod tests {
         Mol {
             sites: m.sites.iter().rev().copied().collect(),
             coords: m.coords.iter().rev().copied().collect(),
+            geometries: m.geometries.iter().rev().copied().collect(),
             bonds: m.bonds.iter().rev().copied().collect(),
             endpoints: m.endpoints.iter().rev().copied().collect(),
             orders: m.orders.iter().rev().copied().collect(),
@@ -632,23 +633,20 @@ mod tests {
 
     #[test]
     fn empty_molecule_has_no_configurations() {
-        let perceived = perceive(&empty(), |_| Some(StereoKind::Tetrahedral));
+        let perceived = perceive(&empty());
         assert_eq!(perceived.len(), 0);
         assert!(perceived.is_empty());
     }
 
     #[test]
-    fn a_molecule_the_candidate_rejects_has_no_configurations() {
-        assert!(perceive(&tetrahedral(), |_| None).is_empty());
+    fn a_molecule_that_names_no_geometry_has_no_configurations() {
+        assert!(perceive(&tetrahedral()).is_empty());
     }
 
     #[test]
     fn a_tetrahedral_configuration_is_perceived_in_positive_orientation() {
-        let molecule = tetrahedral();
-        let perceived = perceive(
-            &molecule,
-            only(StereoLocus::Site(s(1)), StereoKind::Tetrahedral),
-        );
+        let molecule = tetrahedral().with_geometries([(1, Tetrahedral)]);
+        let perceived = perceive(&molecule);
         let n = perceived.get(StereoLocus::Site(s(1))).unwrap().neighbors();
         let volume = signed_volume(
             difference(molecule.at(n[1]), molecule.at(n[0])),
@@ -660,9 +658,8 @@ mod tests {
 
     #[test]
     fn enantiomeric_coordinates_are_perceived_as_distinct_configurations() {
-        let candidate = only(StereoLocus::Site(s(1)), StereoKind::Tetrahedral);
-        let right = perceive(&tetrahedral(), &candidate);
-        let left = perceive(&mirrored(&tetrahedral()), &candidate);
+        let right = perceive(&tetrahedral().with_geometries([(1, Tetrahedral)]));
+        let left = perceive(&mirrored(&tetrahedral()).with_geometries([(1, Tetrahedral)]));
         assert_ne!(
             right.get(StereoLocus::Site(s(1))),
             left.get(StereoLocus::Site(s(1))),
@@ -671,20 +668,14 @@ mod tests {
 
     #[test]
     fn a_coplanar_center_fixes_no_configuration() {
-        let perceived = perceive(
-            &planar_center(),
-            only(StereoLocus::Site(s(1)), StereoKind::Tetrahedral),
-        );
+        let perceived = perceive(&planar_center().with_geometries([(1, Tetrahedral)]));
         assert!(perceived.is_empty());
     }
 
     #[test]
     fn an_octahedral_configuration_is_perceived_in_positive_orientation() {
-        let molecule = octahedral();
-        let perceived = perceive(
-            &molecule,
-            only(StereoLocus::Site(s(1)), StereoKind::Octahedral),
-        );
+        let molecule = octahedral().with_geometries([(1, Octahedral)]);
+        let perceived = perceive(&molecule);
         let n = perceived.get(StereoLocus::Site(s(1))).unwrap().neighbors();
         let volume = signed_volume(
             difference(molecule.at(n[0]), molecule.at(n[1])),
@@ -696,26 +687,20 @@ mod tests {
 
     #[test]
     fn a_square_planar_configuration_is_perceived() {
-        let perceived = perceive(
-            &square_planar(),
-            only(StereoLocus::Site(s(1)), StereoKind::SquarePlanar),
-        );
+        let perceived = perceive(&square_planar().with_geometries([(1, SquarePlanar)]));
         let config = perceived.get(StereoLocus::Site(s(1))).unwrap();
-        assert_eq!(config.kind(), StereoKind::SquarePlanar);
+        assert_eq!(config.kind(), center(SquarePlanar));
         assert_eq!(config.neighbors().len(), 4);
     }
 
     #[test]
     fn a_cis_double_bond_is_perceived_in_reference_order() {
-        let perceived = perceive(
-            &cis_alkene(),
-            only(StereoLocus::Bond(b(1)), StereoKind::CisTrans),
-        );
+        let perceived = perceive(&cis_alkene());
         assert_eq!(
             perceived.get(StereoLocus::Bond(b(1))),
             Some(&config_at(
                 StereoLocus::Bond(b(1)),
-                StereoKind::CisTrans,
+                StereoKind::Bond,
                 [3, 4, 5, 6]
             )),
         );
@@ -723,15 +708,12 @@ mod tests {
 
     #[test]
     fn a_trans_double_bond_reverses_the_far_end() {
-        let perceived = perceive(
-            &trans_alkene(),
-            only(StereoLocus::Bond(b(1)), StereoKind::CisTrans),
-        );
+        let perceived = perceive(&trans_alkene());
         assert_eq!(
             perceived.get(StereoLocus::Bond(b(1))),
             Some(&config_at(
                 StereoLocus::Bond(b(1)),
-                StereoKind::CisTrans,
+                StereoKind::Bond,
                 [3, 4, 6, 5]
             )),
         );
@@ -739,21 +721,18 @@ mod tests {
 
     #[test]
     fn a_degenerate_double_bond_fixes_no_configuration() {
-        let perceived = perceive(
-            &degenerate_double_bond(),
-            only(StereoLocus::Bond(b(1)), StereoKind::CisTrans),
-        );
+        let perceived = perceive(&degenerate_double_bond());
         assert!(perceived.is_empty());
     }
 
     #[test]
     fn an_allene_is_perceived_in_reference_order() {
-        let perceived = perceive(&allene(), only(StereoLocus::Axis(s(2)), StereoKind::Allene));
+        let perceived = perceive(&allene());
         assert_eq!(
             perceived.get(StereoLocus::Axis(s(2))),
             Some(&config_at(
                 StereoLocus::Axis(s(2)),
-                StereoKind::Allene,
+                StereoKind::Axis,
                 [4, 5, 6, 7]
             )),
         );
@@ -761,15 +740,12 @@ mod tests {
 
     #[test]
     fn the_opposite_allene_twist_swaps_the_first_terminus() {
-        let perceived = perceive(
-            &mirrored(&allene()),
-            only(StereoLocus::Axis(s(2)), StereoKind::Allene),
-        );
+        let perceived = perceive(&mirrored(&allene()));
         assert_eq!(
             perceived.get(StereoLocus::Axis(s(2))),
             Some(&config_at(
                 StereoLocus::Axis(s(2)),
-                StereoKind::Allene,
+                StereoKind::Axis,
                 [5, 4, 6, 7]
             )),
         );
@@ -777,29 +753,20 @@ mod tests {
 
     #[test]
     fn a_planar_allene_fixes_no_configuration() {
-        let perceived = perceive(
-            &planar_allene(),
-            only(StereoLocus::Axis(s(2)), StereoKind::Allene),
-        );
+        let perceived = perceive(&planar_allene());
         assert!(perceived.is_empty());
     }
 
     #[test]
     fn count_reports_the_number_of_configurations() {
-        let perceived = perceive(
-            &tetrahedral(),
-            only(StereoLocus::Site(s(1)), StereoKind::Tetrahedral),
-        );
+        let perceived = perceive(&tetrahedral().with_geometries([(1, Tetrahedral)]));
         assert_eq!(perceived.len(), 1);
         assert!(!perceived.is_empty());
     }
 
     #[test]
     fn iter_yields_the_perceived_configurations() {
-        let perceived = perceive(
-            &tetrahedral(),
-            only(StereoLocus::Site(s(1)), StereoKind::Tetrahedral),
-        );
+        let perceived = perceive(&tetrahedral().with_geometries([(1, Tetrahedral)]));
         let configs: Vec<&StereoConfiguration> = perceived.iter().collect();
         assert_eq!(configs.len(), 1);
         assert_eq!(configs[0].locus(), StereoLocus::Site(s(1)));
@@ -807,30 +774,21 @@ mod tests {
 
     #[test]
     fn get_returns_the_configuration_at_a_locus() {
-        let perceived = perceive(
-            &tetrahedral(),
-            only(StereoLocus::Site(s(1)), StereoKind::Tetrahedral),
-        );
+        let perceived = perceive(&tetrahedral().with_geometries([(1, Tetrahedral)]));
         let config = perceived.get(StereoLocus::Site(s(1))).unwrap();
-        assert_eq!(config.kind(), StereoKind::Tetrahedral);
+        assert_eq!(config.kind(), center(Tetrahedral));
     }
 
     #[test]
     fn get_is_none_for_a_locus_without_a_configuration() {
-        let perceived = perceive(
-            &tetrahedral(),
-            only(StereoLocus::Site(s(1)), StereoKind::Tetrahedral),
-        );
+        let perceived = perceive(&tetrahedral().with_geometries([(1, Tetrahedral)]));
         assert!(perceived.get(StereoLocus::Site(s(99))).is_none());
     }
 
     #[test]
     fn bound_view_answers_the_stereo_configuration_capability() {
-        let molecule = tetrahedral();
-        let perceived = perceive(
-            &molecule,
-            only(StereoLocus::Site(s(1)), StereoKind::Tetrahedral),
-        );
+        let molecule = tetrahedral().with_geometries([(1, Tetrahedral)]);
+        let perceived = perceive(&molecule);
         let view = perceived.bind(&molecule);
         assert_eq!(view.stereo_configuration_count(), 1);
         assert!(view.stereo_configuration(StereoLocus::Site(s(1))).is_some());
@@ -838,11 +796,8 @@ mod tests {
 
     #[test]
     fn bound_view_forwards_the_skeleton() {
-        let molecule = tetrahedral();
-        let perceived = perceive(
-            &molecule,
-            only(StereoLocus::Site(s(1)), StereoKind::Tetrahedral),
-        );
+        let molecule = tetrahedral().with_geometries([(1, Tetrahedral)]);
+        let perceived = perceive(&molecule);
         let view = perceived.bind(&molecule);
         assert_eq!(view.bond_endpoints(b(1)), molecule.bond_endpoints(b(1)));
         assert_eq!(view.bond_count(), molecule.bond_count());
@@ -850,10 +805,6 @@ mod tests {
 
     #[test]
     fn perception_is_independent_of_input_order() {
-        let candidate = only(StereoLocus::Bond(b(1)), StereoKind::CisTrans);
-        assert_eq!(
-            perceive(&cis_alkene(), &candidate),
-            perceive(&reversed(&cis_alkene()), &candidate),
-        );
+        assert_eq!(perceive(&cis_alkene()), perceive(&reversed(&cis_alkene())),);
     }
 }

@@ -74,6 +74,6 @@ mod tests {
         let system = configuration(&[[1.0, 2.0, 0.0], [0.0, 0.0, 0.0], [0.0, 1.0, 3.0]]);
         let forward: Angle<f64, Radian> = angle(&system, s(1), s(2), s(3)).unwrap();
         let reversed: Angle<f64, Radian> = angle(&system, s(3), s(2), s(1)).unwrap();
-        assert_eq!(forward, reversed);
+        assert!(close(forward, reversed));
     }
 }

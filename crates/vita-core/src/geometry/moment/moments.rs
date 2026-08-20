@@ -52,7 +52,7 @@ impl<V: Scalar> Moments<V> {
     /// moments leave their axes undetermined: any frame spanning the same
     /// eigenspace serves, and which one comes out is not fixed.
     pub fn principal_axes(self) -> Matrix3<V> {
-        symmetric_eigendecomposition(self.covariance).0
+        self.covariance.symmetric_eigendecomposition().0
     }
 
     /// The principal moments, ascending, in unit `U`.
@@ -61,7 +61,8 @@ impl<V: Scalar> Moments<V> {
     /// names the direction the sites depart from least, so its axis is the normal
     /// of the plane they fit best.
     pub fn principal_moments<U: AreaUnit>(self) -> Vector3<Area<V, U>> {
-        symmetric_eigendecomposition(self.covariance)
+        self.covariance
+            .symmetric_eigendecomposition()
             .1
             .map(from_square_angstroms)
     }
@@ -123,91 +124,6 @@ fn from_square_angstroms<V: Scalar, U: AreaUnit>(value: V) -> Area<V, U> {
     Area::<V, SquareAngstrom>::new(value).to::<U>()
 }
 
-/// The eigendecomposition of the symmetric `matrix`: its eigenvectors as the
-/// columns of a right-handed orthonormal frame, and its eigenvalues ascending
-/// alongside them.
-///
-/// Cyclic Jacobi rotations, which leave the frame orthonormal by construction and
-/// so stay defined where eigenvalues repeat — the ordinary case here, a collinear
-/// or planar distribution having a rank-deficient covariance. Sweeps run only while
-/// the off-diagonal keeps shrinking, so the rotations stop at the floor of whatever
-/// precision `V` carries, on no threshold and no count: each sweep leaves a strictly
-/// smaller non-negative value, of which there are finitely many. `matrix` must be
-/// symmetric, as a covariance is by construction.
-fn symmetric_eigendecomposition<V: Scalar>(matrix: Matrix3<V>) -> (Matrix3<V>, Vector3<V>) {
-    let mut values = [
-        matrix.row(0).to_array(),
-        matrix.row(1).to_array(),
-        matrix.row(2).to_array(),
-    ];
-    let mut frame = [
-        [V::ONE, V::ZERO, V::ZERO],
-        [V::ZERO, V::ONE, V::ZERO],
-        [V::ZERO, V::ZERO, V::ONE],
-    ];
-    let off_diagonal = |values: &[[V; 3]; 3]| {
-        values[0][1] * values[0][1] + values[0][2] * values[0][2] + values[1][2] * values[1][2]
-    };
-    let mut remaining = off_diagonal(&values);
-    while remaining > V::ZERO {
-        for (p, q) in [(0usize, 1usize), (0, 2), (1, 2)] {
-            let off = values[p][q];
-            if off == V::ZERO {
-                continue;
-            }
-            let theta = (values[q][q] - values[p][p]) / (off + off);
-            let tangent = theta.signum() / (theta.abs() + (theta * theta + V::ONE).sqrt());
-            let cosine = (tangent * tangent + V::ONE).sqrt().recip();
-            let sine = tangent * cosine;
-
-            values[p][p] -= tangent * off;
-            values[q][q] += tangent * off;
-            values[p][q] = V::ZERO;
-            values[q][p] = V::ZERO;
-
-            let rest = 3 - p - q;
-            let (near, far) = (values[p][rest], values[q][rest]);
-            values[p][rest] = cosine * near - sine * far;
-            values[rest][p] = values[p][rest];
-            values[q][rest] = sine * near + cosine * far;
-            values[rest][q] = values[q][rest];
-
-            for row in &mut frame {
-                let (near, far) = (row[p], row[q]);
-                row[p] = cosine * near - sine * far;
-                row[q] = sine * near + cosine * far;
-            }
-        }
-        let shrunk = off_diagonal(&values);
-        if shrunk >= remaining {
-            break;
-        }
-        remaining = shrunk;
-    }
-
-    let mut eigenvalues = [values[0][0], values[1][1], values[2][2]];
-    for (lower, upper) in [(0usize, 1usize), (0, 2), (1, 2)] {
-        if eigenvalues[upper] < eigenvalues[lower] {
-            eigenvalues.swap(lower, upper);
-            for row in &mut frame {
-                row.swap(lower, upper);
-            }
-        }
-    }
-
-    let axes = Matrix3::from_rows(
-        Vector3::from_array(frame[0]),
-        Vector3::from_array(frame[1]),
-        Vector3::from_array(frame[2]),
-    );
-    let axes = if axes.determinant() < V::ZERO {
-        Matrix3::from_cols(axes.col(0), axes.col(1), -axes.col(2))
-    } else {
-        axes
-    };
-    (axes, Vector3::from_array(eigenvalues))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -247,34 +163,6 @@ mod tests {
         ])
     }
 
-    fn diagonal() -> Matrix3<f64> {
-        Matrix3::from_diagonal(Vector3::new(2.0, 1.0, 3.0))
-    }
-
-    fn tilted() -> Matrix3<f64> {
-        Matrix3::from_rows(
-            Vector3::new(2.5, 1.5, 0.0),
-            Vector3::new(1.5, 2.5, 0.0),
-            Vector3::new(0.0, 0.0, 0.0),
-        )
-    }
-
-    fn repeated() -> Matrix3<f64> {
-        Matrix3::from_rows(
-            Vector3::new(2.0, 1.0, 0.0),
-            Vector3::new(1.0, 2.0, 0.0),
-            Vector3::new(0.0, 0.0, 3.0),
-        )
-    }
-
-    fn saddle() -> Matrix3<f64> {
-        Matrix3::from_rows(
-            Vector3::new(4.0, 1.0, 2.0),
-            Vector3::new(1.0, 3.0, -1.0),
-            Vector3::new(2.0, -1.0, -5.0),
-        )
-    }
-
     #[test]
     fn the_moments_of_an_empty_system_are_absent() {
         let taken: Option<Moments<f64>> = moments(&configuration(&[]));
@@ -292,12 +180,6 @@ mod tests {
     fn the_covariance_of_one_site_vanishes() {
         let moment = moments(&configuration(&[[1.0, 2.0, 3.0]])).unwrap();
         assert_eq!(moment.covariance::<SquareAngstrom>(), Matrix3::ZERO);
-    }
-
-    #[test]
-    fn a_diagonal_matrix_keeps_its_diagonal_as_its_eigenvalues() {
-        let (_, eigenvalues) = symmetric_eigendecomposition(diagonal());
-        assert_eq!(eigenvalues, Vector3::new(1.0, 2.0, 3.0));
     }
 
     #[test]
@@ -347,31 +229,6 @@ mod tests {
         let widest = moments(&diamond()).unwrap().principal_axes().col(2);
         let diagonal = Vector3::new(1.0, 1.0, 0.0).normalize();
         assert!(close(widest.dot(diagonal).abs(), 1.0));
-    }
-
-    #[test]
-    fn the_eigenvalues_ascend() {
-        let (_, eigenvalues) = symmetric_eigendecomposition(tilted());
-        assert!(
-            close(eigenvalues.x, 0.0) && close(eigenvalues.y, 1.0) && close(eigenvalues.z, 4.0)
-        );
-    }
-
-    #[test]
-    fn the_eigenvectors_are_orthonormal() {
-        let (frame, _) = symmetric_eigendecomposition(saddle());
-        assert!(
-            (0..3).all(|index| close(frame.col(index).norm_squared(), 1.0))
-                && close(frame.col(0).dot(frame.col(1)), 0.0)
-                && close(frame.col(0).dot(frame.col(2)), 0.0)
-                && close(frame.col(1).dot(frame.col(2)), 0.0)
-        );
-    }
-
-    #[test]
-    fn the_eigenvectors_form_a_right_handed_frame() {
-        let (frame, _) = symmetric_eigendecomposition(diagonal());
-        assert!(close(frame.determinant(), 1.0));
     }
 
     #[test]
@@ -426,38 +283,9 @@ mod tests {
     }
 
     #[test]
-    fn repeated_eigenvalues_leave_the_eigenvectors_orthonormal() {
-        let (frame, eigenvalues) = symmetric_eigendecomposition(repeated());
-        assert!(
-            close(eigenvalues.y, eigenvalues.z)
-                && (0..3).all(|index| close(frame.col(index).norm_squared(), 1.0))
-                && close(frame.col(1).dot(frame.col(2)), 0.0)
-        );
-    }
-
-    #[test]
-    fn an_indefinite_matrix_decomposes_alike() {
-        let (_, eigenvalues) = symmetric_eigendecomposition(saddle());
-        assert!(eigenvalues.x < 0.0 && eigenvalues.z > 0.0);
-    }
-
-    #[test]
     fn the_covariance_is_symmetric() {
         let covariance = moments(&diamond()).unwrap().covariance::<SquareAngstrom>();
         assert_eq!(covariance, covariance.transpose());
-    }
-
-    #[test]
-    fn the_decomposition_reconstructs_the_matrix() {
-        let (frame, eigenvalues) = symmetric_eigendecomposition(saddle());
-        let rebuilt = frame * Matrix3::from_diagonal(eigenvalues) * frame.transpose();
-        assert!(
-            rebuilt
-                .to_cols_array()
-                .iter()
-                .zip(saddle().to_cols_array())
-                .all(|(&taken, expected)| close(taken, expected))
-        );
     }
 
     #[test]

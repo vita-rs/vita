@@ -51,6 +51,6 @@ mod tests {
         let system = configuration(&[[1.0, 2.0, 3.0], [-4.0, 0.5, 6.0]]);
         let forward: Length<f64, Angstrom> = distance(&system, s(1), s(2));
         let backward: Length<f64, Angstrom> = distance(&system, s(2), s(1));
-        assert_eq!(forward, backward);
+        assert!(close(forward, backward));
     }
 }

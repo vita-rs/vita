@@ -3,7 +3,9 @@ use std::collections::BTreeSet;
 use vita_core::SiteId;
 
 use super::stereocenters;
-use crate::{BondId, HasBondOrders, HasStereoConfigurations, StereoKind, StereoLocus};
+use crate::{
+    BondId, HasBondOrders, HasCoordinationGeometries, HasStereoConfigurations, StereoLocus,
+};
 
 /// The disagreements between a molecule's stereocenters and its declared
 /// configurations.
@@ -39,13 +41,13 @@ impl StereoConsistency {
         self.overspecified.len()
     }
 
-    /// Iterates the stereogenic loci left without a configuration, ascending.
+    /// Iterates the stereogenic loci left without a configuration, in ascending order.
     pub fn unspecified(&self) -> impl Iterator<Item = StereoLocus> + '_ {
         self.unspecified.iter().copied()
     }
 
-    /// Iterates the loci that carry a configuration yet are not stereogenic,
-    /// ascending.
+    /// Iterates the loci that carry a configuration yet are not stereogenic, in
+    /// ascending order.
     pub fn overspecified(&self) -> impl Iterator<Item = StereoLocus> + '_ {
         self.overspecified.iter().copied()
     }
@@ -59,10 +61,9 @@ impl StereoConsistency {
 
 /// Reconciles a molecule's stereocenters with the configurations it declares.
 ///
-/// Detects the stereogenic loci under the caller's coloring and `candidate` (as
-/// [`stereocenters`]), then compares them with the loci [`stereo_configurations`]
-/// speak for: a stereocenter without a configuration is reported unspecified, a
-/// configuration off a stereocenter overspecified.
+/// Detects the stereogenic loci as [`stereocenters`] does, then compares them with the
+/// loci [`stereo_configurations`] speak for: a stereogenic unit without a configuration
+/// is reported unspecified, a configuration off one overspecified.
 ///
 /// [`stereo_configurations`]: HasStereoConfigurations::stereo_configurations
 ///
@@ -74,16 +75,13 @@ pub fn consistency<M, VK, EK>(
     mol: &M,
     site_key: impl Fn(SiteId) -> VK,
     bond_key: impl Fn(BondId) -> EK,
-    candidate: impl Fn(StereoLocus) -> Option<StereoKind>,
 ) -> StereoConsistency
 where
-    M: HasStereoConfigurations + HasBondOrders,
+    M: HasBondOrders + HasCoordinationGeometries + HasStereoConfigurations,
     VK: Ord,
     EK: Ord,
 {
-    let detected: BTreeSet<StereoLocus> = stereocenters(mol, site_key, bond_key, candidate)
-        .iter()
-        .collect();
+    let detected: BTreeSet<StereoLocus> = stereocenters(mol, site_key, bond_key).iter().collect();
     let declared: BTreeSet<StereoLocus> = mol
         .stereo_configurations()
         .map(|config| config.locus())
@@ -102,7 +100,11 @@ mod tests {
     use vita_core::HasSites;
 
     use crate::BondOrder::Single;
-    use crate::{BondOrder, HasBonds, StereoConfiguration};
+    use crate::CoordinationGeometry::*;
+    use crate::{
+        BondOrder, CoordinationGeometry, HasBonds, StereoConfiguration, StereoKind,
+        StereogenicGeometry,
+    };
 
     fn s(n: u32) -> SiteId {
         SiteId::new(n).unwrap()
@@ -112,17 +114,14 @@ mod tests {
         BondId::new(n).unwrap()
     }
 
-    fn centers_at(sites: &'static [u32]) -> impl Fn(StereoLocus) -> Option<StereoKind> {
-        move |locus| match locus {
-            StereoLocus::Site(site) if sites.contains(&site.get()) => Some(StereoKind::Tetrahedral),
-            _ => None,
-        }
+    fn center(geometry: CoordinationGeometry) -> StereoKind {
+        StereoKind::Center(StereogenicGeometry::new(geometry).expect("the geometry is stereogenic"))
     }
 
     fn config(site: u32, order: [u32; 4]) -> StereoConfiguration {
         StereoConfiguration::new(
             StereoLocus::Site(s(site)),
-            StereoKind::Tetrahedral,
+            center(Tetrahedral),
             order.map(s),
         )
         .unwrap()
@@ -131,6 +130,7 @@ mod tests {
     struct Mol {
         sites: Vec<SiteId>,
         colors: Vec<u32>,
+        geometries: Vec<Option<CoordinationGeometry>>,
         bonds: Vec<BondId>,
         endpoints: Vec<(SiteId, SiteId)>,
         orders: Vec<BondOrder>,
@@ -138,6 +138,17 @@ mod tests {
     }
 
     impl Mol {
+        fn with_geometries(
+            mut self,
+            geometries: impl IntoIterator<Item = (u32, CoordinationGeometry)>,
+        ) -> Self {
+            for (site, geometry) in geometries {
+                let i = self.sites.iter().position(|&x| x == s(site)).unwrap();
+                self.geometries[i] = Some(geometry);
+            }
+            self
+        }
+
         fn color(&self, site: SiteId) -> u32 {
             self.colors[self.sites.iter().position(|&x| x == site).unwrap()]
         }
@@ -167,17 +178,20 @@ mod tests {
         }
     }
 
+    impl HasCoordinationGeometries for Mol {
+        fn coordination_geometry(&self, site: SiteId) -> Option<CoordinationGeometry> {
+            self.geometries[self.sites.iter().position(|&x| x == site).unwrap()]
+        }
+    }
+
     impl HasStereoConfigurations for Mol {
         fn stereo_configurations(&self) -> impl Iterator<Item = StereoConfiguration> + '_ {
             self.configs.iter().cloned()
         }
     }
 
-    fn reconcile(
-        mol: &Mol,
-        candidate: impl Fn(StereoLocus) -> Option<StereoKind>,
-    ) -> StereoConsistency {
-        consistency(mol, |site| mol.color(site), |_| 0u32, candidate)
+    fn reconcile(mol: &Mol) -> StereoConsistency {
+        consistency(mol, |site| mol.color(site), |_| 0u32)
     }
 
     fn mol(
@@ -188,6 +202,7 @@ mod tests {
         Mol {
             sites: atoms.iter().map(|&(id, _)| s(id)).collect(),
             colors: atoms.iter().map(|&(_, color)| color).collect(),
+            geometries: vec![None; atoms.len()],
             bonds: bonds.iter().map(|&(id, ..)| b(id)).collect(),
             endpoints: bonds.iter().map(|&(_, a, c)| (s(a), s(c))).collect(),
             orders: bonds.iter().map(|_| Single).collect(),
@@ -199,6 +214,7 @@ mod tests {
         Mol {
             sites: m.sites.iter().rev().copied().collect(),
             colors: m.colors.iter().rev().copied().collect(),
+            geometries: m.geometries.iter().rev().copied().collect(),
             bonds: m.bonds.iter().rev().copied().collect(),
             endpoints: m.endpoints.iter().rev().copied().collect(),
             orders: m.orders.iter().rev().copied().collect(),
@@ -264,7 +280,7 @@ mod tests {
 
     #[test]
     fn empty_molecule_is_consistent() {
-        let report = reconcile(&empty(), centers_at(&[1]));
+        let report = reconcile(&empty());
         assert!(report.is_consistent());
         assert_eq!(report.unspecified_count(), 0);
         assert_eq!(report.overspecified_count(), 0);
@@ -272,12 +288,12 @@ mod tests {
 
     #[test]
     fn a_configured_stereocenter_is_consistent() {
-        assert!(reconcile(&specified(), centers_at(&[1])).is_consistent());
+        assert!(reconcile(&specified().with_geometries([(1, Tetrahedral)])).is_consistent());
     }
 
     #[test]
     fn a_stereocenter_without_a_configuration_is_unspecified() {
-        let report = reconcile(&unspecified(), centers_at(&[1]));
+        let report = reconcile(&unspecified().with_geometries([(1, Tetrahedral)]));
         assert!(report.contains_unspecified(StereoLocus::Site(s(1))));
         assert!(!report.contains_overspecified(StereoLocus::Site(s(1))));
         assert_eq!(report.unspecified_count(), 1);
@@ -286,7 +302,7 @@ mod tests {
 
     #[test]
     fn a_configuration_off_a_stereocenter_is_overspecified() {
-        let report = reconcile(&overspecified(), centers_at(&[1]));
+        let report = reconcile(&overspecified().with_geometries([(1, Tetrahedral)]));
         assert!(report.contains_overspecified(StereoLocus::Site(s(1))));
         assert!(!report.contains_unspecified(StereoLocus::Site(s(1))));
         assert_eq!(report.overspecified_count(), 1);
@@ -295,21 +311,21 @@ mod tests {
 
     #[test]
     fn unspecified_lists_the_stereocenters_without_a_configuration() {
-        let report = reconcile(&unspecified(), centers_at(&[1]));
+        let report = reconcile(&unspecified().with_geometries([(1, Tetrahedral)]));
         let loci: Vec<StereoLocus> = report.unspecified().collect();
         assert_eq!(loci, vec![StereoLocus::Site(s(1))]);
     }
 
     #[test]
     fn overspecified_lists_the_configurations_off_a_stereocenter() {
-        let report = reconcile(&overspecified(), centers_at(&[1]));
+        let report = reconcile(&overspecified().with_geometries([(1, Tetrahedral)]));
         let loci: Vec<StereoLocus> = report.overspecified().collect();
         assert_eq!(loci, vec![StereoLocus::Site(s(1))]);
     }
 
     #[test]
     fn both_kinds_of_disagreement_are_reported_together() {
-        let report = reconcile(&mixed(), centers_at(&[1, 6]));
+        let report = reconcile(&mixed().with_geometries([(1, Tetrahedral), (6, Tetrahedral)]));
         assert!(report.contains_unspecified(StereoLocus::Site(s(1))));
         assert!(report.contains_overspecified(StereoLocus::Site(s(6))));
         assert!(!report.is_consistent());
@@ -317,10 +333,7 @@ mod tests {
 
     #[test]
     fn reconciliation_is_independent_of_input_order() {
-        let molecule = mixed();
-        assert_eq!(
-            reconcile(&molecule, centers_at(&[1, 6])),
-            reconcile(&reversed(&molecule), centers_at(&[1, 6])),
-        );
+        let molecule = mixed().with_geometries([(1, Tetrahedral), (6, Tetrahedral)]);
+        assert_eq!(reconcile(&molecule), reconcile(&reversed(&molecule)),);
     }
 }

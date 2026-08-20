@@ -202,6 +202,24 @@ macro_rules! forward_capabilities {
         }
     };
 
+    (@one $wrapper:ident, $field:ident, HasCoordinationGeometries) => {
+        impl<M: $crate::HasCoordinationGeometries> $crate::HasCoordinationGeometries
+            for $wrapper<'_, M>
+        {
+            fn coordination_geometry(
+                &self,
+                site: ::vita_core::SiteId,
+            ) -> Option<$crate::CoordinationGeometry> {
+                self.$field.coordination_geometry(site)
+            }
+            fn coordination_geometries(
+                &self,
+            ) -> impl Iterator<Item = Option<$crate::CoordinationGeometry>> + '_ {
+                self.$field.coordination_geometries()
+            }
+        }
+    };
+
     (@one $wrapper:ident, $field:ident, HasFormalCharges) => {
         impl<M: $crate::HasFormalCharges> $crate::HasFormalCharges for $wrapper<'_, M> {
             fn formal_charge(&self, site: ::vita_core::SiteId) -> i8 {
@@ -209,17 +227,6 @@ macro_rules! forward_capabilities {
             }
             fn formal_charges(&self) -> impl Iterator<Item = i8> + '_ {
                 self.$field.formal_charges()
-            }
-        }
-    };
-
-    (@one $wrapper:ident, $field:ident, HasHybridizations) => {
-        impl<M: $crate::HasHybridizations> $crate::HasHybridizations for $wrapper<'_, M> {
-            fn hybridization(&self, site: ::vita_core::SiteId) -> $crate::Hybridization {
-                self.$field.hybridization(site)
-            }
-            fn hybridizations(&self) -> impl Iterator<Item = $crate::Hybridization> + '_ {
-                self.$field.hybridizations()
             }
         }
     };

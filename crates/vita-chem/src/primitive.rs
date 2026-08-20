@@ -1,9 +1,10 @@
 mod bond_order;
-mod hybridization;
 mod id;
-mod stereo;
+mod symmetry;
 
 pub use bond_order::BondOrder;
-pub use hybridization::Hybridization;
 pub use id::BondId;
-pub use stereo::{StereoConfiguration, StereoDescriptor, StereoKind, StereoLocus};
+pub use symmetry::{
+    CoordinationGeometry, StereoConfiguration, StereoDescriptor, StereoKind, StereoLocus,
+    StereogenicGeometry,
+};

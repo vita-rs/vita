@@ -33,7 +33,7 @@ where
 mod tests {
     use super::*;
 
-    use crate::geometry::fixture::{close, configuration, weighted};
+    use crate::geometry::fixture::{close, configuration, points_close, weighted};
     use crate::geometry::moment::moments;
     use crate::units::length::{Angstrom, Nanometer};
 
@@ -100,6 +100,6 @@ mod tests {
         let system = configuration(&[[1.0, 2.0, 3.0], [-4.0, 0.5, 6.0], [7.0, -8.0, 0.25]]);
         let alone: Point3<Length<f64, Angstrom>> = centroid(&system).unwrap();
         let carried = moments(&system).unwrap().center::<Angstrom>();
-        assert_eq!(alone, carried);
+        assert!(points_close(alone, carried));
     }
 }

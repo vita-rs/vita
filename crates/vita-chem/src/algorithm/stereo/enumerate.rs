@@ -3,7 +3,7 @@ use vita_core::SiteId;
 use super::{
     StereoConfigurations, StereoForm, candidate_loci, form, realizable, refined_key, settle,
 };
-use crate::{BondId, HasBondOrders, StereoConfiguration, StereoKind, StereoLocus};
+use crate::{BondId, HasBondOrders, HasCoordinationGeometries, StereoConfiguration, StereoLocus};
 
 /// The stereoisomers of a molecule's constitution — every assignment of a
 /// configuration to its stereogenic units that no symmetry equates.
@@ -41,12 +41,11 @@ impl Stereoisomers {
 
 /// Enumerates the stereoisomers a molecule's constitution admits.
 ///
-/// `candidate`, `site_key`, and `bond_key` are the caller's, exactly as for
-/// [`stereocenters`](super::stereocenters): the first reports which loci could bear
-/// stereochemistry and of which [`StereoKind`], the latter two color the graph. The
-/// stereogenic units are found under the configurations assigned so far and one is
-/// given each of its realizable configurations in turn, recursively — so a
-/// pseudo-asymmetric center surfaces once the neighbors it depends on are fixed.
+/// `site_key` and `bond_key` color the graph exactly as for
+/// [`stereocenters`](super::stereocenters), and a locus bears stereochemistry on the
+/// same terms. The stereogenic units are found under the configurations assigned so
+/// far, and one is given each of its realizable configurations in turn, recursively —
+/// so a pseudo-asymmetric center surfaces once the neighbors it depends on are fixed.
 /// Assignments the molecule's symmetry equates, and the two halves of a meso form,
 /// collapse to one isomer by their [`StereoForm`].
 ///
@@ -67,22 +66,14 @@ pub fn stereoisomers<M, VK, EK>(
     mol: &M,
     site_key: impl Fn(SiteId) -> VK,
     bond_key: impl Fn(BondId) -> EK,
-    candidate: impl Fn(StereoLocus) -> Option<StereoKind>,
 ) -> Stereoisomers
 where
-    M: HasBondOrders,
+    M: HasBondOrders + HasCoordinationGeometries,
     VK: Ord,
     EK: Ord,
 {
     let mut assignments: Vec<Vec<StereoConfiguration>> = Vec::new();
-    extend(
-        mol,
-        Vec::new(),
-        &site_key,
-        &bond_key,
-        &candidate,
-        &mut assignments,
-    );
+    extend(mol, Vec::new(), &site_key, &bond_key, &mut assignments);
 
     let mut isomers: Vec<(StereoForm<VK, EK>, StereoConfigurations)> = assignments
         .into_iter()
@@ -108,10 +99,9 @@ fn extend<M, VK, EK>(
     assigned: Vec<StereoConfiguration>,
     site_key: &impl Fn(SiteId) -> VK,
     bond_key: &impl Fn(BondId) -> EK,
-    candidate: &impl Fn(StereoLocus) -> Option<StereoKind>,
     out: &mut Vec<Vec<StereoConfiguration>>,
 ) where
-    M: HasBondOrders,
+    M: HasBondOrders + HasCoordinationGeometries,
     VK: Ord,
     EK: Ord,
 {
@@ -124,7 +114,7 @@ fn extend<M, VK, EK>(
         if assigned.iter().any(|config| config.locus() == locus) {
             return None;
         }
-        let configs = realizable(&view, locus, candidate(locus)?, &key, bond_key);
+        let configs = realizable(&view, locus, &key, bond_key);
         (configs.len() > 1).then_some(configs)
     };
 
@@ -138,7 +128,7 @@ fn extend<M, VK, EK>(
             for config in configs {
                 let mut branch = assigned.clone();
                 branch.push(config);
-                extend(mol, branch, site_key, bond_key, candidate, out);
+                extend(mol, branch, site_key, bond_key, out);
             }
         }
     }
@@ -151,7 +141,8 @@ mod tests {
     use vita_core::HasSites;
 
     use crate::BondOrder::Single;
-    use crate::{BondOrder, HasBonds, HasStereoConfigurations};
+    use crate::CoordinationGeometry::*;
+    use crate::{BondOrder, CoordinationGeometry, HasBonds, HasStereoConfigurations};
 
     fn s(n: u32) -> SiteId {
         SiteId::new(n).unwrap()
@@ -161,21 +152,26 @@ mod tests {
         BondId::new(n).unwrap()
     }
 
-    fn centers_at(sites: &'static [u32]) -> impl Fn(StereoLocus) -> Option<StereoKind> {
-        move |locus| match locus {
-            StereoLocus::Site(site) if sites.contains(&site.get()) => Some(StereoKind::Tetrahedral),
-            _ => None,
-        }
-    }
-
     struct Mol {
         sites: Vec<SiteId>,
         colors: Vec<u32>,
+        geometries: Vec<Option<CoordinationGeometry>>,
         bonds: Vec<BondId>,
         endpoints: Vec<(SiteId, SiteId)>,
     }
 
     impl Mol {
+        fn with_geometries(
+            mut self,
+            geometries: impl IntoIterator<Item = (u32, CoordinationGeometry)>,
+        ) -> Self {
+            for (site, geometry) in geometries {
+                let i = self.sites.iter().position(|&x| x == s(site)).unwrap();
+                self.geometries[i] = Some(geometry);
+            }
+            self
+        }
+
         fn color(&self, site: SiteId) -> u32 {
             self.colors[self.sites.iter().position(|&x| x == site).unwrap()]
         }
@@ -204,17 +200,21 @@ mod tests {
         }
     }
 
-    fn enumerate(
-        mol: &Mol,
-        candidate: impl Fn(StereoLocus) -> Option<StereoKind>,
-    ) -> Stereoisomers {
-        stereoisomers(mol, |site| mol.color(site), |_| 0u32, candidate)
+    impl HasCoordinationGeometries for Mol {
+        fn coordination_geometry(&self, site: SiteId) -> Option<CoordinationGeometry> {
+            self.geometries[self.sites.iter().position(|&x| x == site).unwrap()]
+        }
+    }
+
+    fn enumerate(mol: &Mol) -> Stereoisomers {
+        stereoisomers(mol, |site| mol.color(site), |_| 0u32)
     }
 
     fn mol(atoms: &[(u32, u32)], bonds: &[(u32, u32, u32)]) -> Mol {
         Mol {
             sites: atoms.iter().map(|&(id, _)| s(id)).collect(),
             colors: atoms.iter().map(|&(_, color)| color).collect(),
+            geometries: vec![None; atoms.len()],
             bonds: bonds.iter().map(|&(id, ..)| b(id)).collect(),
             endpoints: bonds.iter().map(|&(_, a, c)| (s(a), s(c))).collect(),
         }
@@ -224,6 +224,7 @@ mod tests {
         Mol {
             sites: m.sites.iter().rev().copied().collect(),
             colors: m.colors.iter().rev().copied().collect(),
+            geometries: m.geometries.iter().rev().copied().collect(),
             bonds: m.bonds.iter().rev().copied().collect(),
             endpoints: m.endpoints.iter().rev().copied().collect(),
         }
@@ -292,36 +293,47 @@ mod tests {
 
     #[test]
     fn a_constitution_without_stereocenters_has_a_single_isomer() {
-        assert_eq!(enumerate(&tetrahedral(), |_| None).len(), 1);
+        assert_eq!(enumerate(&tetrahedral()).len(), 1);
     }
 
     #[test]
     fn a_single_stereocenter_has_two_isomers() {
-        assert_eq!(enumerate(&tetrahedral(), centers_at(&[1])).len(), 2);
+        assert_eq!(
+            enumerate(&tetrahedral().with_geometries([(1, Tetrahedral)])).len(),
+            2
+        );
     }
 
     #[test]
     fn two_equivalent_centers_have_three_stereoisomers() {
-        assert_eq!(enumerate(&tartaric(), centers_at(&[1, 2])).len(), 3);
+        assert_eq!(
+            enumerate(&tartaric().with_geometries([(1, Tetrahedral), (2, Tetrahedral)])).len(),
+            3
+        );
     }
 
     #[test]
     fn a_pseudo_asymmetric_constitution_has_four_stereoisomers() {
         assert_eq!(
-            enumerate(&trihydroxyglutaric(), centers_at(&[1, 2, 3])).len(),
+            enumerate(&trihydroxyglutaric().with_geometries([
+                (1, Tetrahedral),
+                (2, Tetrahedral),
+                (3, Tetrahedral)
+            ]))
+            .len(),
             4,
         );
     }
 
     #[test]
     fn a_lone_isomer_is_not_empty() {
-        assert!(!enumerate(&tetrahedral(), |_| None).is_empty());
+        assert!(!enumerate(&tetrahedral()).is_empty());
     }
 
     #[test]
     fn each_isomer_binds_a_configuration_to_the_stereocenter() {
-        let molecule = tetrahedral();
-        let isomers = enumerate(&molecule, centers_at(&[1]));
+        let molecule = tetrahedral().with_geometries([(1, Tetrahedral)]);
+        let isomers = enumerate(&molecule);
         for isomer in isomers.iter() {
             assert_eq!(isomer.bind(&molecule).stereo_configuration_count(), 1);
         }
@@ -329,10 +341,11 @@ mod tests {
 
     #[test]
     fn enumeration_is_independent_of_input_order() {
-        let molecule = trihydroxyglutaric();
-        assert_eq!(
-            enumerate(&molecule, centers_at(&[1, 2, 3])),
-            enumerate(&reversed(&molecule), centers_at(&[1, 2, 3])),
-        );
+        let molecule = trihydroxyglutaric().with_geometries([
+            (1, Tetrahedral),
+            (2, Tetrahedral),
+            (3, Tetrahedral),
+        ]);
+        assert_eq!(enumerate(&molecule), enumerate(&reversed(&molecule)));
     }
 }

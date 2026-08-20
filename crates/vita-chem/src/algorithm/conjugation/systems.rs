@@ -162,7 +162,7 @@ impl ConjugatedSystems {
 /// cumulene's ends stay insulated, an odd cumulene's conjugate — and a triple
 /// bond runs one network per plane, so a site or bond can lie in two systems
 /// at once. Everything else is taken maximally planar: the perception reports
-/// what idealised geometry admits, leaving the overlap any one conformer
+/// what idealized geometry admits, leaving the overlap any one conformer
 /// realizes to geometric analysis; a cumulated cycle admitting no consistent
 /// alternation collapses into a single system.
 ///
