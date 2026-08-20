@@ -52,4 +52,8 @@ mod fixture {
     pub fn close<Q: Quantity<Value = f64>>(a: Q, b: Q) -> bool {
         (a.value() - b.value()).abs() <= 1e-12
     }
+
+    pub fn points_close<Q: Quantity<Value = f64>>(a: Point3<Q>, b: Point3<Q>) -> bool {
+        close(a.x, b.x) && close(a.y, b.y) && close(a.z, b.z)
+    }
 }
