@@ -39,28 +39,41 @@ use crate::{
 /// substituents its geometry arranges.
 ///
 /// A site's frame is the atom and its neighbors. An edge's or axis's is the two
-/// termini of its rigid double-bond chain and the two substituents each bears,
-/// walked out from the anchor — so a plain double bond and a long cumulene resolve
-/// alike, and only the locus at the chain's middle resolves at all. The substituents
-/// of a two-ended frame are grouped by end.
+/// termini of its rigid double-bond chain and the two substituents each bears, walked
+/// out from the anchor — so a plain double bond and a long cumulene resolve alike, and
+/// only the locus at the chain's middle resolves at all. The substituents of a
+/// two-ended frame are grouped by end.
 struct Frame {
     anchors: Vec<SiteId>,
     substituents: Vec<SiteId>,
 }
 
 /// Locates the stereogenic frame a `locus` names, or `None` if the graph does not
-/// realize one — a branched cumulene, or a terminus without its two substituents.
+/// realize one — a bond that is not double, a branched cumulene, a terminus without its
+/// two substituents, or an atom filling two of the slots at once.
 ///
 /// Stereochemistry across a bond or axis is a rigidity phenomenon: the frame is the
 /// maximal chain of cumulated double bonds, so its termini — where the substituents
 /// hang — are found by following those bonds, not the graph's plain connectivity.
 fn frame<M: HasBondOrders>(mol: &M, locus: StereoLocus) -> Option<Frame> {
+    let frame = located(mol, locus)?;
+    let distinct = frame
+        .substituents
+        .iter()
+        .enumerate()
+        .all(|(slot, substituent)| !frame.substituents[..slot].contains(substituent));
+    distinct.then_some(frame)
+}
+
+/// The frame a `locus` names before its substituents are checked for repeats.
+fn located<M: HasBondOrders>(mol: &M, locus: StereoLocus) -> Option<Frame> {
     match locus {
         StereoLocus::Site(site) => Some(Frame {
             anchors: vec![site],
             substituents: mol.neighbors(site).collect(),
         }),
         StereoLocus::Bond(bond) => {
+            (mol.bond_order(bond) == BondOrder::Double).then_some(())?;
             let (first, second) = mol.bond_endpoints(bond);
             centered(mol, walk(mol, first, second)?, walk(mol, second, first)?)
         }
@@ -553,6 +566,19 @@ mod tests {
         )
     }
 
+    fn cyclopropene() -> Mol {
+        mol(
+            &[1, 2, 3, 4, 5],
+            &[
+                (1, 1, 2, Double),
+                (2, 1, 3, Single),
+                (3, 2, 3, Single),
+                (4, 1, 4, Single),
+                (5, 2, 5, Single),
+            ],
+        )
+    }
+
     fn butatriene() -> Mol {
         mol(
             &[1, 2, 3, 4, 5, 6, 7, 8],
@@ -666,6 +692,16 @@ mod tests {
     #[test]
     fn an_axis_frame_is_none_off_a_cumulene_center() {
         assert!(frame(&alkene(), StereoLocus::Axis(s(1))).is_none());
+    }
+
+    #[test]
+    fn a_single_bond_has_no_frame() {
+        assert!(frame(&quaternary(), StereoLocus::Bond(b(1))).is_none());
+    }
+
+    #[test]
+    fn a_frame_is_none_where_the_termini_share_a_substituent() {
+        assert!(frame(&cyclopropene(), StereoLocus::Bond(b(1))).is_none());
     }
 
     #[test]
