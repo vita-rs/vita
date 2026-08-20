@@ -5,7 +5,8 @@
 //! group of its geometry. On that footing [`perceive`] reads
 //! [`StereoConfigurations`] off coordinates, viewable as
 //! [`WithStereoConfigurations`]; [`stereocenters`] finds the
-//! [`Stereocenters`] where more than one configuration is realizable;
+//! [`Stereocenters`] where the constitution admits more than one
+//! configuration;
 //! [`form`] canonicalizes constitution and stereochemistry into one
 //! [`StereoForm`] and names the [`StereoRelationship`] between two
 //! molecules; [`stereoisomers`] enumerates the [`Stereoisomers`] no
@@ -30,8 +31,8 @@ use vita_core::SiteId;
 use crate::algorithm::canonical::{Canonical, canonicalize};
 use crate::algorithm::utils::{FxHashMap, FxHashSet};
 use crate::{
-    BondId, BondOrder, HasBondOrders, HasBonds, HasStereoConfigurations, StereoConfiguration,
-    StereoDescriptor, StereoKind, StereoLocus,
+    BondId, BondOrder, HasBondOrders, HasBonds, HasCoordinationGeometries, HasStereoConfigurations,
+    StereoConfiguration, StereoDescriptor, StereoKind, StereoLocus, StereogenicGeometry,
 };
 
 /// A stereogenic frame located in the graph: the atoms that pin it, and the
@@ -40,7 +41,8 @@ use crate::{
 /// A site's frame is the atom and its neighbors. An edge's or axis's is the two
 /// termini of its rigid double-bond chain and the two substituents each bears,
 /// walked out from the anchor — so a plain double bond and a long cumulene resolve
-/// alike. The substituents of a two-ended frame are grouped by end.
+/// alike, and only the locus at the chain's middle resolves at all. The substituents
+/// of a two-ended frame are grouped by end.
 struct Frame {
     anchors: Vec<SiteId>,
     substituents: Vec<SiteId>,
@@ -60,7 +62,7 @@ fn frame<M: HasBondOrders>(mol: &M, locus: StereoLocus) -> Option<Frame> {
         }),
         StereoLocus::Bond(bond) => {
             let (first, second) = mol.bond_endpoints(bond);
-            poles(mol, walk(mol, first, second)?, walk(mol, second, first)?)
+            centered(mol, walk(mol, first, second)?, walk(mol, second, first)?)
         }
         StereoLocus::Axis(center) => {
             let mut chain = double_neighbors(mol, center, center);
@@ -68,9 +70,26 @@ fn frame<M: HasBondOrders>(mol: &M, locus: StereoLocus) -> Option<Frame> {
             else {
                 return None;
             };
-            poles(mol, walk(mol, first, center)?, walk(mol, second, center)?)
+            centered(mol, walk(mol, first, center)?, walk(mol, second, center)?)
         }
     }
+}
+
+/// The frame of an edge or axis whose two walks reached their termini in the same
+/// number of double bonds, or `None` where they did not.
+///
+/// Equal walks say the locus sits at the middle of its cumulated chain, and a chain has
+/// exactly one middle: a bond when it holds an odd number of double bonds, an atom when
+/// even. So the same test settles both which of the two kinds a chain bears and which
+/// single locus along it carries the stereochemistry — a plain double bond is its own
+/// middle, an allene's is its central atom, a butatriene's its central bond.
+fn centered<M: HasBondOrders>(
+    mol: &M,
+    (first, out): (SiteId, usize),
+    (second, back): (SiteId, usize),
+) -> Option<Frame> {
+    (out == back).then_some(())?;
+    poles(mol, first, second)
 }
 
 /// The frame of an edge or axis from its two termini: each terminus is an anchor and
@@ -88,14 +107,18 @@ fn poles<M: HasBondOrders>(mol: &M, first: SiteId, second: SiteId) -> Option<Fra
 }
 
 /// Follows the double-bond chain from `start`, entered from `came_from`, to its
-/// terminus — the atom with no onward double bond — or `None` if the chain branches.
-fn walk<M: HasBondOrders>(mol: &M, start: SiteId, came_from: SiteId) -> Option<SiteId> {
-    let (mut previous, mut current) = (came_from, start);
+/// terminus — the atom with no onward double bond — with the number of double bonds
+/// crossed to reach it, or `None` if the chain branches.
+fn walk<M: HasBondOrders>(mol: &M, start: SiteId, came_from: SiteId) -> Option<(SiteId, usize)> {
+    let (mut previous, mut current, mut crossed) = (came_from, start, 0);
     loop {
         let mut chain = double_neighbors(mol, current, previous);
         match (chain.next(), chain.next()) {
-            (None, _) => return Some(current),
-            (Some(next), None) => (previous, current) = (current, next),
+            (None, _) => return Some((current, crossed)),
+            (Some(next), None) => {
+                (previous, current) = (current, next);
+                crossed += 1;
+            }
             (Some(_), Some(_)) => return None,
         }
     }
@@ -120,13 +143,30 @@ fn terminal_substituents<M: HasBondOrders>(mol: &M, terminus: SiteId) -> Vec<Sit
 }
 
 /// Every locus a molecule could bear stereochemistry at — each site as a coordination
-/// center and as an allene axis, each bond as a double bond. The caller's `candidate`
-/// then says which the geometry admits.
+/// center and as an allene axis, each bond as a double bond. [`kind`] then says which
+/// of them the molecule answers for.
 fn candidate_loci<M: HasBonds>(mol: &M) -> impl Iterator<Item = StereoLocus> + '_ {
     mol.sites()
         .map(StereoLocus::Site)
         .chain(mol.sites().map(StereoLocus::Axis))
         .chain(mol.bonds().map(StereoLocus::Bond))
+}
+
+/// The [`StereoKind`] a `locus` bears, or `None` where it bears none.
+///
+/// A site bears the kind of its coordination geometry, and only where that geometry
+/// admits more than one configuration — a trigonal planar center equates every ordering
+/// of its substituents, so no site holding one is stereogenic. A bond and an axis bear
+/// kinds of their own, which the graph settles: [`frame`] finds their rigid chain, or
+/// no frame at all.
+fn kind<M: HasCoordinationGeometries>(mol: &M, locus: StereoLocus) -> Option<StereoKind> {
+    match locus {
+        StereoLocus::Site(site) => {
+            StereogenicGeometry::new(mol.coordination_geometry(site)?).map(StereoKind::Center)
+        }
+        StereoLocus::Bond(_) => Some(StereoKind::Bond),
+        StereoLocus::Axis(_) => Some(StereoKind::Axis),
+    }
 }
 
 /// The stereo an atom carries under a labeling: the sorted descriptors of the
@@ -280,29 +320,28 @@ fn configurations(
     result
 }
 
-/// The distinct configurations `locus` of `kind` realizes in a molecule, under a
-/// coloring `site_key` that already carries any stereo refinement.
+/// The distinct configurations a `locus` realizes in a molecule, under a coloring
+/// `site_key` that already carries any stereo refinement.
 ///
-/// Locates and individualises the frame, colors the graph so interchangeable
-/// substituents share a class, and returns one configuration per stereoisomer those
-/// classes admit — empty if the graph realizes no frame of the right size. The locus
-/// is stereogenic exactly when more than one results; an enumeration branches over
-/// each.
+/// Takes the locus's kind from [`kind`], locates and individualises the frame, colors
+/// the graph so interchangeable substituents share a class, and returns one
+/// configuration per stereoisomer those classes admit — empty if the molecule answers
+/// for no kind there, or the graph realizes no frame of the right size. The locus is
+/// stereogenic exactly when more than one results; an enumeration branches over each.
 fn realizable<M, VK, EK>(
     mol: &M,
     locus: StereoLocus,
-    kind: StereoKind,
     site_key: &impl Fn(SiteId) -> VK,
     bond_key: &impl Fn(BondId) -> EK,
 ) -> Vec<StereoConfiguration>
 where
-    M: HasBondOrders,
+    M: HasBondOrders + HasCoordinationGeometries,
     VK: Ord,
     EK: Ord,
 {
-    if !locus.anchors(kind) {
+    let Some(kind) = kind(mol, locus) else {
         return Vec::new();
-    }
+    };
     let Some(frame) = frame(mol, locus) else {
         return Vec::new();
     };
@@ -395,6 +434,7 @@ mod tests {
 
     struct Mol {
         sites: Vec<SiteId>,
+        geometries: Vec<Option<CoordinationGeometry>>,
         bonds: Vec<BondId>,
         endpoints: Vec<(SiteId, SiteId)>,
         orders: Vec<BondOrder>,
@@ -402,8 +442,22 @@ mod tests {
     }
 
     impl Mol {
-        fn with(mut self, configs: impl IntoIterator<Item = StereoConfiguration>) -> Self {
-            self.configs = configs.into_iter().collect();
+        fn with_geometries(
+            mut self,
+            geometries: impl IntoIterator<Item = (u32, CoordinationGeometry)>,
+        ) -> Self {
+            for (site, geometry) in geometries {
+                let i = self.sites.iter().position(|&x| x == s(site)).unwrap();
+                self.geometries[i] = Some(geometry);
+            }
+            self
+        }
+
+        fn with_configurations(
+            mut self,
+            configurations: impl IntoIterator<Item = StereoConfiguration>,
+        ) -> Self {
+            self.configs = configurations.into_iter().collect();
             self
         }
     }
@@ -432,6 +486,12 @@ mod tests {
         }
     }
 
+    impl HasCoordinationGeometries for Mol {
+        fn coordination_geometry(&self, site: SiteId) -> Option<CoordinationGeometry> {
+            self.geometries[self.sites.iter().position(|&x| x == site).unwrap()]
+        }
+    }
+
     impl HasStereoConfigurations for Mol {
         fn stereo_configurations(&self) -> impl Iterator<Item = StereoConfiguration> + '_ {
             self.configs.iter().cloned()
@@ -441,6 +501,7 @@ mod tests {
     fn mol(sites: &[u32], bonds: &[(u32, u32, u32, BondOrder)]) -> Mol {
         Mol {
             sites: sites.iter().map(|&id| s(id)).collect(),
+            geometries: vec![None; sites.len()],
             bonds: bonds.iter().map(|&(id, ..)| b(id)).collect(),
             endpoints: bonds.iter().map(|&(_, a, c, _)| (s(a), s(c))).collect(),
             orders: bonds.iter().map(|&(_, _, _, order)| order).collect(),
@@ -548,7 +609,7 @@ mod tests {
                 (8, 3, 9, Single),
             ],
         )
-        .with([
+        .with_configurations([
             StereoConfiguration::new(
                 StereoLocus::Site(s(2)),
                 center(Tetrahedral),
@@ -608,6 +669,17 @@ mod tests {
     }
 
     #[test]
+    fn a_bond_frame_is_none_off_the_middle_of_its_chain() {
+        assert!(frame(&allene(), StereoLocus::Bond(b(1))).is_none());
+        assert!(frame(&butatriene(), StereoLocus::Bond(b(1))).is_none());
+    }
+
+    #[test]
+    fn an_axis_frame_is_none_off_the_middle_of_its_chain() {
+        assert!(frame(&butatriene(), StereoLocus::Axis(s(2))).is_none());
+    }
+
+    #[test]
     fn candidate_loci_offer_each_site_as_a_center_and_an_axis_and_each_bond() {
         let loci: Vec<StereoLocus> = candidate_loci(&quaternary()).collect();
         assert_eq!(loci.len(), 5 + 5 + 4);
@@ -618,7 +690,7 @@ mod tests {
 
     #[test]
     fn a_reflected_signal_is_the_mirror_of_the_plain_signal() {
-        let mol = quaternary().with([StereoConfiguration::new(
+        let mol = quaternary().with_configurations([StereoConfiguration::new(
             StereoLocus::Site(s(1)),
             center(Tetrahedral),
             [s(2), s(3), s(4), s(5)],
@@ -660,7 +732,7 @@ mod tests {
 
     #[test]
     fn settle_files_a_site_configuration_against_its_site() {
-        let mol = quaternary().with([StereoConfiguration::new(
+        let mol = quaternary().with_configurations([StereoConfiguration::new(
             StereoLocus::Site(s(1)),
             center(Tetrahedral),
             [s(2), s(3), s(4), s(5)],
@@ -673,7 +745,7 @@ mod tests {
 
     #[test]
     fn settle_files_a_bond_configuration_against_both_ends() {
-        let mol = alkene().with([StereoConfiguration::new(
+        let mol = alkene().with_configurations([StereoConfiguration::new(
             StereoLocus::Bond(b(1)),
             StereoKind::Bond,
             [s(3), s(4), s(5), s(6)],
@@ -726,9 +798,8 @@ mod tests {
     #[test]
     fn realizable_lists_a_stereogenic_centers_configurations() {
         let configs = realizable(
-            &quaternary(),
+            &quaternary().with_geometries([(1, Tetrahedral)]),
             StereoLocus::Site(s(1)),
-            center(Tetrahedral),
             &|site: SiteId| site.get(),
             &|_: BondId| 0u8,
         );
@@ -738,9 +809,8 @@ mod tests {
     #[test]
     fn realizable_collapses_a_symmetric_center_to_one() {
         let configs = realizable(
-            &quaternary(),
+            &quaternary().with_geometries([(1, Tetrahedral)]),
             StereoLocus::Site(s(1)),
-            center(Tetrahedral),
             &|_: SiteId| 0u8,
             &|_: BondId| 0u8,
         );
@@ -748,11 +818,21 @@ mod tests {
     }
 
     #[test]
-    fn realizable_is_empty_off_an_anchor() {
+    fn realizable_is_empty_where_the_molecule_names_no_geometry() {
         let configs = realizable(
             &quaternary(),
-            StereoLocus::Bond(b(1)),
-            center(Tetrahedral),
+            StereoLocus::Site(s(1)),
+            &|site: SiteId| site.get(),
+            &|_: BondId| 0u8,
+        );
+        assert!(configs.is_empty());
+    }
+
+    #[test]
+    fn realizable_is_empty_where_the_geometry_admits_one_configuration() {
+        let configs = realizable(
+            &trigonal().with_geometries([(1, TrigonalPlanar)]),
+            StereoLocus::Site(s(1)),
             &|site: SiteId| site.get(),
             &|_: BondId| 0u8,
         );
@@ -764,7 +844,6 @@ mod tests {
         let configs = realizable(
             &short_alkene(),
             StereoLocus::Bond(b(1)),
-            StereoKind::Bond,
             &|site: SiteId| site.get(),
             &|_: BondId| 0u8,
         );
@@ -774,9 +853,8 @@ mod tests {
     #[test]
     fn realizable_is_empty_when_the_substituents_miscount() {
         let configs = realizable(
-            &trigonal(),
+            &trigonal().with_geometries([(1, Tetrahedral)]),
             StereoLocus::Site(s(1)),
-            center(Tetrahedral),
             &|site: SiteId| site.get(),
             &|_: BondId| 0u8,
         );
